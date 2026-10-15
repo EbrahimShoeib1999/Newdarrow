@@ -1,0 +1,567 @@
+import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Autocomplete,
+  AutocompleteItem,
+  Card,
+  CardBody,
+  CardHeader,
+  Button,
+  Input,
+  Select,
+  SelectItem,
+  Divider,
+  Textarea,
+} from "@heroui/react";
+import { Plus, Trash2, Save, Send, ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
+import { selectFieldProps } from "@/components/shared/select-field";
+import { RiyalSymbol } from "@/components/shared/riyal-symbol";
+import {
+  useContactsQuery,
+  useCreateContactMutation,
+} from "@/features/crm/hooks/use-contacts";
+import { toCreateContactDTO } from "@/features/crm/schemas/contact.schema";
+import { useAccounts } from "../hooks/use-accounts";
+import { useCostCenters } from "../hooks/use-cost-centers";
+import {
+  useCreateBillMutation,
+  useUpdateBillMutation,
+  useBill,
+} from "../hooks/use-bills";
+import { billSchema, type CreateBillDTO } from "../schemas/bill";
+import { BillingMoney } from "../components/BillingMoney";
+import { useBillingSettings } from "../hooks/use-billing-settings";
+import { LineTaxRateSelect } from "../components/LineTaxRateSelect";
+import { getDefaultTax } from "../utils/tax-utils";
+import {
+  DEFAULT_BILLING_CURRENCY,
+  getDefaultBillingCurrency,
+} from "../utils/billing-currency";
+import {
+  findContactByCustomerInput,
+  invoiceCustomerPickerLabel,
+  resolveBillVendorName,
+} from "../utils/invoice-customer";
+
+export default function CreateBillPage() {
+  const { t } = useTranslation("billing");
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const isEditing = !!id;
+
+  const { data: contactsRes } = useContactsQuery();
+  const contacts = contactsRes?.data || [];
+  const createContact = useCreateContactMutation();
+  const [vendorInput, setVendorInput] = useState("");
+  const { data: accounts = [] } = useAccounts();
+  const { data: costCenters = [] } = useCostCenters();
+  const expenseAccounts = accounts.filter(
+    (a) => a.type === "expense" || a.type === "asset"
+  );
+
+  const { data: existingBill, isLoading: isLoadingExisting } = useBill(id);
+  const createBill = useCreateBillMutation();
+  const updateBill = useUpdateBillMutation();
+  const { data: billingSettings } = useBillingSettings();
+  const taxes = billingSettings?.taxes ?? [];
+  const defaultTax = getDefaultTax(taxes);
+
+  const {
+    control,
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<CreateBillDTO>({
+    resolver: zodResolver(billSchema) as any,
+    defaultValues: {
+      billNumber: "DRAFT",
+      status: "draft",
+      vendorId: "",
+      vendorName: "",
+      currency: DEFAULT_BILLING_CURRENCY,
+      issueDate: new Date(),
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      items: [
+        {
+          description: "",
+          accountId: expenseAccounts[0]?.id ?? "",
+          quantity: 1,
+          unitPrice: 0,
+          taxRate: 0,
+          taxRateId: null,
+          total: 0,
+        },
+      ],
+      subTotal: 0,
+      totalTax: 0,
+      grandTotal: 0,
+    },
+  });
+
+  const { fields, append, remove } = useFieldArray({ control, name: "items" });
+  const watchItems = watch("items");
+  const currency = watch("currency") ?? DEFAULT_BILLING_CURRENCY;
+
+  useEffect(() => {
+    if (isEditing && existingBill) {
+      const name = resolveBillVendorName(
+        existingBill,
+        contacts,
+        existingBill.vendorName ?? ""
+      );
+      control._reset({
+        ...existingBill,
+        vendorName: existingBill.vendorName || name,
+        issueDate: new Date(existingBill.issueDate),
+        dueDate: new Date(existingBill.dueDate),
+      } as any);
+      setVendorInput(existingBill.vendorName || name);
+    }
+  }, [isEditing, existingBill, control, contacts]);
+
+  useEffect(() => {
+    if (!isEditing && billingSettings) {
+      setValue("currency", getDefaultBillingCurrency(billingSettings));
+    }
+  }, [billingSettings, isEditing, setValue]);
+
+  useEffect(() => {
+    if (isEditing || !defaultTax) return;
+    const items = watch("items");
+    if (
+      items?.length === 1 &&
+      !items[0]?.taxRateId &&
+      (items[0]?.taxRate ?? 0) === 0
+    ) {
+      setValue("items.0.taxRateId", defaultTax.id);
+      setValue("items.0.taxRate", defaultTax.rate);
+    }
+  }, [defaultTax, isEditing, setValue, watch]);
+
+  const subTotal = watchItems.reduce(
+    (acc, item) =>
+      acc + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+    0
+  );
+  const totalTax = watchItems.reduce((acc, item) => {
+    const beforeTax =
+      (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+    return acc + beforeTax * ((Number(item.taxRate) || 0) / 100);
+  }, 0);
+  const grandTotal = subTotal + totalTax;
+
+  const resolveVendorForSave = async (
+    data: CreateBillDTO
+  ): Promise<{ vendorId: string; vendorName: string }> => {
+    const typedName = (data.vendorName || vendorInput).trim();
+    let vendorId = data.vendorId?.trim() || "";
+
+    if (vendorId) {
+      const selected = contacts.find((c) => c.id === vendorId);
+      return {
+        vendorId,
+        vendorName:
+          typedName ||
+          (selected ? invoiceCustomerPickerLabel(selected) : vendorId),
+      };
+    }
+
+    if (!typedName) {
+      throw new Error("vendor_required");
+    }
+
+    const existing = findContactByCustomerInput(contacts, typedName);
+    if (existing?.id) {
+      return {
+        vendorId: existing.id,
+        vendorName: typedName,
+      };
+    }
+
+    const created = await createContact.mutateAsync(
+      toCreateContactDTO({
+        firstName: typedName,
+        lastName: "",
+        email: "",
+        phone: "",
+        accountName: typedName,
+      })
+    );
+
+    return {
+      vendorId: created.data.id,
+      vendorName: typedName,
+    };
+  };
+
+  const buildPayload = (
+    data: CreateBillDTO,
+    actionType: "draft" | "open"
+  ): CreateBillDTO => ({
+    ...data,
+    status: actionType,
+    subTotal,
+    totalTax,
+    grandTotal,
+    items: watchItems.map((item, index) => {
+      const q = Number(item.quantity) || 0;
+      const r = Number(item.unitPrice) || 0;
+      const tx = Number(item.taxRate) || 0;
+      const beforeTax = q * r;
+      return {
+        ...data.items[index],
+        ...item,
+        total: beforeTax + beforeTax * (tx / 100),
+      };
+    }),
+  });
+
+  const onSubmit = async (data: CreateBillDTO, actionType: "draft" | "open") => {
+    try {
+      const vendor = await resolveVendorForSave(data);
+      const finalData = {
+        ...buildPayload(data, actionType),
+        ...vendor,
+      };
+      if (isEditing && id) {
+        await updateBill.mutateAsync({ id, data: finalData });
+        toast.success(
+          actionType === "open"
+            ? t("bills.create.posted")
+            : t("bills.create.updated")
+        );
+      } else {
+        await createBill.mutateAsync(finalData);
+        toast.success(
+          actionType === "open"
+            ? t("bills.create.posted")
+            : t("bills.create.draft_saved")
+        );
+      }
+      navigate("/billing/bills");
+    } catch {
+      toast.error(t("bills.create.save_failed"));
+    }
+  };
+
+  if (isEditing && isLoadingExisting) {
+    return (
+      <div className="p-8 text-center animate-pulse">
+        {t("bills.detail.loading")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 max-w-5xl mx-auto pb-20 animate-in fade-in duration-300">
+      <nav className="flex items-center gap-1 text-sm text-default-500">
+        <Link to="/billing" className="hover:text-primary">
+          {t("module_name")}
+        </Link>
+        <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
+        <Link to="/billing/bills" className="hover:text-primary">
+          {t("bills.title")}
+        </Link>
+        <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
+        <span className="font-medium text-default-800">
+          {isEditing ? t("bills.create.edit_title") : t("bills.create.title")}
+        </span>
+      </nav>
+
+      <p className="text-sm text-default-500">{t("bills.create.subtitle")}</p>
+
+      <form className="space-y-6">
+        <Card className="border border-default-100 shadow-sm rounded-2xl">
+          <CardBody className="gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Controller
+                control={control}
+                name="vendorId"
+                render={({ field }) => (
+                  <Autocomplete
+                    label={t("bills.create.vendor")}
+                    placeholder={t("bills.create.vendor_placeholder")}
+                    description={t("bills.create.vendor_hint")}
+                    variant="bordered"
+                    allowsCustomValue
+                    menuTrigger="focus"
+                    inputValue={vendorInput}
+                    selectedKey={field.value || null}
+                    onInputChange={(value) => {
+                      setVendorInput(value);
+                      setValue("vendorName", value, { shouldValidate: true });
+                      const selected = contacts.find((c) => c.id === field.value);
+                      if (
+                        selected &&
+                        invoiceCustomerPickerLabel(selected) !== value
+                      ) {
+                        field.onChange("");
+                      }
+                    }}
+                    onSelectionChange={(key) => {
+                      const id = key != null ? String(key) : "";
+                      field.onChange(id);
+                      if (!id) return;
+                      const contact = contacts.find((c) => c.id === id);
+                      if (!contact) return;
+                      const label = invoiceCustomerPickerLabel(contact);
+                      setVendorInput(label);
+                      setValue("vendorName", label, { shouldValidate: true });
+                    }}
+                    onBlur={field.onBlur}
+                    isInvalid={!!errors.vendorId}
+                    errorMessage={errors.vendorId?.message as string | undefined}
+                    listboxProps={{
+                      emptyContent: t("bills.create.vendor_empty"),
+                    }}
+                  >
+                    {contacts.map((contact) => {
+                      const label = invoiceCustomerPickerLabel(contact);
+                      return (
+                        <AutocompleteItem key={contact.id!} textValue={label}>
+                          <div className="flex flex-col">
+                            <span>{label}</span>
+                            {contact.email ? (
+                              <span className="text-xs text-default-400">
+                                {contact.email}
+                              </span>
+                            ) : null}
+                          </div>
+                        </AutocompleteItem>
+                      );
+                    })}
+                  </Autocomplete>
+                )}
+              />
+              <Input
+                label={t("bills.create.bill_number") || "Bill Number"}
+                variant="bordered"
+                isReadOnly
+                {...register("billNumber")}
+              />
+
+              <Controller
+                name="costCenterId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    label="مركز التكلفة (Cost Center)"
+                    placeholder="اختر مركز التكلفة (اختياري)..."
+                    variant="bordered"
+                    selectedKeys={field.value ? [field.value] : []}
+                    onSelectionChange={(keys) => field.onChange(Array.from(keys)[0] as string || "")}
+                  >
+                    {costCenters.map((cc) => (
+                      <SelectItem key={cc.id!} textValue={`${cc.code} - ${cc.name}`}>
+                        {cc.code} - {cc.name}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                )}
+              />
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card className="border border-default-100 shadow-sm rounded-2xl">
+          <CardHeader className="px-6 py-4 bg-default-50/50">
+            <h3 className="font-bold text-lg">
+              {t("bills.create.line_items") || "Line Items"}
+            </h3>
+          </CardHeader>
+          <Divider />
+          <CardBody className="p-0 overflow-x-auto">
+            <table className="w-full min-w-[800px] text-start">
+              <thead className="bg-default-100/50 text-sm font-medium text-default-600">
+                <tr>
+                  <th className="p-4 w-[25%]">
+                    {t("bills.create.account") || "Expense Account"}
+                  </th>
+                  <th className="p-4 w-[25%]">
+                    {t("bills.create.item_description")}
+                  </th>
+                  <th className="p-4 w-[12%]">{t("bills.create.quantity")}</th>
+                  <th className="p-4 w-[12%]">{t("bills.create.rate")}</th>
+                  <th className="p-4 w-[12%]">{t("bills.create.tax")}</th>
+                  <th className="p-4 w-[12%] text-end">{t("bills.create.amount")}</th>
+                  <th className="p-4 w-[2%]" />
+                </tr>
+              </thead>
+              <tbody>
+                {fields.map((field, index) => {
+                  const q = Number(watch(`items.${index}.quantity`)) || 0;
+                  const r = Number(watch(`items.${index}.unitPrice`)) || 0;
+                  const tx = Number(watch(`items.${index}.taxRate`)) || 0;
+                  const lineTotal = q * r + q * r * (tx / 100);
+                  return (
+                    <tr key={field.id} className="border-b border-default-100">
+                      <td className="p-4">
+                        <Controller
+                          control={control}
+                          name={`items.${index}.accountId`}
+                          render={({ field: f }) => (
+                            <Select
+                              {...selectFieldProps({ compact: true })}
+                              size="sm"
+                              variant="flat"
+                              selectedKeys={f.value ? [f.value] : []}
+                              onSelectionChange={(keys) => {
+                                const key = Array.from(keys)[0];
+                                f.onChange(key ? String(key) : "");
+                              }}
+                            >
+                              {expenseAccounts.map((a) => (
+                                <SelectItem
+                                  key={a.id!}
+                                  textValue={t(`accounts.names.${a.name}`, {
+                                    defaultValue: a.name,
+                                  })}
+                                >
+                                  {a.code} —{" "}
+                                  {t(`accounts.names.${a.name}`, {
+                                    defaultValue: a.name,
+                                  })}
+                                </SelectItem>
+                              ))}
+                            </Select>
+                          )}
+                        />
+                      </td>
+                      <td className="p-4">
+                        <Input
+                          size="sm"
+                          variant="flat"
+                          {...register(`items.${index}.description` as const)}
+                        />
+                      </td>
+                      <td className="p-4">
+                        <Input
+                          size="sm"
+                          type="number"
+                          variant="flat"
+                          {...register(`items.${index}.quantity` as const, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                      </td>
+                      <td className="p-4">
+                        <Input
+                          size="sm"
+                          type="number"
+                          variant="flat"
+                          dir="ltr"
+                          classNames={{ input: "text-start" }}
+                          startContent={<RiyalSymbol size={12} className="text-default-400" />}
+                          {...register(`items.${index}.unitPrice` as const, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                      </td>
+                      <td className="p-4">
+                        <LineTaxRateSelect
+                          taxes={taxes}
+                          taxRateId={watch(`items.${index}.taxRateId`)}
+                          onChange={(tax) => {
+                            setValue(`items.${index}.taxRateId`, tax?.id ?? null);
+                            setValue(`items.${index}.taxRate`, tax?.rate ?? 0);
+                          }}
+                        />
+                      </td>
+                      <td className="p-4 text-end font-medium">
+                        <BillingMoney amount={lineTotal} currency={currency} />
+                      </td>
+                      <td className="p-4">
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          color="danger"
+                          onPress={() => remove(index)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="p-4">
+              <Button
+                variant="flat"
+                color="primary"
+                size="sm"
+                startContent={<Plus className="w-4 h-4" />}
+                onPress={() =>
+                  append({
+                    description: "",
+                    accountId: expenseAccounts[0]?.id ?? "",
+                    quantity: 1,
+                    unitPrice: 0,
+                    taxRate: defaultTax?.rate ?? 0,
+                    taxRateId: defaultTax?.id ?? null,
+                    total: 0,
+                  })
+                }
+              >
+                {t("bills.create.add_line") || "Add line"}
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
+
+        <div className="flex flex-col md:flex-row gap-6 justify-between">
+          <Textarea
+            label={t("bills.create.notes") || "Notes"}
+            variant="bordered"
+            className="md:w-1/2"
+            {...register("notes")}
+          />
+          <Card className="md:w-1/3 border border-default-100">
+            <CardBody className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span>{t("bills.create.subtotal")}</span>
+                <BillingMoney amount={subTotal} currency={currency} />
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>{t("bills.create.total_tax")}</span>
+                <BillingMoney amount={totalTax} currency={currency} />
+              </div>
+              <Divider />
+              <div className="flex justify-between font-bold text-lg">
+                <span>{t("bills.create.total")}</span>
+                <BillingMoney amount={grandTotal} currency={currency} />
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <Button
+            variant="flat"
+            onPress={() => handleSubmit((d) => onSubmit(d as any, "draft"))()}
+            isLoading={isSubmitting || createBill.isPending || updateBill.isPending || createContact.isPending}
+            startContent={<Save className="w-4 h-4" />}
+          >
+            {t("bills.create.save_draft") || "Save Draft"}
+          </Button>
+          <Button
+            color="primary"
+            onPress={() => handleSubmit((d) => onSubmit(d as any, "open"))()}
+            isLoading={isSubmitting || createBill.isPending || updateBill.isPending || createContact.isPending}
+            startContent={<Send className="w-4 h-4" />}
+          >
+            {t("bills.create.post") || "Post Bill"}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}

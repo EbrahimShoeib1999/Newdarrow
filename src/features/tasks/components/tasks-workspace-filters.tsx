@@ -1,0 +1,392 @@
+import {
+  Avatar,
+  Button,
+  Chip,
+  Dropdown,
+  DropdownItem,
+  DropdownMenu,
+  DropdownSection,
+  DropdownTrigger,
+  Input,
+} from "@heroui/react";
+import { Filter, Search, UserCircle2, X, CircleDot, AlertTriangle, CheckCircle2, Zap, Briefcase } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
+import { localizedName } from "@/lib/localized-name";
+import { TASK_STATUSES } from "@/lib/constants";
+import { useAllUsers } from "@/features/users/hooks/use-users";
+import { useSprintsQuery } from "../hooks/use-tasks";
+import { useTasksUIStore } from "../store/tasks-ui.store";
+import { DEPARTMENT_OPTIONS } from "./task-form";
+import type { TaskPriority, TaskStatus } from "../types/task.types";
+
+interface TasksWorkspaceFiltersProps {
+  compact?: boolean;
+}
+
+/** Sentinel for the "no sprint filter" choice; the store keeps it as `null`. */
+const ALL_SPRINTS_KEY = "__all__";
+
+export function TasksWorkspaceFilters({ compact }: TasksWorkspaceFiltersProps) {
+  const { t, i18n } = useTranslation("tasks");
+  const isAr = i18n.language === "ar";
+  const { t: tc } = useTranslation();
+  const { filters, setFilter, resetFilters } = useTasksUIStore();
+  const { data: allUsers } = useAllUsers();
+  const { data: allSprints } = useSprintsQuery();
+
+  const sprints = allSprints?.data || [];
+  const selectedSprint = sprints.find((s) => s.id === filters.sprintId) ?? null;
+  const allSprintsLabel = t("workspace.filters.allSprints", isAr ? "كل الدورات" : "All sprints");
+
+  const priorities = ["low", "medium", "high", "urgent"] as const;
+  const selectedAssignee = allUsers?.find((u) => u.id === filters.assigneeId) ?? null;
+  const hasActiveFilters =
+    !!filters.search ||
+    filters.priority.length > 0 ||
+    filters.status.length > 0 ||
+    !!filters.assigneeId ||
+    !!filters.sprintId ||
+    !!filters.department ||
+    filters.overdueOnly ||
+    filters.completedThisWeek;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Input
+        isClearable
+        size="sm"
+        variant="bordered"
+        placeholder={t("list.searchPlaceholder")}
+        value={filters.search}
+        onValueChange={(val) => setFilter("search", val)}
+        startContent={<Search className="h-3.5 w-3.5 text-default-400" />}
+        className={compact ? "w-56" : "w-60"}
+        classNames={{
+          input: compact ? "text-xs" : "text-xs font-medium",
+          inputWrapper: "rounded-md border-default-200/80 bg-content1 shadow-xs h-9 min-h-9",
+        }}
+      />
+
+      <Dropdown>
+        <DropdownTrigger>
+          <Button
+            size="sm"
+            variant="bordered"
+            className={cn(
+              "rounded-md border-default-200/80 bg-content1 font-semibold gap-1.5 h-9 min-h-9",
+              compact ? "text-xs" : "text-xs",
+              filters.sprintId && "border-primary/40 bg-primary/10 text-primary"
+            )}
+            startContent={<Zap className="h-3.5 w-3.5 text-primary" />}
+          >
+            {selectedSprint ? selectedSprint.name : allSprintsLabel}
+            {filters.sprintId && (
+              <span
+                role="button"
+                className="ms-1 hover:text-danger p-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilter("sprintId", null);
+                }}
+              >
+                <X className="h-3 w-3" />
+              </span>
+            )}
+          </Button>
+        </DropdownTrigger>
+        <DropdownMenu
+          aria-label="Filter by sprint"
+          selectionMode="single"
+          disallowEmptySelection
+          selectedKeys={new Set([filters.sprintId ?? ALL_SPRINTS_KEY])}
+          onSelectionChange={(keys) => {
+            const selected = Array.from(keys)[0] as string | undefined;
+            setFilter(
+              "sprintId",
+              !selected || selected === ALL_SPRINTS_KEY ? null : selected
+            );
+          }}
+        >
+          <DropdownSection showDivider>
+            <DropdownItem
+              key={ALL_SPRINTS_KEY}
+              className="font-bold"
+              endContent={
+                <Chip size="sm" variant="flat" className="h-4 text-[9px] font-extrabold px-1">
+                  {isAr ? "الافتراضي" : "Default"}
+                </Chip>
+              }
+            >
+              {allSprintsLabel}
+            </DropdownItem>
+          </DropdownSection>
+          <DropdownSection>
+            {sprints.map((s) => (
+              <DropdownItem
+                key={s.id}
+                endContent={
+                  s.status === "active" ? (
+                    <Chip size="sm" color="primary" variant="flat" className="h-4 text-[9px] font-extrabold px-1">
+                      🚀 {isAr ? "النشطة" : "Active"}
+                    </Chip>
+                  ) : undefined
+                }
+              >
+                {s.name}
+              </DropdownItem>
+            ))}
+          </DropdownSection>
+        </DropdownMenu>
+      </Dropdown>
+
+      {/* Department Filter */}
+      <Dropdown>
+        <DropdownTrigger>
+          <Button
+            size="sm"
+            variant="bordered"
+            className={cn(
+              "rounded-md border-default-200/80 bg-content1 font-semibold gap-1.5 h-9 min-h-9",
+              compact ? "text-xs" : "text-xs",
+              filters.department && "border-primary/40 bg-primary/10 text-primary"
+            )}
+            startContent={<Briefcase className="h-3.5 w-3.5 text-primary" />}
+          >
+            {filters.department ? filters.department : (isAr ? "كل الأقسام" : "All departments")}
+            {filters.department && (
+              <span
+                role="button"
+                className="ms-1 hover:text-danger p-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilter("department", null);
+                }}
+              >
+                <X className="h-3 w-3" />
+              </span>
+            )}
+          </Button>
+        </DropdownTrigger>
+        <DropdownMenu
+          aria-label="Filter by department"
+          selectionMode="single"
+          disallowEmptySelection
+          selectedKeys={new Set([filters.department ?? "__all__"])}
+          onSelectionChange={(keys) => {
+            const selected = Array.from(keys)[0] as string | undefined;
+            setFilter(
+              "department",
+              !selected || selected === "__all__" ? null : selected
+            );
+          }}
+        >
+          <DropdownSection showDivider>
+            <DropdownItem key="__all__" className="font-bold">
+              {isAr ? "جميع الأقسام" : "All departments"}
+            </DropdownItem>
+          </DropdownSection>
+          <DropdownSection>
+            {DEPARTMENT_OPTIONS.map((dept) => (
+              <DropdownItem key={dept}>
+                {dept}
+              </DropdownItem>
+            ))}
+          </DropdownSection>
+        </DropdownMenu>
+      </Dropdown>
+
+      <Dropdown>
+        <DropdownTrigger>
+          <Button
+            size="sm"
+            variant="bordered"
+            className={cn(
+              "rounded-md border-default-200/80 bg-content1 font-semibold gap-1.5 h-9 min-h-9",
+              compact ? "text-xs" : "text-xs",
+              filters.status.length > 0 && "border-primary/40 bg-primary/10 text-primary"
+            )}
+            startContent={<CircleDot className="h-3.5 w-3.5" />}
+          >
+            {t("list.columns.status")}
+            {filters.status.length > 0 && (
+              <Chip size="sm" color="primary" variant="flat" className="h-4 text-[9px] font-bold px-1 min-w-4">
+                {filters.status.length}
+              </Chip>
+            )}
+          </Button>
+        </DropdownTrigger>
+        <DropdownMenu
+          aria-label="Filter status"
+          selectionMode="multiple"
+          selectedKeys={new Set(filters.status)}
+          onSelectionChange={(keys) => {
+            setFilter("status", Array.from(keys) as TaskStatus[]);
+            setFilter("overdueOnly", false);
+            setFilter("completedThisWeek", false);
+          }}
+        >
+          {TASK_STATUSES.map((status) => (
+            <DropdownItem key={status}>
+              {t(`status.${status}`)}
+            </DropdownItem>
+          ))}
+        </DropdownMenu>
+      </Dropdown>
+
+      <Dropdown>
+        <DropdownTrigger>
+          <Button
+            size="sm"
+            variant="bordered"
+            className={cn(
+              "rounded-md border-default-200/80 bg-content1 font-semibold gap-1.5 h-9 min-h-9",
+              compact ? "text-xs" : "text-xs",
+              filters.priority.length > 0 && "border-primary/40 bg-primary/10 text-primary"
+            )}
+            startContent={<Filter className="h-3.5 w-3.5" />}
+          >
+            {t("form.priority.label")}
+            {filters.priority.length > 0 && (
+              <Chip size="sm" color="primary" variant="flat" className="h-4 text-[9px] font-bold px-1 min-w-4">
+                {filters.priority.length}
+              </Chip>
+            )}
+          </Button>
+        </DropdownTrigger>
+        <DropdownMenu
+          aria-label="Filter priority"
+          selectionMode="multiple"
+          selectedKeys={new Set(filters.priority)}
+          onSelectionChange={(keys) =>
+            setFilter("priority", Array.from(keys) as TaskPriority[])
+          }
+        >
+          {priorities.map((p) => (
+            <DropdownItem key={p} className="capitalize">
+              {t(`priority.${p}`)}
+            </DropdownItem>
+          ))}
+        </DropdownMenu>
+      </Dropdown>
+
+      <Dropdown>
+        <DropdownTrigger>
+          <Button
+            size="sm"
+            variant="bordered"
+            className={cn(
+              "rounded-md border-default-200/80 bg-content1 font-semibold gap-1.5 h-9 min-h-9",
+              compact ? "text-xs" : "text-xs",
+              filters.assigneeId && "border-primary/40 bg-primary/10 text-primary"
+            )}
+            startContent={
+              selectedAssignee ? (
+                <Avatar
+                  src={selectedAssignee.avatar}
+                  name={selectedAssignee.name}
+                  size="sm"
+                  className={compact ? "h-4 w-4 text-[8px]" : "h-4.5 w-4.5 text-[9px]"}
+                  showFallback
+                />
+              ) : (
+                <UserCircle2 className="h-3.5 w-3.5" />
+              )
+            }
+          >
+            {selectedAssignee
+              ? localizedName(i18n.language, {
+                  name: selectedAssignee.name,
+                  nameAr: selectedAssignee.nameAr,
+                })
+              : t("form.assignee.label")}
+            {selectedAssignee && (
+              <span
+                role="button"
+                className="ms-1 hover:text-danger p-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilter("assigneeId", null);
+                }}
+              >
+                <X className="h-3 w-3" />
+              </span>
+            )}
+          </Button>
+        </DropdownTrigger>
+        <DropdownMenu
+          aria-label="Filter by assignee"
+          selectionMode="single"
+          selectedKeys={filters.assigneeId ? new Set([filters.assigneeId]) : new Set()}
+          onSelectionChange={(keys) => {
+            const selected = Array.from(keys)[0] as string | undefined;
+            setFilter("assigneeId", selected ?? null);
+          }}
+        >
+          {(allUsers ?? []).map((u) => (
+            <DropdownItem
+              key={u.id}
+              startContent={
+                <Avatar
+                  src={u.avatar}
+                  name={u.name}
+                  size="sm"
+                  className="h-5 w-5 text-[9px]"
+                  showFallback
+                />
+              }
+            >
+              {localizedName(i18n.language, { name: u.name, nameAr: u.nameAr })}
+            </DropdownItem>
+          ))}
+        </DropdownMenu>
+      </Dropdown>
+
+      {/* Quick Filter Pill: Overdue */}
+      <Button
+        size="sm"
+        variant="bordered"
+        onPress={() => setFilter("overdueOnly", !filters.overdueOnly)}
+        className={cn(
+          "rounded-md font-bold gap-1 h-9 min-h-9 text-xs transition-colors",
+          filters.overdueOnly
+            ? "border-danger/40 bg-danger/10 text-danger"
+            : "border-default-200/80 bg-content1 text-default-600 hover:text-danger"
+        )}
+        startContent={<AlertTriangle className="h-3.5 w-3.5" />}
+      >
+        {t("dashboard.overdue")}
+      </Button>
+
+      {/* Quick Filter Pill: Completed This Week */}
+      <Button
+        size="sm"
+        variant="bordered"
+        onPress={() => setFilter("completedThisWeek", !filters.completedThisWeek)}
+        className={cn(
+          "rounded-md font-bold gap-1 h-9 min-h-9 text-xs transition-colors",
+          filters.completedThisWeek
+            ? "border-success/40 bg-success/10 text-success"
+            : "border-default-200/80 bg-content1 text-default-600 hover:text-success"
+        )}
+        startContent={<CheckCircle2 className="h-3.5 w-3.5" />}
+      >
+        {t("dashboard.completedThisWeek")}
+      </Button>
+
+      {hasActiveFilters && (
+        <Button
+          size="sm"
+          variant="light"
+          color="danger"
+          onPress={resetFilters}
+          className="font-bold text-xs h-9 min-h-9 rounded-md"
+          startContent={<X className="h-3.5 w-3.5" />}
+        >
+          {tc("actions.reset")}
+        </Button>
+      )}
+    </div>
+  );
+}
+

@@ -1,0 +1,286 @@
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import { LoginPage } from "@/features/auth/pages/login-page";
+import { RegisterPage } from "@/features/auth/pages/register-page";
+import { ProfilePage } from "@/features/auth/pages/profile-page";
+import { ForgotPasswordPage } from "@/features/auth/pages/forgot-password-page";
+import { ResetPasswordPage } from "@/features/auth/pages/reset-password-page";
+import { AcceptInvitePage } from "@/features/auth/pages/accept-invite-page";
+import { ProtectedRoute } from "@/features/auth/components/protected-route";
+import PublicInvoicePdfPage from "@/features/billing/pages/PublicInvoicePdfPage";
+import PublicClientReportPage from "@/features/crm/pages/PublicClientReportPage";
+import { AppLayout } from "@/components/layout/app-layout";
+import { TasksLayout } from "@/features/tasks/components/TasksLayout";
+import { TasksDashboardPage } from "@/features/tasks/pages/tasks-dashboard-page";
+import { TasksWorkspacePage } from "@/features/tasks/pages/tasks-workspace-page";
+import { TaskCreatePage } from "@/features/tasks/pages/task-create-page";
+import { TaskDetailPage } from "@/features/tasks/pages/task-detail-page";
+import { SprintsPage } from "@/features/tasks/pages/sprints-page";
+import { MeetingsPage } from "@/features/meetings/pages/MeetingsPage";
+import { CrmLayout } from "@/features/crm/components/CrmLayout";
+import { CrmDashboardPage } from "@/features/crm/pages/CrmDashboardPage";
+import { LeadsListPage } from "@/features/crm/pages/LeadsListPage";
+import { LeadDetailPage } from "@/features/crm/pages/LeadDetailPage";
+import { ContactsListPage } from "@/features/crm/pages/ContactsListPage";
+import { ContactDetailPage } from "@/features/crm/pages/ContactDetailPage";
+import { DealsPipelinePage } from "@/features/crm/pages/DealsPipelinePage";
+import { DealDetailPage } from "@/features/crm/pages/DealDetailPage";
+import { CrmTasksPage } from "@/features/crm/pages/CrmTasksPage";
+import { CrmReportsPage } from "@/features/crm/pages/CrmReportsPage";
+import { ClientReportsPage } from "@/features/crm/pages/ClientReportsPage";
+import { QuotationPage } from "@/features/crm/pages/QuotationPage";
+
+import { ContractPage } from "@/features/crm/pages/ContractPage";
+import { PeopleLayout } from "@/features/people/components/PeopleLayout";
+import { SeedPage } from "@/features/admin/pages/SeedPage";
+import PeopleDashboardPage from "@/features/people/pages/PeopleDashboardPage";
+import LeaveTrackerPage from "@/features/people/pages/LeaveTrackerPage";
+import EmployeeProfilePage from "@/features/people/pages/EmployeeProfilePage";
+import { ApprovalsPage } from "@/features/people/pages/ApprovalsPage";
+import PerformancePage from "@/features/people/pages/PerformancePage";
+import AttendanceSettingsPage from "@/features/people/pages/AttendanceSettingsPage";
+import HrSettingsHubPage from "@/features/people/pages/HrSettingsHubPage";
+import TimesheetsPage from "@/features/people/pages/TimesheetsPage";
+import DailyReportsPage from "@/features/people/pages/DailyReportsPage";
+import TaskDailyReportsPage from "@/features/tasks/pages/TaskDailyReportsPage";
+import NotificationsPage from "@/features/notifications/pages/NotificationsPage";
+import { SettingsLayout } from "@/features/companies/components/SettingsLayout";
+import { CompanySettingsPage } from "@/features/companies/pages/CompanySettingsPage";
+import { PricingPage } from "@/features/companies/pages/PricingPage";
+import { RolesPermissionsPage } from "@/features/companies/pages/RolesPermissionsPage";
+import { TeamMembersPage } from "@/features/companies/pages/TeamMembersPage";
+import { NotFoundPage } from "@/components/shared/not-found-page";
+import { ErrorPage } from "@/components/shared/error-page";
+import { HomePage } from "@/features/marketing/pages/home-page";
+import { PortalPickerPage } from "@/features/portals/pages/PortalPickerPage";
+import { ProjectsLayout } from "@/features/projects/components/ProjectsLayout";
+import { ProjectsListPage } from "@/features/projects/pages/ProjectsListPage";
+
+// Billing Imports
+import { BillingLayout } from "@/features/billing/components/BillingLayout";
+import AccountingLandingPage from "@/features/billing/pages/AccountingLandingPage";
+import BillingDashboardPage from "@/features/billing/pages/BillingDashboardPage";
+import SettingsPage from "@/features/billing/pages/SettingsPage";
+import ProductsPage from "@/features/billing/pages/ProductsPage";
+import ChartOfAccountsPage from "@/features/billing/pages/ChartOfAccountsPage";
+import ManualJournalsPage from "@/features/billing/pages/ManualJournalsPage";
+import InvoicesPage from "@/features/billing/pages/InvoicesPage";
+import CreateInvoicePage from "@/features/billing/pages/CreateInvoicePage";
+import InvoiceDetailPage from "@/features/billing/pages/InvoiceDetailPage";
+import BillsPage from "@/features/billing/pages/BillsPage";
+import CreateBillPage from "@/features/billing/pages/CreateBillPage";
+import BillDetailPage from "@/features/billing/pages/BillDetailPage";
+import VouchersPage from "@/features/billing/pages/VouchersPage";
+import CreateVoucherPage from "@/features/billing/pages/CreateVoucherPage";
+import VoucherDetailPage from "@/features/billing/pages/VoucherDetailPage";
+import ReportsPage from "@/features/billing/pages/ReportsPage";
+import ZakatPage from "@/features/billing/pages/ZakatPage";
+import CostCentersPage from "@/features/billing/pages/CostCentersPage";
+import VatReturnPage from "@/features/billing/pages/VatReturnPage";
+import CreditNotesPage from "@/features/billing/pages/CreditNotesPage";
+import StatementOfAccountPage from "@/features/billing/pages/StatementOfAccountPage";
+import BankReconciliationPage from "@/features/billing/pages/BankReconciliationPage";
+import FixedAssetsPage from "@/features/billing/pages/FixedAssetsPage";
+import FiscalClosingPage from "@/features/billing/pages/FiscalClosingPage";
+import { ChatLayout } from "@/features/chat/components/ChatLayout";
+import { ChatPage } from "@/features/chat/pages/ChatPage";
+
+export const router = createBrowserRouter([
+  {
+    path: "/",
+    errorElement: <ErrorPage />,
+    children: [
+      {
+        path: "login",
+        element: <LoginPage />,
+      },
+      {
+        path: "register",
+        element: <RegisterPage />,
+      },
+      {
+        path: "forgot-password",
+        element: <ForgotPasswordPage />,
+      },
+      {
+        path: "reset-password",
+        element: <ResetPasswordPage />,
+      },
+      {
+        path: "invite/:token",
+        element: <AcceptInvitePage />,
+      },
+      {
+        path: "i/:token",
+        element: <PublicInvoicePdfPage />,
+      },
+      {
+        path: "public/report/:companyId/:reportId",
+        element: <PublicClientReportPage />,
+      },
+      {
+        index: true,
+        element: <HomePage />,
+      },
+      {
+        element: (
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        ),
+        children: [
+          {
+            path: "apps",
+            element: <PortalPickerPage forceChoose />,
+          },
+          {
+            path: "tasks",
+            element: <TasksLayout />,
+            children: [
+              { index: true, element: <TasksDashboardPage /> },
+              { path: "work", element: <TasksWorkspacePage /> },
+              { path: "work/list", element: <TasksWorkspacePage /> },
+              { path: "work/board", element: <Navigate to="/tasks/work" replace /> },
+              { path: "list", element: <Navigate to="/tasks/work/list" replace /> },
+              { path: "board", element: <Navigate to="/tasks/work" replace /> },
+              { path: "sprints", element: <SprintsPage /> },
+              { path: "daily-reports", element: <TaskDailyReportsPage /> },
+              { path: "meetings", element: <Navigate to="/meetings" replace /> },
+              { path: "new", element: <TaskCreatePage /> },
+              { path: ":taskId", element: <TaskDetailPage /> },
+            ],
+          },
+          {
+            path: "tasks/dashboard",
+            element: <Navigate to="/tasks" replace />,
+          },
+          {
+            path: "crm",
+            element: <CrmLayout />,
+            children: [
+              { index: true, element: <CrmDashboardPage /> },
+              { path: "leads", element: <LeadsListPage /> },
+              { path: "leads/:leadId", element: <LeadDetailPage /> },
+              { path: "contacts", element: <ContactsListPage /> },
+              { path: "contacts/:contactId", element: <ContactDetailPage /> },
+              { path: "deals", element: <DealsPipelinePage /> },
+              { path: "deals/:dealId", element: <DealDetailPage /> },
+              { path: "tasks", element: <CrmTasksPage /> },
+              { path: "quotations", element: <QuotationPage /> },
+              { path: "contracts", element: <ContractPage /> },
+              { path: "reports", element: <CrmReportsPage /> },
+              { path: "client-reports", element: <ClientReportsPage /> },
+
+            ],
+          },
+          {
+            path: "people",
+            element: <PeopleLayout />,
+            children: [
+              { index: true, element: <PeopleDashboardPage /> },
+              { path: "leave", element: <LeaveTrackerPage /> },
+              { path: "approvals", element: <ApprovalsPage /> },
+              { path: "performance", element: <PerformancePage /> },
+              { path: "timesheets", element: <TimesheetsPage /> },
+              { path: "daily-reports", element: <DailyReportsPage /> },
+              { path: "attendance-settings", element: <AttendanceSettingsPage /> },
+              { path: "team", element: <TeamMembersPage /> },
+              { path: "roles", element: <RolesPermissionsPage /> },
+              { path: "company-settings", element: <CompanySettingsPage /> },
+              { path: "settings", element: <HrSettingsHubPage /> },
+              { path: ":id", element: <EmployeeProfilePage /> },
+            ],
+          },
+          {
+            path: "settings",
+            element: <SettingsLayout />,
+            children: [
+              { index: true, element: <Navigate to="/settings/company" replace /> },
+              { path: "company", element: <CompanySettingsPage /> },
+              { path: "pricing", element: <PricingPage /> },
+              { path: "team", element: <TeamMembersPage /> },
+              { path: "roles", element: <RolesPermissionsPage /> },
+            ],
+          },
+          {
+            path: "billing",
+            element: <BillingLayout />,
+            children: [
+              { index: true, element: <AccountingLandingPage /> },
+              { path: "overview", element: <BillingDashboardPage /> },
+              { path: "reports", element: <ReportsPage /> },
+              { path: "invoices", element: <InvoicesPage /> },
+              { path: "invoices/new", element: <CreateInvoicePage /> },
+              { path: "invoices/:id/edit", element: <CreateInvoicePage /> },
+              { path: "invoices/:id", element: <InvoiceDetailPage /> },
+              { path: "receipt-vouchers", element: <VouchersPage type="receipt" /> },
+              { path: "receipt-vouchers/new", element: <CreateVoucherPage type="receipt" /> },
+              { path: "receipt-vouchers/:id", element: <VoucherDetailPage type="receipt" /> },
+              { path: "bills", element: <BillsPage /> },
+              { path: "bills/new", element: <CreateBillPage /> },
+              { path: "bills/:id/edit", element: <CreateBillPage /> },
+              { path: "bills/:id", element: <BillDetailPage /> },
+              { path: "payment-vouchers", element: <VouchersPage type="disbursement" /> },
+              { path: "payment-vouchers/new", element: <CreateVoucherPage type="disbursement" /> },
+              { path: "payment-vouchers/:id", element: <VoucherDetailPage type="disbursement" /> },
+              { path: "accounts", element: <ChartOfAccountsPage /> },
+              { path: "journals", element: <ManualJournalsPage /> },
+              { path: "zakat", element: <ZakatPage /> },
+              { path: "vat-return", element: <VatReturnPage /> },
+              { path: "cost-centers", element: <CostCentersPage /> },
+              { path: "credit-notes", element: <CreditNotesPage /> },
+              { path: "statement-of-account", element: <StatementOfAccountPage /> },
+              { path: "bank-reconciliation", element: <BankReconciliationPage /> },
+              { path: "fixed-assets", element: <FixedAssetsPage /> },
+              { path: "fiscal-closing", element: <FiscalClosingPage /> },
+              { path: "products", element: <ProductsPage /> },
+              { path: "settings", element: <SettingsPage /> },
+            ],
+          },
+          {
+            path: "chat",
+            element: <ChatLayout />,
+            children: [
+              { index: true, element: <ChatPage /> },
+              { path: ":conversationId", element: <ChatPage /> },
+            ],
+          },
+          {
+            path: "projects",
+            element: <ProjectsLayout />,
+            children: [
+              { index: true, element: <ProjectsListPage scope="all" /> },
+              { path: "mine", element: <ProjectsListPage scope="mine" /> },
+              { path: "completed", element: <ProjectsListPage scope="completed" /> },
+            ],
+          },
+          {
+            // Meetings are open to every signed-in user, so they sit outside
+            // the portal guards.
+            path: "meetings",
+            element: <MeetingsPage />,
+          },
+          {
+            path: "seed",
+            element: <SeedPage />,
+          },
+          {
+            path: "profile",
+            element: <ProfilePage />,
+          },
+          {
+            path: "notifications",
+            element: <NotificationsPage />,
+          },
+          {
+            path: "*",
+            element: <NotFoundPage />,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    path: "*",
+    element: <NotFoundPage />,
+  },
+]);

@@ -1,0 +1,399 @@
+{
+  "module_name": "المهام",
+  "nav": {
+    "dashboard": "لوحة المهام",
+    "back": "رجوع"
+  },
+  "landing": {
+    "title": "المهام",
+    "subtitle": "خطّط دورات التطوير، تابع العمل في لوحة أو قائمة، عيّن المسؤولين، وراقب تقدّم الفريق — في مركز واحد.",
+    "footer": "دي أرو للأعمال — بوابة المهام",
+    "quick": {
+      "newTask": "مهمة جديدة",
+      "openBoard": "فتح اللوحة",
+      "openList": "فتح القائمة",
+      "openSprints": "دورات التطوير"
+    },
+    "sections": {
+      "work": "التنفيذ",
+      "work_desc": "لوحة كانبان وقائمة المهام للعمل اليومي",
+      "planning": "التخطيط",
+      "planning_desc": "دورات التطوير والأهداف ودورات العمل المركّزة",
+      "insights": "المتابعة",
+      "insights_desc": "رسوم بيانية ومؤشرات وآخر النشاط"
+    },
+    "apps": {
+      "dashboard": {
+        "title": "لوحة المهام",
+        "desc": "مؤشرات ورسوم بيانية ونظرة سريعة على عبء العمل"
+      },
+      "board": {
+        "title": "لوحة المهام",
+        "desc": "اسحب المهام بين الأعمدة حسب الحالة — للتنفيذ، قيد التنفيذ، مراجعة، مكتمل"
+      },
+      "list": {
+        "title": "قائمة المهام",
+        "desc": "جدول قابل للفرز مع فلاتر للمسؤول ودورة التطوير والحالة والأولوية"
+      },
+      "sprints": {
+        "title": "دورات التطوير",
+        "desc": "خطّط دورات العمل، حدّد الأهداف، واجمع المهام ضمن sprint"
+      },
+      "newTask": {
+        "title": "إنشاء مهمة",
+        "desc": "أضف مهمة رئيسية أو فرعية مع مسؤول وتاريخ استحقاق ومرفقات"
+      }
+    }
+  },
+  "dashboard": {
+    "title": "لوحة المهام",
+    "subtitle": "نظرة عامة على أداء فريقك والأنشطة الأخيرة.",
+    "description": "مؤشرات ورسوم بيانية ومهام حديثة — مركز متابعة عمل الفريق.",
+    "totalTasks": "إجمالي المهام",
+    "inProgress": "قيد التنفيذ",
+    "overdue": "متأخرة",
+    "completedThisWeek": "مكتملة هذا الأسبوع",
+    "recentTasks": "المهام الأخيرة",
+    "tasksByStatus": "المهام حسب الحالة",
+    "tasksByPriority": "المهام حسب الأولوية",
+    "overview": "نظرة عامة",
+    "distribution": "التوزيع",
+    "quickActions": "إجراءات سريعة",
+    "openBoard": "فتح اللوحة",
+    "openList": "فتح القائمة",
+    "openSprints": "دورات التطوير",
+    "viewAll": "عرض الكل",
+    "noRecent": "لا توجد مهام حديثة",
+    "noData": "لا توجد بيانات بعد"
+  },
+  "workspace": {
+    "title": "المهام",
+    "subtitle": "تصفّح المهام في لوحة كانبان أو قائمة مع فلاتر متقدمة.",
+    "description": "بدّل بين اللوحة والقائمة لإدارة المهام المفتوحة.",
+    "views": {
+      "list": "قائمة",
+      "board": "لوحة"
+    },
+    "filters": {
+      "allSprints": "كل الدورات"
+    }
+  },
+  "list": {
+    "title": "قائمة المهام",
+    "description": "كل المهام في جدول قابل للتصفية — ابحث، رتّب، وافتح التفاصيل بسرعة.",
+    "newTask": "مهمة جديدة",
+    "searchPlaceholder": "البحث في المهام...",
+    "columns": {
+      "title": "العنوان",
+      "status": "الحالة",
+      "priority": "الأولوية",
+      "assignee": "المسؤول",
+      "dueDate": "تاريخ الاستحقاق",
+      "created": "تاريخ الإنشاء",
+      "actions": "الإجراءات"
+    }
+  },
+  "board": {
+    "title": "لوحة المهام",
+    "description": "سير عمل كانبان مرئي — انقل البطاقات بين أعمدة الحالة مع تقدّم العمل.",
+    "scrollStart": "تمرير الأعمدة للخلف",
+    "scrollEnd": "تمرير الأعمدة للأمام",
+    "jumpToColumn": "الانتقال إلى عمود {{status}}",
+    "dropHere": "أفلت المهمة هنا",
+    "addTask": "إضافة مهمة",
+    "collapseColumn": "طي عمود {{status}}",
+    "expandColumn": "توسيع عمود {{status}}",
+    "scrollProgress": "موضع التمرير الأفقي للوحة",
+    "keyboardHint": "اختصارات: 1–4 للأعمدة · ← → للتمرير · Home/End · Esc للخروج من التركيز",
+    "expandAll": "توسيع كل الأعمدة",
+    "collapseAll": "طي كل الأعمدة",
+    "scrollColumnUp": "تمرير العمود للأعلى",
+    "scrollColumnDown": "تمرير العمود للأسفل",
+    "moveSuccess": "نُقلت \"{{title}}\" إلى {{status}}",
+    "undo": "تراجع",
+    "sort": {
+      "label": "ترتيب البطاقات داخل الأعمدة",
+      "updated": "آخر تحديث",
+      "priority": "الأولوية",
+      "dueDate": "تاريخ الاستحقاق"
+    },
+    "density": {
+      "compact": "بطاقات مضغوطة",
+      "comfortable": "بطاقات مريحة"
+    },
+    "focusMode": {
+      "enter": "تركيز عمود {{status}}",
+      "exit": "عرض كل الأعمدة ({{status}} مُركَّز)"
+    },
+    "stats": {
+      "total": "{{count}} مهمة",
+      "inProgress": "{{count}} قيد التنفيذ",
+      "overdue": "{{count}} متأخرة"
+    },
+    "emptyTitle": "لا توجد مهام متاحة",
+    "emptySubtitle": "أضف مهمة إلى هذه الحالة وتتبعها"
+  },
+  "detail": {
+    "title": "تفاصيل المهمة",
+    "description": "سجل المهمة الكامل — الوصف، التعليقات، السجل، المرفقات، والمهام الفرعية.",
+    "notFound": "المهمة غير موجودة",
+    "description": "الوصف",
+    "noDescription": "لا يوجد وصف",
+    "comments": "التعليقات",
+    "activity": "النشاط",
+    "addComment": "أضف تعليقاً...",
+    "postComment": "نشر",
+    "noComments": "لا توجد تعليقات بعد",
+    "editComment": "تعديل التعليق",
+    "deleteComment": "حذف التعليق",
+    "deleteCommentConfirm": "هل أنت متأكد من حذف هذا التعليق؟",
+    "saveComment": "حفظ",
+    "cancelEdit": "إلغاء",
+    "edited": "تم التعديل",
+    "details": "التفاصيل",
+    "noDueDate": "لا يوجد تاريخ استحقاق",
+    "history": "السجل",
+    "historySubtitle": "تتبع من غيّر ماذا ومتى",
+    "historyPlaceholder": "ستظهر تغييرات هذه المهمة هنا.",
+    "editTask": "تعديل المهمة",
+    "subtasks": "المهام الفرعية",
+    "more": "+ {{count}} أخرى",
+    "noSubtasks": "لا توجد مهام فرعية.",
+    "addSubtask": "إضافة مهمة فرعية",
+    "parentTask": "المهمة الرئيسية",
+    "saveChanges": "حفظ التغييرات",
+    "createdAt": "تاريخ الإنشاء",
+    "attachedFiles": "الملفات المرفقة ({{count}})",
+    "fileIndex": "ملف {{index}}",
+    "viewFullSize": "عرض بالحجم الكامل",
+    "tabs": {
+      "details": "التفاصيل",
+      "description": "الوصف",
+      "comments": "التعليقات",
+      "history": "السجل",
+      "attachments": "المرفقات",
+      "log-hours": "تسجيل الساعات",
+      "subitems": "المهام الفرعية"
+    },
+    "sections": {
+      "detailsTitle": "تفاصيل المهمة",
+      "detailsSubtitle": "دورة التطوير، المسؤول، الحالة، والجدولة",
+      "primary": "أساسي",
+      "associatedSprint": "دورة التطوير المرتبطة",
+      "properties": "الخصائص",
+      "assignedTo": "المسؤول",
+      "status": "الحالة",
+      "parentTask": "المهمة الرئيسية",
+      "mainTask": "المهمة الرئيسية",
+      "itemType": "نوع العنصر",
+      "priority": "الأولوية",
+      "startDate": "تاريخ البدء",
+      "endDate": "تاريخ الانتهاء",
+      "descriptionTitle": "الوصف",
+      "descriptionSubtitle": "أضف سياقاً، معايير قبول، أو ملاحظات",
+      "descriptionPlaceholder": "لم يتم تقديم وصف. اكتب لإضافة وصف.",
+      "commentsTitle": "التعليقات",
+      "commentsSubtitle_one": "نقاش واحد",
+      "commentsSubtitle_other": "{{count}} نقاشات",
+      "attachmentsTitle": "المرفقات",
+      "attachmentsSubtitle": "الملفات المرتبطة بهذه المهمة",
+      "upload": "رفع",
+      "clickToUpload": "انقر لرفع الملفات",
+      "logHoursTitle": "تسجيل الساعات",
+      "logHoursSubtitle": "تتبع الوقت المستغرق في هذه المهمة",
+      "totalLogged": "إجمالي المسجل: {{hours}} ساعة {{minutes}} دقيقة",
+      "hours": "الساعات",
+      "minutes": "الدقائق",
+      "logDescPlaceholder": "ما الذي عملت عليه؟",
+      "saveLog": "حفظ السجل",
+      "noTimeLogged": "لم يتم تسجيل وقت بعد.",
+      "subitemsTitle": "المهام الفرعية",
+      "subitemsSubtitle": "خطوات العمل المرتبطة بهذه المهمة",
+      "delete": "حذف",
+      "unsavedChanges": "تغييرات غير محفوظة",
+      "createdBy": "أُنشئ بواسطة {{name}} في {{date}}",
+      "noActiveSprint": "لا توجد دورة تطوير نشطة",
+      "notAssigned": "غير معين",
+      "noTags": "لا توجد وسوم",
+      "none": "بلا",
+      "taskId": "معرف المهمة",
+      "progress": "التقدم"
+    }
+  },
+  "form": {
+    "createTitle": "إنشاء مهمة",
+    "editTitle": "تعديل المهمة",
+    "title": {
+      "label": "العنوان",
+      "placeholder": "أدخل عنوان المهمة",
+      "required": "العنوان مطلوب",
+      "minLength": "يجب أن يكون العنوان 3 أحرف على الأقل"
+    },
+    "description": {
+      "label": "الوصف",
+      "placeholder": "صف المهمة..."
+    },
+    "search": {
+      "placeholder": "بحث..."
+    },
+    "statusLabel": "الحالة",
+    "status": {
+      "label": "الحالة",
+      "placeholder": "اختر الحالة"
+    },
+    "priority": {
+      "label": "الأولوية"
+    },
+    "assignee": {
+      "label": "المسؤول",
+      "placeholder": "اختر المسؤول",
+      "searchPlaceholder": "ابحث عن مسؤول...",
+      "unassigned": "غير معين",
+      "me": "أنا"
+    },
+    "dueDate": {
+      "label": "تاريخ الاستحقاق",
+      "placeholder": "اختر تاريخاً"
+    },
+    "tags": {
+      "label": "الوسوم",
+      "placeholder": "أضف وسوماً..."
+    },
+    "type": {
+      "label": "نوع المهمة"
+    },
+    "parent": {
+      "label": "المهمة الرئيسية",
+      "placeholder": "اختر المهمة الرئيسية",
+      "required": "المهمة الرئيسية مطلوبة للمهام الفرعية",
+      "linkedTo": "ستُربط هذه المهمة الفرعية بـ"
+    },
+    "createSubtaskFor": "إنشاء مهمة فرعية لـ",
+    "sprint": {
+      "label": "دورة التطوير",
+      "assigned": "معيّن لدورة تطوير",
+      "unassigned": "بدون دورة تطوير",
+      "placeholder": "اختر دورة تطوير",
+      "active": "دورة تطوير نشطة",
+      "filterBy": "تصفية حسب دورة التطوير"
+    },
+    "attachments": {
+      "label": "المرفقات",
+      "optional": "اختياري",
+      "hint": "أضف الملفات الآن أو تخطَّ وأرفق لاحقاً من صفحة المهمة.",
+      "partialUpload": "تعذر رفع بعض الملفات. سيتم حفظ المهمة بالملفات التي نجح رفعها.",
+      "uploadFailed": "فشل رفع الملفات. سيتم إنشاء المهمة بدون تلك المرفقات.",
+      "document": "مستند",
+      "view": "عرض",
+      "pending": "قيد الانتظار",
+      "new": "جديد",
+      "clickOrDrag": "انقر أو اسحب الملفات لرفعها",
+      "optionalHint": "اختياري — صور، ملفات PDF، ومستندات",
+      "filesSelected_one": "تم اختيار ملف واحد",
+      "filesSelected_other": "تم اختيار {{count}} ملفات"
+    },
+    "createHint": "أكمل التفاصيل أدناه. العنوان فقط مطلوب.",
+    "pageDescription": "أنشئ مهمة عمل، عيّن مسؤولاً، حدّد التواريخ، وأرفق الملفات.",
+    "checkFields": "يرجى مراجعة الحقول والمحاولة مرة أخرى."
+  },
+  "type": {
+    "task": "مهمة رئيسية",
+    "taskHint": "مهمة مستقلة يمكن ربط مهام فرعية بها",
+    "subtask": "مهمة فرعية",
+    "subtaskHint": "خطوة عمل مرتبطة بمهمة رئيسية"
+  },
+  "status": {
+    "todo": "للتنفيذ",
+    "in_progress": "قيد التنفيذ",
+    "in_review": "قيد المراجعة",
+    "done": "مكتمل"
+  },
+  "priority": {
+    "low": "منخفضة",
+    "medium": "متوسطة",
+    "high": "عالية",
+    "urgent": "عاجلة"
+  },
+  "history": {
+    "unknownUser": "مستخدم",
+    "emptyValue": "—",
+    "noParent": "بدون مهمة رئيسية",
+    "fileCount": "{{count}} ملف",
+    "created": "{{user}} أنشأ هذه المهمة",
+    "updated": "{{user}} حدّث المهمة",
+    "timeLogged": "{{user}} سجّل وقتاً",
+    "attachmentAdded": "{{user}} حدّث المرفقات ({{count}} ملفات)",
+    "changedField": "{{user}} غيّر {{field}} من {{from}} إلى {{to}}",
+    "setField": "{{user}} عيّن {{field}} إلى {{value}}",
+    "actions": {
+      "created": "إنشاء",
+      "updated": "تحديث",
+      "attachment_added": "مرفق",
+      "time_logged": "وقت"
+    },
+    "fields": {
+      "title": "العنوان",
+      "description": "الوصف",
+      "status": "الحالة",
+      "priority": "الأولوية",
+      "type": "النوع",
+      "parentId": "المهمة الرئيسية",
+      "sprintId": "دورة التطوير",
+      "assigneeId": "المسؤول",
+      "dueDate": "تاريخ الاستحقاق",
+      "startDate": "تاريخ البدء",
+      "attachments": "المرفقات",
+      "timeLogs": "سجلات الوقت"
+    }
+  },
+  "delete": {
+    "title": "حذف المهمة",
+    "message": "هل أنت متأكد من حذف هذه المهمة؟ لا يمكن التراجع عن هذا الإجراء."
+  },
+  "errors": {
+    "approvePermission": "فقط المديرون والمشرفون يمكنهم نقل المهمة إلى حالة 'مكتمل'.",
+    "approveOnly": "للمديرين فقط"
+  },
+  "sprints": {
+    "title": "دورات التطوير",
+    "subtitle": "خطّط دورات العمل، حدّد الأهداف، وتابع تقدّم الفريق.",
+    "description": "عرّف فترات sprint وأهدافها، ثم صفِّ اللوحة والقائمة حسب الدورة النشطة.",
+    "newSprint": "دورة تطوير جديدة",
+    "editSprint": "تعديل دورة التطوير",
+    "createSprint": "إنشاء دورة تطوير جديدة",
+    "nameLabel": "اسم دورة التطوير",
+    "namePlaceholder": "مثال: دورة التطوير ٢٤ — الميزات الأساسية",
+    "startDate": "تاريخ البداية",
+    "endDate": "تاريخ النهاية",
+    "goalLabel": "هدف دورة التطوير",
+    "goalPlaceholder": "ما الذي تريد إنجازه في هذه الدورة؟",
+    "cancel": "إلغاء",
+    "saveChanges": "حفظ التغييرات",
+    "createBtn": "إنشاء دورة التطوير",
+    "statusActive": "نشط",
+    "statusCompleted": "مكتمل",
+    "statusPlanned": "مخطط له",
+    "msgFillRequired": "يرجى تعبئة جميع الحقول المطلوبة",
+    "msgUpdateSuccess": "تم تحديث دورة التطوير بنجاح",
+    "msgCreateSuccess": "تم إنشاء دورة التطوير بنجاح",
+    "msgUpdateError": "تعذّر تحديث دورة التطوير",
+    "msgCreateError": "تعذّر إنشاء دورة التطوير",
+    "viewTasks": "عرض مهام دورة التطوير",
+    "duration": "مدة دورة التطوير",
+    "noSprints": "لا توجد دورات تطوير بعد",
+    "noSprintsHint": "أنشئ دورة تطوير لتجميع المهام ضمن دورة عمل محددة"
+  },
+  "toast": {
+    "created": "تم إنشاء المهمة بنجاح",
+    "updated": "تم تحديث المهمة بنجاح",
+    "deleted": "تم حذف المهمة بنجاح",
+    "createFailed": "فشل إنشاء المهمة",
+    "updateFailed": "فشل تحديث المهمة",
+    "deleteFailed": "فشل حذف المهمة",
+    "commentUpdated": "تم تحديث التعليق",
+    "commentDeleted": "تم حذف التعليق",
+    "commentAddFailed": "فشل إضافة التعليق",
+    "commentUpdateFailed": "فشل تحديث التعليق",
+    "commentDeleteFailed": "فشل حذف التعليق"
+  }
+}

@@ -1,0 +1,169 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasUserDoc() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function belongsToCompany(companyId) {
+      return signedIn() && hasUserDoc() && userDoc().companyId == companyId;
+    }
+
+    function isCompanyAdmin(companyId) {
+      return belongsToCompany(companyId)
+        && userDoc().role in ['super_admin', 'admin'];
+    }
+
+    // Effective People sub-role; empty string means "fall back to the global role".
+    // Guarded with `is map` because a null/absent field would make .get() error out,
+    // which rules treat as a denial.
+    function peopleSubRole() {
+      return userDoc().get('portalSubRoles', {}) is map
+        ? userDoc().get('portalSubRoles', {}).get('people', '')
+        : '';
+    }
+
+    function customPermissions() {
+      return userDoc().get('customPermissions', []) is list
+        ? userDoc().get('customPermissions', [])
+        : [];
+    }
+
+    // Mirrors the `people.view_all_reports` permission in src/lib/permissions.
+    // Everyone can always read their own reports; this covers reading everyone's.
+    function canViewAllReports(companyId) {
+      return belongsToCompany(companyId) && (
+        userDoc().role == 'super_admin'
+        || 'people.view_all_reports' in customPermissions()
+        || (
+          userDoc().role in ['admin', 'manager']
+          && (peopleSubRole() == '' || peopleSubRole() in ['admin', 'manager', 'hr'])
+        )
+      );
+    }
+
+    // User profiles
+    match /users/{userId} {
+      // Own profile, or teammates in the same company
+      allow read: if signedIn() && (
+        request.auth.uid == userId
+        || (hasUserDoc() && resource.data.companyId == userDoc().companyId)
+      );
+
+      // New account (register / invite accept / Google)
+      allow create: if signedIn() && request.auth.uid == userId;
+
+      // Self update, or company admin updating teammates
+      allow update: if signedIn() && (
+        request.auth.uid == userId
+        || (hasUserDoc() && isCompanyAdmin(resource.data.companyId))
+      );
+
+      allow delete: if hasUserDoc() && isCompanyAdmin(resource.data.companyId);
+    }
+
+    // Team invitations (token = document id)
+    match /invites/{token} {
+      // Accept page loads a single pending invite by token (pre-auth)
+      allow get: if resource.data.status == 'pending'
+        || (signedIn() && isCompanyAdmin(resource.data.companyId));
+
+      // Admins list pending invites for their company (query must filter companyId)
+      allow list: if signedIn() && isCompanyAdmin(resource.data.companyId);
+
+      allow create: if signedIn()
+        && isCompanyAdmin(request.resource.data.companyId)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.email is string
+        && request.resource.data.token == token;
+
+      allow update: if signedIn() && (
+        isCompanyAdmin(resource.data.companyId)
+        || (
+          resource.data.status == 'pending'
+          && request.resource.data.status == 'accepted'
+          && request.auth.uid == request.resource.data.acceptedBy
+        )
+      );
+
+      allow delete: if signedIn() && isCompanyAdmin(resource.data.companyId);
+    }
+
+    // OTP password-reset codes (EmailJS flow)
+    match /otpResets/{id} {
+      allow read, write: if true;
+    }
+
+    // Public invoice PDF shares (QR scan → PDF). No auth required to open.
+    match /publicInvoiceShares/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if signedIn()
+        && request.resource.data.token == token
+        && request.resource.data.companyId is string
+        && request.resource.data.invoiceId is string
+        && belongsToCompany(request.resource.data.companyId)
+        && (
+          request.resource.data.snapshot is map
+          || request.resource.data.pdfUrl is string
+          || request.resource.data.pdfBase64 is string
+        );
+      allow delete: if signedIn()
+        && belongsToCompany(resource.data.companyId);
+    }
+
+    match /companies/{companyId} {
+      allow read, write: if belongsToCompany(companyId);
+      allow create: if signedIn();
+
+      // Allow public unauthenticated single GET for client reports (direct share link)
+      match /client_reports/{reportId} {
+        allow get: if true;
+        allow list, write: if belongsToCompany(companyId);
+      }
+
+      // Daily reports are private: authors see their own, managers/HR/admins see all.
+      // A list query is only permitted when it is filtered to the caller, which is
+      // exactly what DailyReportsService does for non-privileged users.
+      match /daily_reports/{reportId} {
+        allow read: if belongsToCompany(companyId) && (
+          resource.data.employeeId == request.auth.uid
+          || canViewAllReports(companyId)
+        );
+        allow create: if belongsToCompany(companyId)
+          && request.resource.data.employeeId == request.auth.uid;
+        // Authors may amend their own report; managers add the review fields.
+        // `resource != null` keeps this from erroring while a create is evaluated.
+        allow update: if belongsToCompany(companyId) && resource != null && (
+          resource.data.employeeId == request.auth.uid
+          || canViewAllReports(companyId)
+        );
+        allow delete: if isCompanyAdmin(companyId);
+      }
+
+      // Every other company subcollection stays open to company members.
+      // Rules are additive, so `daily_reports` must be excluded by name here —
+      // otherwise this block would re-grant what the stricter rule above denies.
+      match /{collection}/{docId} {
+        allow read, write: if belongsToCompany(companyId)
+          && collection != 'daily_reports';
+
+        // Nested data such as tasks/{id}/comments and conversations/{id}/messages.
+        match /{nested=**} {
+          allow read, write: if belongsToCompany(companyId)
+            && collection != 'daily_reports';
+        }
+      }
+    }
+  }
+}

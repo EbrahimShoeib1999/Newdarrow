@@ -1,0 +1,761 @@
+import { useState, useEffect, useRef } from "react";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerBody,
+  DrawerFooter,
+  Button,
+  Chip,
+} from "@heroui/react";
+import {
+  FileText,
+  Bold,
+  Italic,
+  Underline,
+  List,
+  ListOrdered,
+  Heading1,
+  Heading2,
+  Heading3,
+  Quote,
+  Smile,
+  Meh,
+  AlertTriangle,
+  Flame,
+  Star,
+  Plus,
+  Trash2,
+  CheckCircle,
+  Save,
+  Send,
+  Calendar,
+  Lock,
+  Sparkles,
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useContactsQuery, useDealsQuery } from "../hooks";
+import {
+  useCreateClientReportMutation,
+  useUpdateClientReportMutation,
+} from "../hooks/use-client-reports";
+import type {
+  ClientReport,
+  ClientReportType,
+  ClientMood,
+  ReportActionItem,
+} from "../types/client-reports.types";
+
+interface ClientReportEditorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  initialReport?: ClientReport | null;
+  initialContactId?: string;
+  initialDealId?: string;
+}
+
+const MOOD_OPTIONS: { key: ClientMood; labelAr: string; labelEn: string; color: "success" | "default" | "warning" | "danger"; icon: any }[] = [
+  { key: "satisfied", labelAr: "مرتاح / راضٍ", labelEn: "Satisfied", color: "success", icon: Smile },
+  { key: "neutral", labelAr: "محايد", labelEn: "Neutral", color: "default", icon: Meh },
+  { key: "needs_attention", labelAr: "يحتاج متابعة", labelEn: "Needs Attention", color: "warning", icon: AlertTriangle },
+  { key: "at_risk", labelAr: "في خطر / معترض", labelEn: "At Risk", color: "danger", icon: Flame },
+];
+
+const REPORT_TYPES: { key: ClientReportType; labelAr: string; labelEn: string }[] = [
+  { key: "meeting_summary", labelAr: "ملخص اجتماع عميل", labelEn: "Meeting Summary" },
+  { key: "status_update", labelAr: "متابعة وتحديث حالة", labelEn: "Status Update" },
+  { key: "sales_pitch", labelAr: "تقرير عرض مبيعات", labelEn: "Sales Pitch" },
+  { key: "complaint_resolution", labelAr: "معالجة شكوى", labelEn: "Complaint Resolution" },
+  { key: "quarterly_review", labelAr: "مراجعة دورية / ربع سنوية", labelEn: "Quarterly Review" },
+  { key: "general", labelAr: "تقرير عام", labelEn: "General Report" },
+];
+
+const DEFAULT_SAMPLE_TITLE = "تقرير اجتماع المراجعة الاستراتيجية وتحديد المتطلبات الرقمية";
+const DEFAULT_SAMPLE_DESCRIPTION = "يتضمن هذا التقرير المستندي تفاصيل اجتماع العمل الشامل المجرى مع ممثلي العميل لمراجعة الأداء الحالي، مخرجات المرحلة الأولى، وتحديد الأولويات الفنية والخطط المستقبلية لتعزيز الكفاءة التشغيلية وتحقيق الأهداف الاستثمارية المرجوة.";
+const DEFAULT_SAMPLE_CONTENT = `# 1. الملخص التنفيذي والسياق العام للاجتماع
+عُقد هذا الاجتماع التنسيقي الموسع بحضور ممثلي الإدارة وفريق العمل الفني لمراجعة نطاق العمل الحالي وتقييم مخرجات المرحلة السابقة. هدف الجلسة إلى الوقوف على جميع الملاحظات الفنية والتنظيمية، وتحديد أهداف المرحلة المقبلة وفقاً لأعلى معايير الجودة والالتزام بالجدول الزمني المحدد.
+
+# 2. أبرز محاور النقاش والجلسة التفصيلية
+- **مراجعة متطلبات وتوقعات العميل:** تم استعراض كافة تفاصيل المشروع ومناقشة التعديلات المطلوبة على سير العمل بما يضمن تحقيق الكفاءة القصوى وتفادي أي تأخير تشغيلي.
+- **تحليل الجودة ومؤشرات الأداء:** أظهر التقييم الميداني استقراراً ممتازاً في سير العمل مع وجود فرص تحسين تم مناقشتها وتدوينها لضمان تطبيقها في الإصدارات التالية.
+- **التنسيق المالي والتشغيلي:** التأكيد على الميزانية المعتمدة وتوفير كافة الموارد اللوجستية والفنية اللازمة لدعم استمرارية المشروع بسلاسة.
+
+# 3. التوصيات الاستراتيجية والحلول المقترحة
+> 💡 **ملاحظة وتوصية رئيسية:** يوصي فريق العمل بضرورة تعزيز التواصل الأسبوعي المستمر وعقد جلسات مراجعة سريعة لضمان مرونة التنفيذ والاستجابة الفورية لأي تحديات طارئة.
+
+1. أتمتة إجراءات المتابعة اليومية لرفع سرعة الاستجابة.
+2. تقديم تقارير دورية كل أسبوعين تبيّن نسبة الإنجاز والمراحل المتبقية.
+3. تنظيم ورشة عمل تدريبية لموظفي العميل على التعامل مع النظام الجديد.
+
+# 4. التطلعات والخاتمة
+نؤكد حرصنا الكامل على تقديم أفضل مستويات الخدمة المتميزة، والاستمرار في متابعة تنفيذ كافة التوصيات الواردة في هذا التقرير لتحقيق نجاح كلي ومستدام للمشروع.`;
+
+const DEFAULT_SAMPLE_OUTCOMES = [
+  "المرونة والالتزام التام بالجدول الزمني المحدد للمشروع",
+  "الموافقة المبدئية على خطة الترقية والتطوير الجديدة",
+  "رفع مستوى التنسيق بين فريق العمل وممثلي العميل",
+];
+
+const DEFAULT_SAMPLE_ACTION_ITEMS: ReportActionItem[] = [
+  { id: "act_1", text: "إرسال المسودة النهائية للتقرير وعرض السعر المعدل", done: false, dueDate: "2026-09-20" },
+  { id: "act_2", text: "تنسيق اجتماع المتابعة القادم مع فريق الدعم الفني", done: false, dueDate: "2026-09-25" },
+];
+
+export function ClientReportEditorModal({
+  isOpen,
+  onClose,
+  initialReport,
+  initialContactId,
+  initialDealId,
+}: ClientReportEditorModalProps) {
+  const { i18n } = useTranslation();
+  const isAr = i18n.language === "ar";
+
+  const { data: contactsData } = useContactsQuery();
+  const { data: dealsData } = useDealsQuery();
+
+  const contacts = contactsData?.data || [];
+  const deals = dealsData?.data || [];
+
+  const createMutation = useCreateClientReportMutation();
+  const updateMutation = useUpdateClientReportMutation();
+
+  const [contactId, setContactId] = useState(initialContactId || "");
+  const [dealId, setDealId] = useState(initialDealId || "");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
+  const [reportType, setReportType] = useState<ClientReportType>("meeting_summary");
+  const [content, setContent] = useState("");
+  const [clientMood, setClientMood] = useState<ClientMood>("satisfied");
+  const [satisfactionRating, setSatisfactionRating] = useState<number>(5);
+  const [outcomes, setOutcomes] = useState<string[]>([]);
+  const [newOutcome, setNewOutcome] = useState("");
+  const [actionItems, setActionItems] = useState<ReportActionItem[]>([]);
+  const [newActionText, setNewActionText] = useState("");
+  const [newActionDate, setNewActionDate] = useState("");
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (initialReport) {
+      setContactId(initialReport.contactId);
+      setDealId(initialReport.dealId || "");
+      setTitle(initialReport.title);
+      setDescription(initialReport.description || "");
+      setInternalNotes(initialReport.internalNotes || "");
+      setReportType(initialReport.reportType);
+      setContent(initialReport.content);
+      setClientMood(initialReport.clientMood);
+      setSatisfactionRating(initialReport.satisfactionRating || 5);
+      setOutcomes(initialReport.keyOutcomes || []);
+      setActionItems(initialReport.actionItems || []);
+    } else {
+      setContactId(initialContactId || (contacts.length > 0 ? contacts[0].id : ""));
+      setDealId(initialDealId || "");
+      setTitle(isAr ? DEFAULT_SAMPLE_TITLE : "Strategic Review & Client Requirements Report");
+      setDescription(isAr ? DEFAULT_SAMPLE_DESCRIPTION : "Detailed client meeting report covering performance review, outcome alignment, and strategic roadmap.");
+      setInternalNotes(isAr ? "ملاحظة سرية للإدارة: أظهر العميل استعداداً لزيادة التعاقد في حال توفير خصم تجاري بنسبة 5%." : "Private management note: Client is ready to expand contract volume if 5% discount is provided.");
+      setReportType("meeting_summary");
+      setContent(isAr ? DEFAULT_SAMPLE_CONTENT : "# Executive Summary\n\nDetailed client report content...");
+      setClientMood("satisfied");
+      setSatisfactionRating(5);
+      setOutcomes(isAr ? DEFAULT_SAMPLE_OUTCOMES : ["Agreed on timeline", "Approved project scope"]);
+      setActionItems(isAr ? DEFAULT_SAMPLE_ACTION_ITEMS : []);
+    }
+  }, [initialReport, initialContactId, initialDealId, isOpen]);
+
+  const generateSmartTemplate = () => {
+    if (reportType === "sales_pitch") {
+      setTitle(isAr ? "تقرير تقديم العرض الاستثماري والمبيعات" : "Sales Pitch & Proposal Presentation Report");
+      setDescription(isAr ? "تقرير توثيقي لعرض الخدمات والمميزات الاستثمارية للعميل مع تحديد خطة الأسعار والملاحظات المالية." : "Documentation report for sales presentation, financial terms, and package proposal.");
+      setContent(isAr ? `# 1. هدف العرض الاستثماري
+تم تقديم عرض شامل يستعرض الحلول الرقمية والخدمات المتاحة مع بيان القيمة المضافة ومعدل العائد على الاستثمار المتوقع.
+
+# 2. انطباع العميل والملاحظات المالية
+- أبدى العميل اهتماماً كبيراً بالحزمة الاحترافية.
+- تمت مناقشة تفاصيل الدفعات المالية والجدول الزمني للتنفيذ.
+
+> 💡 **توصية المبيعات:** إرسال العقد النهائي المعتمد خلال 48 ساعة للاستفادة من الاهتمام العالي للعميل.` : `# 1. Presentation Objective\nPresented full solution proposal and ROI projection.`);
+    } else if (reportType === "complaint_resolution") {
+      setTitle(isAr ? "تقرير معالجة وتفادي الشكاوى التشغيلية" : "Complaint Resolution & SLA Report");
+      setDescription(isAr ? "تقرير توثيقي لمعالجة ملاحظات العميل وتوفير الحلول الجذرية لضمان استقرار الخدمة وتلبية مستوى الخدمة (SLA)." : "Detailed report on resolving client complaint, root-cause analysis, and SLA alignment.");
+      setContent(isAr ? `# 1. ملخص الشكوى الواردة
+تم الاستماع لملاحظات العميل بشأن التأخير الفني وتأثيره على سير العمل.
+
+# 2. الإجراءات التصحيحية المتخذة
+- تم معالجة الخلل الفني بشكل كامل وتوفير الدعم المباشر.
+- تم تحديث آليات المتابعة وتعيين مسؤول مباشر لحساب العميل.
+
+> 💡 **تعهد الجودة:** تقديم متابعة مجانية وإحصائيات أسبوعية لضمان عدم تكرار المشكلة.` : `# 1. Complaint Summary\nAddressed technical delay and provided immediate direct support.`);
+    } else {
+      setTitle(isAr ? DEFAULT_SAMPLE_TITLE : "Strategic Review Report");
+      setDescription(isAr ? DEFAULT_SAMPLE_DESCRIPTION : "Detailed client meeting report.");
+      setContent(isAr ? DEFAULT_SAMPLE_CONTENT : "# Executive Summary\nDetailed content...");
+    }
+  };
+
+  const insertFormatting = (prefix: string, suffix: string = "") => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selectedText = content.substring(start, end);
+
+    const replacement = prefix + (selectedText || (isAr ? "نص مكتوب" : "text")) + suffix;
+    const updated = content.substring(0, start) + replacement + content.substring(end);
+
+    setContent(updated);
+
+    setTimeout(() => {
+      el.focus();
+      el.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length);
+    }, 50);
+  };
+
+  const addOutcome = () => {
+    if (!newOutcome.trim()) return;
+    setOutcomes((prev) => [...prev, newOutcome.trim()]);
+    setNewOutcome("");
+  };
+
+  const removeOutcome = (idx: number) => {
+    setOutcomes((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const addActionItem = () => {
+    if (!newActionText.trim()) return;
+    const newItem: ReportActionItem = {
+      id: "act_" + Date.now(),
+      text: newActionText.trim(),
+      done: false,
+      dueDate: newActionDate || undefined,
+    };
+    setActionItems((prev) => [...prev, newItem]);
+    setNewActionText("");
+    setNewActionDate("");
+  };
+
+  const removeActionItem = (id: string) => {
+    setActionItems((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const toggleActionDone = (id: string) => {
+    setActionItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, done: !item.done } : item))
+    );
+  };
+
+  const handleSave = async (status: "draft" | "submitted") => {
+    if (!contactId) {
+      alert(isAr ? "الرجاء اختيار العميل" : "Please select a client contact");
+      return;
+    }
+    if (!title.trim()) {
+      alert(isAr ? "الرجاء إدخال عنوان التقرير" : "Please enter report title");
+      return;
+    }
+
+    const selectedContact = contacts.find((c) => c.id === contactId);
+    const selectedDeal = deals.find((d) => d.id === dealId);
+
+    const contactName = selectedContact
+      ? `${selectedContact.firstName} ${selectedContact.lastName}`.trim() || selectedContact.email
+      : isAr
+      ? "عميل"
+      : "Client";
+
+    const payload = {
+      contactId,
+      contactName,
+      dealId: dealId || undefined,
+      dealTitle: selectedDeal ? selectedDeal.title : undefined,
+      title: title.trim(),
+      description: description.trim() || undefined,
+      internalNotes: internalNotes.trim() || undefined,
+      reportType,
+      content,
+      keyOutcomes: outcomes,
+      actionItems,
+      clientMood,
+      satisfactionRating,
+      status,
+    };
+
+    if (initialReport) {
+      await updateMutation.mutateAsync({ id: initialReport.id, data: payload });
+    } else {
+      await createMutation.mutateAsync(payload);
+    }
+    onClose();
+  };
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  return (
+    <Drawer
+      isOpen={isOpen}
+      onClose={onClose}
+      placement={isAr ? "left" : "right"}
+      size="5xl"
+      backdrop="blur"
+      classNames={{
+        base: "bg-background dark:bg-content1 text-foreground border-s border-default-200 dark:border-default-100 shadow-2xl h-full",
+      }}
+    >
+      <DrawerContent>
+        <DrawerHeader className="flex flex-col gap-1 border-b border-default-200 dark:border-default-100/60 pb-4 bg-default-100/50 dark:bg-default-50/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20">
+              <FileText className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-foreground">
+                {initialReport
+                  ? isAr
+                    ? "تعديل تقرير العميل"
+                    : "Edit Client Report"
+                  : isAr
+                  ? "محرر تقارير العملاء احترافي (مستند Word)"
+                  : "Professional Client Report Editor (Word Document)"}
+              </h3>
+              <p className="text-xs text-default-500">
+                {isAr
+                  ? "اكتب تقريراً مهيكلاً وموثقاً للعميل مع تنسيق مستندات متكامل وتحديد التوصيات والخطوات القادمة"
+                  : "Draft a structured, formatted Word report for the client with action items and key outcomes."}
+              </p>
+            </div>
+          </div>
+        </DrawerHeader>
+
+        <DrawerBody className="p-6 gap-6 bg-content1/30 dark:bg-background/90 overflow-y-auto">
+          {/* Section 1: Client & Metadata Selection */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-2xl bg-white dark:bg-content2/40 border border-default-200 dark:border-default-100/60 shadow-xs">
+            {/* Select Contact */}
+            <div>
+              <label className="block text-xs font-semibold text-foreground mb-1.5">
+                {isAr ? "العميل / جهة الاتصال *" : "Client Contact *"}
+              </label>
+              <select
+                value={contactId}
+                onChange={(e) => setContactId(e.target.value)}
+                className="w-full bg-default-100 dark:bg-content1 border border-default-200 dark:border-default-100 text-foreground text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+              >
+                <option value="">{isAr ? "-- اختر العميل --" : "-- Select Client --"}</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.firstName} {c.lastName} ({c.accountName || c.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Select Deal */}
+            <div>
+              <label className="block text-xs font-semibold text-foreground mb-1.5">
+                {isAr ? "الصفقة المرتبطة (اختياري)" : "Linked Deal (Optional)"}
+              </label>
+              <select
+                value={dealId}
+                onChange={(e) => setDealId(e.target.value)}
+                className="w-full bg-default-100 dark:bg-content1 border border-default-200 dark:border-default-100 text-foreground text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+              >
+                <option value="">{isAr ? "بدون صفقة محددة" : "No Specific Deal"}</option>
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.title} ({d.amount?.toLocaleString()} SAR)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Select Report Type */}
+            <div>
+              <label className="block text-xs font-semibold text-foreground mb-1.5">
+                {isAr ? "نوع التقرير *" : "Report Type *"}
+              </label>
+              <select
+                value={reportType}
+                onChange={(e) => setReportType(e.target.value as ClientReportType)}
+                className="w-full bg-default-100 dark:bg-content1 border border-default-200 dark:border-default-100 text-foreground text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+              >
+                {REPORT_TYPES.map((rt) => (
+                  <option key={rt.key} value={rt.key}>
+                    {isAr ? rt.labelAr : rt.labelEn}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Client Mood */}
+            <div>
+              <label className="block text-xs font-semibold text-foreground mb-1.5">
+                {isAr ? "انطباع / حالة العميل" : "Client Mood / Impression"}
+              </label>
+              <select
+                value={clientMood}
+                onChange={(e) => setClientMood(e.target.value as ClientMood)}
+                className="w-full bg-default-100 dark:bg-content1 border border-default-200 dark:border-default-100 text-foreground text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+              >
+                {MOOD_OPTIONS.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {isAr ? m.labelAr : m.labelEn}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Title and Satisfaction Rating */}
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="flex-1 w-full">
+              <label className="block text-xs font-semibold text-foreground mb-1">
+                {isAr ? "عنوان التقرير المستندي *" : "Report Title *"}
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={
+                  isAr
+                    ? "مثال: تقرير اجتماع مراجعة المتطلبات - شركة الأمل"
+                    : "e.g. Requirements Review Meeting Summary - Al-Amal Co."
+                }
+                className="w-full bg-white dark:bg-content1 border border-default-200 dark:border-default-100 text-foreground text-base font-semibold rounded-xl px-4 py-2.5 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder-default-400 shadow-xs"
+              />
+            </div>
+
+            {/* Star Rating */}
+            <div className="bg-white dark:bg-content1 border border-default-200 dark:border-default-100 px-4 py-2 rounded-xl flex items-center gap-3 shadow-xs">
+              <span className="text-xs text-default-500 whitespace-nowrap font-medium">
+                {isAr ? "تقييم العميل:" : "Satisfaction:"}
+              </span>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setSatisfactionRating(star)}
+                    className="p-1 hover:scale-110 transition-transform"
+                  >
+                    <Star
+                      className={`w-5 h-5 ${
+                        star <= satisfactionRating
+                          ? "text-amber-400 fill-amber-400"
+                          : "text-default-300 dark:text-default-600"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Description / Executive Summary Box */}
+          <div className="bg-white dark:bg-content1 p-4 rounded-2xl border border-default-200 dark:border-default-100 shadow-xs">
+            <label className="block text-xs font-bold text-foreground mb-1.5 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" />
+              {isAr ? "وصف التقرير / الموجز التنفيذي (كلام تفصيلي ومختصر)" : "Report Description / Executive Summary"}
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder={
+                isAr
+                  ? "اكتب وصفاً تفصيلياً وموجزاً عما يحتوي عليه التقرير والأهداف العامة للاجتماع..."
+                  : "Write a detailed summary/description outlining the main scope and goals of this report..."
+              }
+              className="w-full bg-default-100/60 dark:bg-content2/50 border border-default-200 dark:border-default-100/80 rounded-xl p-3 text-sm text-foreground placeholder-default-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 leading-relaxed font-normal"
+            />
+          </div>
+
+          {/* Odoo & Zoho Feature: Internal Management Notes Box */}
+          <div className="bg-amber-500/10 dark:bg-amber-500/5 p-4 rounded-2xl border border-amber-500/30 shadow-xs">
+            <label className="block text-xs font-bold text-amber-700 dark:text-amber-300 mb-1.5 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+              {isAr ? "ملاحظات داخلية وخاصة بالإدارة (سرية - ميزة Odoo/Zoho الحصرية)" : "Internal Management Notes (Private - Odoo/Zoho Feature)"}
+            </label>
+            <textarea
+              value={internalNotes}
+              onChange={(e) => setInternalNotes(e.target.value)}
+              rows={2}
+              placeholder={
+                isAr
+                  ? "ملاحظات سرية لفريق المبيعات والإدارة فقط (لن تظهر في النسخة المطبوعة أو الموجهة للعميل)..."
+                  : "Private notes for internal management only (hidden from client report)..."
+              }
+              className="w-full bg-white dark:bg-content1 border border-amber-500/30 rounded-xl p-3 text-sm text-foreground placeholder-default-400 focus:outline-none focus:border-amber-500 leading-relaxed font-normal"
+            />
+          </div>
+
+          {/* Section 2: Word-like Document Canvas */}
+          <div className="rounded-2xl border border-default-200 dark:border-default-100/80 bg-default-100/60 dark:bg-content2/30 overflow-hidden shadow-sm">
+            {/* Word Formatting Toolbar */}
+            <div className="bg-default-100 dark:bg-content2 border-b border-default-200 dark:border-default-100 p-2 flex flex-wrap items-center justify-between gap-1.5 text-foreground">
+              <div className="flex items-center gap-1.5">
+                <div className="text-xs font-bold text-primary px-2.5 py-1 bg-primary/10 rounded-md border border-primary/20">
+                  Word Editor
+                </div>
+                <div className="h-5 w-[1px] bg-default-300 dark:bg-default-100 mx-1" />
+
+                <button
+                  type="button"
+                  onClick={() => insertFormatting("**", "**")}
+                  title="Bold (غليظ)"
+                  className="p-2 hover:bg-default-200 dark:hover:bg-default-100 rounded-lg text-default-600 dark:text-default-300 hover:text-foreground transition-colors"
+                >
+                  <Bold className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertFormatting("*", "*")}
+                  title="Italic (مائل)"
+                  className="p-2 hover:bg-default-200 dark:hover:bg-default-100 rounded-lg text-default-600 dark:text-default-300 hover:text-foreground transition-colors"
+                >
+                  <Italic className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertFormatting("<u>", "</u>")}
+                  title="Underline (تحته خط)"
+                  className="p-2 hover:bg-default-200 dark:hover:bg-default-100 rounded-lg text-default-600 dark:text-default-300 hover:text-foreground transition-colors"
+                >
+                  <Underline className="w-4 h-4" />
+                </button>
+
+                <div className="h-5 w-[1px] bg-default-300 dark:bg-default-100 mx-1" />
+
+                <button
+                  type="button"
+                  onClick={() => insertFormatting("# ")}
+                  title="Heading 1"
+                  className="p-2 hover:bg-default-200 dark:hover:bg-default-100 rounded-lg text-default-600 dark:text-default-300 hover:text-foreground transition-colors"
+                >
+                  <Heading1 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertFormatting("## ")}
+                  title="Heading 2"
+                  className="p-2 hover:bg-default-200 dark:hover:bg-default-100 rounded-lg text-default-600 dark:text-default-300 hover:text-foreground transition-colors"
+                >
+                  <Heading2 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertFormatting("### ")}
+                  title="Heading 3"
+                  className="p-2 hover:bg-default-200 dark:hover:bg-default-100 rounded-lg text-default-600 dark:text-default-300 hover:text-foreground transition-colors"
+                >
+                  <Heading3 className="w-4 h-4" />
+                </button>
+
+                <div className="h-5 w-[1px] bg-default-300 dark:bg-default-100 mx-1" />
+
+                <button
+                  type="button"
+                  onClick={() => insertFormatting("- ")}
+                  title="Bullet List"
+                  className="p-2 hover:bg-default-200 dark:hover:bg-default-100 rounded-lg text-default-600 dark:text-default-300 hover:text-foreground transition-colors"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertFormatting("1. ")}
+                  title="Numbered List"
+                  className="p-2 hover:bg-default-200 dark:hover:bg-default-100 rounded-lg text-default-600 dark:text-default-300 hover:text-foreground transition-colors"
+                >
+                  <ListOrdered className="w-4 h-4" />
+                </button>
+
+                <div className="h-5 w-[1px] bg-default-300 dark:bg-default-100 mx-1" />
+
+                <button
+                  type="button"
+                  onClick={() => insertFormatting("\n> 💡 **ملاحظة رئيسية:** ", "\n")}
+                  title="Callout Box"
+                  className="p-2 hover:bg-default-200 dark:hover:bg-default-100 rounded-lg text-amber-500 hover:text-amber-400 transition-colors"
+                >
+                  <Quote className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* AI Smart Template Button */}
+              <button
+                type="button"
+                onClick={generateSmartTemplate}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs hover:opacity-90 transition-opacity"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                {isAr ? "توليد القالب الذكي حسب النوع" : "Auto AI Template"}
+              </button>
+            </div>
+
+            {/* Simulated Word Sheet Canvas */}
+            <div className="p-6 md:p-8 bg-default-100/50 dark:bg-background/40 min-h-[300px] flex justify-center">
+              <div className="w-full max-w-3xl bg-white dark:bg-content1 border border-default-200 dark:border-default-100/80 rounded-xl p-6 md:p-8 shadow-md font-sans">
+                <textarea
+                  ref={textareaRef}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  rows={12}
+                  placeholder={
+                    isAr
+                      ? "اكتب تفاصيل التقرير هنا...\n\n# 1. تفاصيل الاجتماع\nتمت مناقشة النقاط الرئيسية والاتفاق على الخطة التشغيلية.\n\n# 2. الملاحظات الهامة\n> 💡 ملاحظة: يبدي العميل اهتماماً كبيراً بتسريع التنفيذ."
+                      : "Write detailed report here...\n\n# 1. Meeting Details\nDiscussed key requirements and finalized project plan.\n\n> 💡 Note: Client expressed strong interest in accelerated delivery."
+                  }
+                  className="w-full h-full bg-transparent border-0 focus:ring-0 focus:outline-none text-foreground placeholder-default-400 resize-y leading-relaxed text-sm md:text-base font-normal font-sans"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Key Outcomes / Highlights */}
+          <div className="p-4 rounded-2xl bg-white dark:bg-content2/40 border border-default-200 dark:border-default-100/60 shadow-xs">
+            <h4 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-500" />
+              {isAr ? "أهم نتائج ومخرجات الاجتماع/التقرير" : "Key Outcomes & Takeaways"}
+            </h4>
+
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                value={newOutcome}
+                onChange={(e) => setNewOutcome(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addOutcome())}
+                placeholder={isAr ? "أضف نتيجة أ ومخرج رئيسي..." : "Add a key outcome..."}
+                className="flex-1 bg-default-100 dark:bg-content1 border border-default-200 dark:border-default-100 text-foreground text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-primary"
+              />
+              <Button color="primary" variant="flat" size="sm" onClick={addOutcome} className="rounded-xl font-semibold">
+                <Plus className="w-4 h-4" />
+                {isAr ? "إضافة" : "Add"}
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {outcomes.map((out, idx) => (
+                <Chip
+                  key={idx}
+                  onClose={() => removeOutcome(idx)}
+                  variant="flat"
+                  color="success"
+                  className="py-1 font-medium"
+                >
+                  {out}
+                </Chip>
+              ))}
+              {outcomes.length === 0 && (
+                <span className="text-xs text-default-400 italic">
+                  {isAr ? "لم يتم إضافة نتائج رئيسية بعد" : "No outcomes added yet"}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Section 4: Action Items & Follow-ups Checklist */}
+          <div className="p-4 rounded-2xl bg-white dark:bg-content2/40 border border-default-200 dark:border-default-100/60 shadow-xs">
+            <h4 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-primary" />
+              {isAr ? "قائمة المهام والخطوات القادمة للعميل (Action Items)" : "Action Items & Follow-ups"}
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-2 mb-4">
+              <input
+                type="text"
+                value={newActionText}
+                onChange={(e) => setNewActionText(e.target.value)}
+                placeholder={isAr ? "الوصف: إرسال عرض السعر المعدل..." : "Description: Send updated proposal..."}
+                className="md:col-span-7 bg-default-100 dark:bg-content1 border border-default-200 dark:border-default-100 text-foreground text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-primary"
+              />
+              <input
+                type="date"
+                value={newActionDate}
+                onChange={(e) => setNewActionDate(e.target.value)}
+                className="md:col-span-3 bg-default-100 dark:bg-content1 border border-default-200 dark:border-default-100 text-foreground text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-primary"
+              />
+              <Button color="secondary" variant="flat" size="sm" onClick={addActionItem} className="md:col-span-2 rounded-xl font-semibold">
+                <Plus className="w-4 h-4" />
+                {isAr ? "إضافة مهمة" : "Add Task"}
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {actionItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between bg-default-50 dark:bg-content1 border border-default-200 dark:border-default-100 rounded-xl p-3 shadow-xs"
+                >
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={item.done}
+                      onChange={() => toggleActionDone(item.id)}
+                      className="w-4 h-4 rounded text-primary focus:ring-primary/30 bg-default-100 dark:bg-default-50 border-default-300"
+                    />
+                    <span
+                      className={`text-sm ${
+                        item.done ? "line-through text-default-400" : "text-foreground"
+                      }`}
+                    >
+                      {item.text}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {item.dueDate && (
+                      <span className="text-xs text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-lg">
+                        {item.dueDate}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeActionItem(item.id)}
+                      className="text-default-400 hover:text-danger transition-colors p-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {actionItems.length === 0 && (
+                <span className="text-xs text-default-400 italic block">
+                  {isAr ? "لم يتم تحديد خطوات متابعة بعد" : "No action items added yet"}
+                </span>
+              )}
+            </div>
+          </div>
+        </DrawerBody>
+
+        <DrawerFooter className="border-t border-default-200 dark:border-default-100 bg-default-100/50 dark:bg-default-50/20 p-4 flex justify-between">
+          <Button variant="flat" color="default" onClick={onClose} className="rounded-xl">
+            {isAr ? "إلغاء" : "Cancel"}
+          </Button>
+
+          <div className="flex gap-2">
+            <Button
+              variant="flat"
+              color="warning"
+              isLoading={isSaving}
+              onClick={() => handleSave("draft")}
+              className="rounded-xl font-semibold"
+            >
+              <Save className="w-4 h-4" />
+              {isAr ? "حفظ كمسودة" : "Save Draft"}
+            </Button>
+            <Button
+              color="primary"
+              isLoading={isSaving}
+              onClick={() => handleSave("submitted")}
+              className="rounded-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20"
+            >
+              <Send className="w-4 h-4" />
+              {isAr ? "إعتماد وإرسال التقرير" : "Submit Report"}
+            </Button>
+          </div>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+  );
+}

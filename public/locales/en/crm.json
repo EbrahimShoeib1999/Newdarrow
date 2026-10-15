@@ -1,0 +1,680 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "leads": "Leads",
+    "contacts": "Contacts",
+    "deals": "Deals",
+    "crmTasks": "CRM Tasks",
+    "quotations": "Quotations",
+    "contracts": "Contracts",
+    "client_reports": "Client Reports",
+    "reports": "Reports"
+
+  },
+  "permissions": {
+    "deniedTitle": "Access denied",
+    "deniedMessage": "You do not have permission to view the CRM module."
+  },
+  "dashboard": {
+    "title": "CRM Dashboard",
+    "description": "Overview of your sales pipeline and customer relationships.",
+    "stats": {
+      "leads": "Leads",
+      "contacts": "Contacts",
+      "deals": "Deals",
+      "tasks": "CRM Tasks",
+      "activeDeals": "Active Deals",
+      "wonDeals": "Won Deals",
+      "lostDeals": "Lost Deals",
+      "expectedRevenue": "Expected Revenue",
+      "conversionRate": "Conversion Rate"
+    },
+    "funnel": {
+      "title": "Sales Funnel",
+      "leads": "Leads",
+      "qualified": "Qualified",
+      "proposal": "Proposal",
+      "negotiation": "Negotiation",
+      "won": "Won"
+    },
+    "charts": {
+      "leadsBySource": "Leads by Source",
+      "dealsByStage": "Deals by Stage",
+      "revenueByMonth": "Revenue by Month",
+      "noData": "No revenue data yet"
+    }
+  },
+  "ui": {
+    "views": {
+      "list": "List",
+      "pipeline": "Pipeline"
+    },
+    "stageBar": "Pipeline",
+    "search": {
+      "placeholder": "Search CRM…",
+      "results": "Search results"
+    },
+    "chatter": {
+      "title": "Chatter",
+      "subtitle": "Log notes, schedule activities, and track history",
+      "logNote": "Log an internal note…",
+      "post": "Log",
+      "attach": "Files",
+      "note": "Note",
+      "empty": "No activity yet. Log a note or schedule a call.",
+      "suggestions": "Suggestions"
+    }
+  },
+  "leads": {
+    "title": "Leads",
+    "description": "Manage your sales pipeline and track potential customers.",
+    "pipelineDescription": "Drag leads across stages to update your pipeline — like Odoo & Zoho.",
+    "addLead": "Add Lead",
+    "searchPlaceholder": "Search by name, company, email, phone…",
+    "filter": "Filter",
+    "columns": {
+      "name": "NAME",
+      "company": "COMPANY",
+      "status": "STATUS",
+      "assigned": "ASSIGNED",
+      "phone": "PHONE",
+      "created": "CREATED",
+      "actions": "ACTIONS"
+    },
+    "empty": "No leads found.",
+    "details": "Details",
+    "filters": {
+      "status": "Status",
+      "source": "Source",
+      "assignedTo": "Assigned to",
+      "allAssignees": "All assignees",
+      "unassigned": "Unassigned",
+      "from": "From",
+      "to": "To",
+      "clear": "Clear filters"
+    },
+    "form": {
+      "createTitle": "Create lead",
+      "editTitle": "Edit lead",
+      "name": "Name",
+      "phone": "Phone",
+      "email": "Email",
+      "company": "Company",
+      "source": "Source",
+      "sourceOther": "Specify source",
+      "sourceOtherPlaceholder": "Type another source",
+      "priority": "Priority",
+      "status": "Status",
+      "assignedTo": "Assigned user",
+      "serviceCategory": "Service / Category",
+      "notes": "Notes",
+      "cancel": "Cancel",
+      "create": "Create lead",
+      "save": "Save changes"
+    },
+    "status": {
+      "new": "New",
+      "contacted": "Contacted",
+      "qualified": "Qualified",
+      "proposal_sent": "Proposal sent",
+      "negotiation": "Negotiation",
+      "won": "Won",
+      "lost": "Lost"
+    },
+    "source": {
+      "website": "Website",
+      "referral": "Referral",
+      "social": "Social",
+      "cold_call": "Cold call",
+      "event": "Event",
+      "other": "Other"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "toast": {
+      "created": "Lead created",
+      "createFailed": "Failed to create lead",
+      "updated": "Lead updated",
+      "updateFailed": "Failed to update lead"
+    },
+    "convert": {
+      "action": "Convert to contact",
+      "viewContact": "View contact",
+      "success": "Lead converted to contact",
+      "failed": "Failed to convert lead"
+    },
+    "board": {
+      "emptyTitle": "No leads in this stage",
+      "emptySubtitle": "Drag leads here to update their status"
+    }
+  },
+  "leadDetail": {
+    "back": "Back to leads",
+    "edit": "Edit lead",
+    "noCompany": "No company",
+    "changeStatus": "Change status",
+    "tabs": {
+      "overview": "Overview",
+      "notes": "Notes",
+      "activities": "Activities",
+      "tasks": "Tasks",
+      "attachments": "Attachments"
+    },
+    "notes": {
+      "placeholder": "Write a note…",
+      "add": "Add note",
+      "empty": "No notes yet.",
+      "saved": "Note added",
+      "failed": "Failed to add note"
+    },
+    "activities": {
+      "subject": "Activity subject",
+      "description": "Details (optional)",
+      "log": "Log activity",
+      "empty": "No activities yet.",
+      "saved": "Activity logged",
+      "failed": "Failed to log activity",
+      "types": {
+        "call": "Call",
+        "email": "Email",
+        "meeting": "Meeting",
+        "note": "Note",
+        "other": "Other"
+      }
+    },
+    "tasks": {
+      "placeholder": "Task title…",
+      "add": "Add task",
+      "empty": "No CRM tasks linked to this lead.",
+      "saved": "Task created",
+      "failed": "Failed to create task"
+    },
+    "attachments": {
+      "fileName": "File name",
+      "url": "File URL",
+      "add": "Add attachment",
+      "empty": "No attachments yet.",
+      "saved": "Attachment added",
+      "failed": "Failed to add attachment"
+    },
+    "wonTask": {
+      "action": "Add to Tasks",
+      "heading": "Add to Tasks",
+      "title": "Follow-up with",
+      "taskTitle": "Task title",
+      "assignee": "Assign to",
+      "priority": "Priority",
+      "description": "Description",
+      "desc": "Onboard the newly won client: {{company}}",
+      "descGeneric": "Onboard the newly won client.",
+      "cancel": "Cancel",
+      "create": "Create task"
+    }
+  },
+  "contacts": {
+    "title": "Contacts",
+    "description": "Manage customer contacts and relationships.",
+    "addContact": "Add contact",
+    "searchPlaceholder": "Search by name, email, phone, account, commercial register…",
+    "details": "Details",
+    "empty": "No contacts found.",
+    "columns": {
+      "name": "NAME",
+      "email": "EMAIL",
+      "phone": "PHONE",
+      "account": "ACCOUNT",
+      "classification": "CLASSIFICATION",
+      "satisfaction": "SATISFACTION",
+      "interests": "INTERESTS",
+      "assigned": "FOLLOW-UP AGENT",
+      "created": "CREATED",
+      "actions": "ACTIONS"
+    },
+    "classification": {
+      "label": "Classification",
+      "all": "All Classifications",
+      "actual_client": "Actual Client",
+      "potential_lead": "Potential Lead",
+      "callback": "Call Back"
+    },
+    "satisfaction": {
+      "label": "Customer Satisfaction",
+      "all": "All Satisfaction Levels",
+      "satisfied": "Satisfied",
+      "neutral": "Neutral",
+      "unsatisfied": "Unsatisfied",
+      "notes": "Satisfaction Notes / Feedback"
+    },
+    "interests": {
+      "label": "Client Interests",
+      "placeholder": "Select or type client interests...",
+      "website": "Website",
+      "store": "E-Commerce Store",
+      "marketingOffer": "Marketing & Promotions",
+      "socialMedia": "Social Media Management",
+      "branding": "Branding & Visual Identity",
+      "photography": "Media & Photography",
+      "seo": "SEO & Search Engine"
+    },
+    "directory": {
+      "tab": "Unified Directory",
+      "tableTab": "Contacts Table",
+      "title": "Unified Contact & Phone Directory",
+      "subtitle": "All phone numbers and communication links in one central place for instant calling and follow-up",
+      "callNow": "Call",
+      "whatsapp": "WhatsApp",
+      "copy": "Copy Number",
+      "copied": "Phone number copied successfully",
+      "secondaryPhone": "Secondary Phone",
+      "whatsappPhone": "WhatsApp Phone",
+      "noPhone": "No registered phone"
+    },
+    "filters": {
+      "assignedTo": "Assigned to",
+      "unassigned": "Unassigned",
+      "classification": "Classification",
+      "satisfaction": "Satisfaction",
+      "clear": "Clear filters"
+    },
+    "form": {
+      "createTitle": "Create contact",
+      "editTitle": "Edit contact",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "email": "Email",
+      "phone": "Primary Phone",
+      "secondaryPhone": "Secondary Phone",
+      "whatsappPhone": "WhatsApp Phone",
+      "jobTitle": "Job title",
+      "department": "Department",
+      "accountName": "Account",
+      "classification": "Contact Classification",
+      "satisfaction": "Satisfaction Status",
+      "satisfactionNotes": "Satisfaction Notes / Feedback",
+      "interests": "Client Interests (Website, Offer, Store...)",
+      "commercialRegister": "Commercial register",
+      "commercialRegisterPlaceholder": "1010123456",
+      "commercialRegisterHint": "Official commercial registration number for linking to accounts later (optional)",
+      "assignedTo": "Follow-up Agent",
+      "cancel": "Cancel",
+      "create": "Create contact",
+      "save": "Save changes"
+    },
+    "toast": {
+      "created": "Contact created successfully",
+      "createFailed": "Failed to create contact",
+      "updated": "Contact updated successfully",
+      "updateFailed": "Failed to update contact"
+    }
+  },
+  "contactDetail": {
+    "back": "Back to contacts",
+    "edit": "Edit contact",
+    "noAccount": "No account",
+    "tabs": {
+      "overview": "Overview",
+      "deals": "Deals",
+      "tasks": "Tasks",
+      "notes": "Notes",
+      "attachments": "Attachments",
+      "timeline": "Timeline"
+    },
+    "deals": {
+      "empty": "No deals linked to this contact."
+    },
+    "tasks": {
+      "empty": "No CRM tasks linked to this contact."
+    }
+  },
+  "deals": {
+    "title": "Deals",
+    "description": "Track your sales pipeline and move deals through stages.",
+    "pipelineDescription": "Kanban pipeline — drag deals between stages to update.",
+    "searchPlaceholder": "Search deals…",
+    "empty": "No deals found.",
+    "addDeal": "Add deal",
+    "stage": {
+      "lead": "Lead",
+      "contacted": "Contacted",
+      "qualified": "Qualified",
+      "proposal_sent": "Proposal sent",
+      "negotiation": "Negotiation",
+      "won": "Won",
+      "lost": "Lost"
+    },
+    "form": {
+      "createTitle": "Create deal",
+      "editTitle": "Edit deal",
+      "title": "Title",
+      "contact": "Contact",
+      "amount": "Amount",
+      "currency": "Currency",
+      "stage": "Stage",
+      "probability": "Probability (0–10)",
+      "expectedCloseDate": "Expected close date",
+      "assignedTo": "Assigned user",
+      "cancel": "Cancel",
+      "create": "Create deal",
+      "save": "Save changes"
+    },
+    "toast": {
+      "created": "Deal created",
+      "createFailed": "Failed to create deal",
+      "updated": "Deal updated",
+      "updateFailed": "Failed to update deal"
+    }
+  },
+  "dealDetail": {
+    "back": "Back to deals",
+    "edit": "Edit deal",
+    "changeStage": "Change stage",
+    "probability": "Probability (0–10)",
+    "tabs": {
+      "overview": "Overview",
+      "tasks": "Tasks",
+      "notes": "Notes",
+      "attachments": "Attachments",
+      "timeline": "Timeline"
+    },
+    "tasks": {
+      "placeholder": "Task title…",
+      "add": "Add task",
+      "empty": "No CRM tasks linked to this deal."
+    }
+  },
+  "crmTasks": {
+    "title": "CRM Tasks",
+    "description": "Follow-ups, calls, and activities across your CRM.",
+    "addTask": "Add task",
+    "edit": "Edit",
+    "empty": "No CRM tasks found.",
+    "columns": {
+      "title": "TITLE",
+      "type": "TYPE",
+      "status": "STATUS",
+      "priority": "PRIORITY",
+      "dueDate": "DUE DATE",
+      "assignee": "ASSIGNEE",
+      "actions": "ACTIONS"
+    },
+    "filters": {
+      "status": "Status",
+      "allStatuses": "All statuses"
+    },
+    "widgets": {
+      "overdue": "Overdue",
+      "today": "Due today",
+      "upcoming": "Upcoming"
+    },
+    "form": {
+      "createTitle": "Create CRM task",
+      "editTitle": "Edit CRM task",
+      "title": "Title",
+      "taskType": "Task type",
+      "status": "Status",
+      "priority": "Priority",
+      "assignee": "Assignee",
+      "dueDate": "Due date",
+      "description": "Description",
+      "cancel": "Cancel",
+      "create": "Create task",
+      "save": "Save changes"
+    },
+    "taskType": {
+      "call": "Call",
+      "meeting": "Meeting",
+      "email": "Email",
+      "follow_up": "Follow up",
+      "proposal": "Proposal"
+    },
+    "status": {
+      "pending": "Pending",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "toast": {
+      "created": "CRM task created",
+      "createFailed": "Failed to create task",
+      "updated": "CRM task updated",
+      "updateFailed": "Failed to update task"
+    }
+  },
+  "timeline": {
+    "empty": "No activity yet."
+  },
+  "attachments": {
+    "upload": "Upload file",
+    "download": "Download",
+    "unsupported": "File type not supported."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications",
+    "markAllRead": "Mark all as read"
+  },
+  "reports": {
+    "title": "CRM Reports",
+    "description": "Lead, sales, and team performance metrics.",
+    "leads": {
+      "title": "Lead Reports",
+      "newLeads": "Total Leads",
+      "conversionRate": "Conversion Rate",
+      "sources": "Lead Sources"
+    },
+    "sales": {
+      "title": "Sales Reports",
+      "won": "Won Deals",
+      "lost": "Lost Deals",
+      "revenue": "Won Revenue"
+    },
+    "team": {
+      "title": "Team Performance",
+      "empty": "No team data yet.",
+      "employee": "Employee",
+      "dealsWon": "Deals Won",
+      "revenue": "Revenue",
+      "tasksDone": "Tasks Completed",
+      "conversion": "Lead Conversion"
+    }
+  },
+  "quotation": {
+    "pageTitle": "Create quotation",
+    "pageSubtitle": "Generate a PDF quotation from your company profile, CRM contacts, and selected services. Only the items you choose appear in the document.",
+    "createQuote": "New quotation",
+    "quoteNumber": "Quotation no.",
+    "quoteDate": "Issue date",
+    "validityDuration": "Validity period",
+    "validityUnit": "Duration unit",
+    "validityUnitOption": { "day": "Day", "month": "Month" },
+    "notes": "Notes",
+    "notesHint": "Shown at the bottom of the quotation as descriptive text.",
+    "vatRate": "VAT rate (%)",
+    "selectContact": "Select contact",
+    "clientName": "Client name",
+    "clientCr": "Client commercial register",
+    "recipientTitle": {
+      "label": "Recipient title"
+    },
+    "basePackage": "Base package",
+    "basePackageHint": "Free add-ons appear as bullet points under the package description; paid add-ons appear on separate rows.",
+    "fromCatalog": "From price list",
+    "optionalAddons": "Optional add-ons",
+    "optionalHint": "Select only what the client needs — unselected items are omitted from the quotation.",
+    "lineItems": "Line items",
+    "lineItemsHint": "Pick an item from the list, or add a new custom line.",
+    "selectItem": "Select item",
+    "selectItemPlaceholder": "Choose an item to add…",
+    "customItem": "Custom item",
+    "addLine": "Add line",
+    "addNewItem": "Add new item",
+    "noLinesYet": "No items yet — select from the list or add a new item",
+    "removeLine": "Remove line",
+    "itemName": "Service name",
+    "itemDescription": "Description",
+    "price": "Price",
+    "description": "Description",
+    "pricesIncludeVat": "Prices include VAT",
+    "total": "Total",
+    "includingVat": "VAT inclusive",
+    "selectedItems_one": "{{count}} service selected",
+    "selectedItems_other": "{{count}} services selected",
+    "preview": "Preview",
+    "hidePreview": "Hide preview",
+    "downloadPdf": "Download PDF",
+    "clientRequired": "Client name is required",
+    "itemsRequired": "Please select at least one service",
+    "exportSuccess": "Quotation downloaded successfully",
+    "exportError": "Could not generate the quotation PDF",
+    "save": "Save",
+    "savedQuotes": "Saved quotations",
+    "newQuote": "New quotation",
+    "untitled": "Untitled",
+    "saveSuccess": "Quotation saved",
+    "saveError": "Could not save quotation",
+    "delete": "Delete",
+    "deleteSuccess": "Quotation deleted",
+    "deleteError": "Could not delete quotation",
+    "recentQuotes": "Recent quotations",
+    "noSavedQuotes": "No saved quotations yet",
+    "editingSaved": "Editing saved quotation",
+    "unsavedDraft": "New draft — not saved yet",
+    "convertToInvoice": "Convert to Invoice",
+    "contactRequiredForInvoice": "Select a CRM contact to create an invoice",
+    "pdf": {
+      "title": "Quotation",
+      "date": "Date",
+      "dateSuffix": "",
+      "quoteNumber": "Quotation no.",
+      "recipientPrefix": "Mr./Ms.",
+      "recipientTitle": {
+        "mr": "Mr.",
+        "mrs": "Ms.",
+        "professor": "Prof."
+      },
+      "details": "Quotation details",
+      "colService": "Service",
+      "colQty": "Qty.",
+      "colDescription": "Description",
+      "colPrice": "Price",
+      "total": "Total",
+      "includingVat": "VAT inclusive",
+      "currencyRiyal": "\u20C1",
+      "currencySar": "\u20C1",
+      "notes": "Notes:",
+      "terms": "Terms & conditions:",
+      "validityNote": "This quotation is valid for {{duration}} {{unit}} from the date of issue",
+      "day": "day",
+      "days": "days",
+      "month": "month",
+      "months": "months",
+      "cr": "Commercial register",
+      "vat": "VAT no.",
+      "crShort": "C.R.",
+      "phone": "Phone",
+      "email": "Email",
+      "address": "Address",
+      "companyShort": "D Arrow Company"
+    }
+  },
+  "contract": {
+    "pageTitle": "Service contracts",
+    "pageSubtitle": "3 simple steps: pick the client, fill service details, download the PDF.",
+    "meta": "Contract details",
+    "title": "Contract title",
+    "number": "Contract number",
+    "date": "Contract date",
+    "pageCount": "Page count",
+    "pageCountHint": "Used in final provisions via {{pageCount}}",
+    "selectContact": "Choose client from contacts",
+    "selectContactPlaceholder": "Search / select a contact…",
+    "clientLoaded": "Client details loaded",
+    "stepClient": "Choose the client",
+    "stepClientHint": "Select a CRM contact or type the details manually.",
+    "stepDetails": "Service details",
+    "stepDetailsHint": "Change only what you need — the contract text updates automatically.",
+    "stepDownload": "Download PDF",
+    "stepDownloadHint": "Review the preview on the side, then download.",
+    "livePreview": "Live preview",
+    "livePreviewHint": "Updates as you type",
+    "progressLabel": "Progress",
+    "pricingGroup": "Pricing",
+    "advancedTitle": "Advanced options",
+    "advancedHint": "Company info, preamble, extra fields, and legal clauses",
+    "autoVatHint": "Calculated automatically from amount + VAT %",
+    "provider": "Our company (first party)",
+    "providerHint": "Usually filled automatically — open only if you need to edit",
+    "client": "Client (second party)",
+    "preamble": "Preamble",
+    "preambleHint": "Intro paragraph at the start of the contract",
+    "moreFields": "More fields",
+    "moreFieldsHint": "Review days, penalties, jurisdiction, etc.",
+    "fields": "Dynamic fields",
+    "fieldsHint": "Use {{key}} inside any clause text — values update live in the preview.",
+    "addField": "Add field",
+    "removeField": "Remove field",
+    "newField": "New field",
+    "fieldKey": "Key",
+    "fieldLabel": "Label",
+    "fieldValue": "Value",
+    "clauses": "Edit clauses",
+    "clausesHint": "Add, edit, reorder, or delete clauses and their bullet points.",
+    "clausesEasyHint": "Optional — open only if you need to change legal wording",
+    "addClause": "Add clause",
+    "removeClause": "Remove clause",
+    "newClause": "New clause",
+    "clauseTitle": "Clause title",
+    "addBullet": "Add bullet",
+    "removeBullet": "Remove bullet",
+    "bulletPlaceholder": "Clause text",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "party": {
+      "name": "Name / company",
+      "cr": "Commercial register",
+      "vat": "Tax number (VAT)",
+      "address": "Address",
+      "representative": "Signatory",
+      "idNumber": "ID number",
+      "phone": "Phone",
+      "email": "Email"
+    },
+    "save": "Save",
+    "new": "New contract",
+    "preview": "Show preview",
+    "hidePreview": "Hide preview",
+    "downloadPdf": "Download PDF",
+    "loadSaved": "Open saved",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this contract?",
+    "clientRequired": "Please enter the client name first",
+    "saveSuccess": "Contract saved",
+    "saveError": "Could not save contract",
+    "deleteSuccess": "Contract deleted",
+    "deleteError": "Could not delete contract",
+    "exportSuccess": "Contract PDF downloaded",
+    "exportError": "Could not generate the contract PDF",
+    "templates": "Contract Types & Templates",
+    "templatesHint": "Choose a contract template to populate corresponding service items and clauses",
+    "servicesTitle": "Service Items & Department Tasks Routing",
+    "servicesHint": "Select required client services; upon migration, each service becomes a main task routed to its department with sequential subtasks",
+    "convertToTasks": "Convert Services to Department Tasks",
+    "converting": "Routing tasks to departments...",
+    "convertedBanner": "Services have been successfully migrated to department tasks",
+    "convertedTasksCount": "{{count}} main and sequential subtasks were generated in the task system",
+    "viewTasks": "View Tasks Board",
+    "addService": "Add Custom Service Item",
+    "department": "Department",
+    "subtasksCount": "Sequential subtasks",
+    "estimatedHours": "Estimated hours",
+    "durationDays": "Work days"
+  }
+}

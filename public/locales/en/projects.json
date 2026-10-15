@@ -1,0 +1,71 @@
+{
+  "nav": {
+    "projects_overview": "Projects",
+    "all_projects": "All Projects",
+    "my_projects": "My Projects",
+    "completed_projects": "Completed"
+  },
+  "title": "Projects",
+  "subtitle": "Plan, track, and deliver your team's projects",
+  "add": "New Project",
+  "search": "Search projects…",
+  "empty": "No projects yet. Create your first project to get started.",
+  "emptyMine": "You are not a member of any project yet.",
+  "emptyCompleted": "No completed projects yet.",
+  "memberCount": "{{count}} members",
+  "noMembers": "No members",
+  "start": "Start",
+  "end": "End",
+  "dates": "{{start}} → {{end}}",
+  "noDates": "No dates",
+  "columns": {
+    "name": "PROJECT",
+    "status": "STATUS",
+    "members": "MEMBERS",
+    "timeline": "TIMELINE",
+    "actions": "ACTIONS"
+  },
+  "filters": {
+    "all": "All",
+    "active": "Active",
+    "on_hold": "On hold",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+  "status": {
+    "active": "Active",
+    "completed": "Completed",
+    "on_hold": "On hold",
+    "cancelled": "Cancelled"
+  },
+  "form": {
+    "createTitle": "Create project",
+    "editTitle": "Edit project",
+    "name": "Project name",
+    "description": "Description",
+    "status": "Status",
+    "members": "Team members",
+    "membersPlaceholder": "Select members",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "actions": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "view": "View"
+  },
+  "toast": {
+    "created": "Project created",
+    "updated": "Project updated",
+    "deleted": "Project deleted",
+    "createFailed": "Failed to create project",
+    "updateFailed": "Failed to update project",
+    "deleteFailed": "Failed to delete project"
+  },
+  "deleteConfirm": {
+    "title": "Delete project?",
+    "message": "This will permanently delete \"{{name}}\"."
+  }
+}

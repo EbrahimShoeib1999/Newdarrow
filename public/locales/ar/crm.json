@@ -1,0 +1,676 @@
+{
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "leads": "العملاء المحتملون",
+    "contacts": "جهات الاتصال",
+    "deals": "الصفقات",
+    "crmTasks": "مهام CRM",
+    "quotations": "عروض الأسعار",
+    "contracts": "العقود",
+    "client_reports": "تقارير العملاء",
+    "reports": "التقارير"
+
+  },
+  "permissions": {
+    "deniedTitle": "الوصول مرفوض",
+    "deniedMessage": "ليس لديك صلاحية لعرض وحدة CRM."
+  },
+  "dashboard": {
+    "title": "لوحة CRM",
+    "description": "نظرة عامة على مسار المبيعات وعلاقات العملاء.",
+    "stats": {
+      "leads": "العملاء المحتملون",
+      "contacts": "جهات الاتصال",
+      "deals": "الصفقات",
+      "tasks": "مهام CRM",
+      "activeDeals": "الصفقات النشطة",
+      "wonDeals": "الصفقات الرابحة",
+      "lostDeals": "الصفقات الخاسرة",
+      "expectedRevenue": "الإيرادات المتوقعة",
+      "conversionRate": "معدل التحويل"
+    },
+    "funnel": {
+      "title": "مسار المبيعات",
+      "leads": "العملاء المحتملون",
+      "qualified": "مؤهل",
+      "proposal": "عرض مقترح",
+      "negotiation": "تفاوض",
+      "won": "ربح"
+    },
+    "charts": {
+      "leadsBySource": "العملاء المحتملون حسب المصدر",
+      "dealsByStage": "الصفقات حسب المرحلة",
+      "revenueByMonth": "الإيرادات حسب الشهر",
+      "noData": "لا توجد بيانات إيرادات بعد"
+    }
+  },
+  "ui": {
+    "views": { "list": "قائمة", "pipeline": "مسار" },
+    "stageBar": "مراحل",
+    "search": { "placeholder": "بحث CRM…", "results": "نتائج البحث" },
+    "chatter": {
+      "title": "المحادثة",
+      "subtitle": "سجّل ملاحظات وأنشطة",
+      "logNote": "اكتب ملاحظة…",
+      "post": "نشر",
+      "attach": "ملفات",
+      "note": "ملاحظة",
+      "empty": "لا نشاط بعد.",
+      "suggestions": "اقتراحات"
+    }
+  },
+  "leads": {
+    "title": "العملاء المحتملون",
+    "description": "إدارة مسار المبيعات وتتبع العملاء المحتملين.",
+    "pipelineDescription": "اسحب العملاء بين المراحل لتحديث المسار.",
+    "addLead": "إضافة عميل محتمل",
+    "searchPlaceholder": "بحث بالاسم، الشركة، البريد، الهاتف…",
+    "filter": "تصفية",
+    "columns": {
+      "name": "الاسم",
+      "company": "الشركة",
+      "status": "الحالة",
+      "assigned": "المسؤول",
+      "phone": "الهاتف",
+      "created": "تاريخ الإنشاء",
+      "actions": "إجراءات"
+    },
+    "empty": "لا يوجد عملاء محتملون.",
+    "details": "التفاصيل",
+    "filters": {
+      "status": "الحالة",
+      "source": "المصدر",
+      "assignedTo": "مسند إلى",
+      "allAssignees": "جميع المسؤولين",
+      "unassigned": "غير مسند",
+      "from": "من",
+      "to": "إلى",
+      "clear": "مسح التصفية"
+    },
+    "form": {
+      "createTitle": "إنشاء عميل محتمل",
+      "editTitle": "تعديل العميل المحتمل",
+      "name": "الاسم",
+      "phone": "الهاتف",
+      "email": "البريد",
+      "company": "الشركة",
+      "source": "المصدر",
+      "sourceOther": "حدّد المصدر",
+      "sourceOtherPlaceholder": "اكتب مصدرًا آخر",
+      "priority": "الأولوية",
+      "status": "الحالة",
+      "assignedTo": "المستخدم المسند",
+      "serviceCategory": "الخدمة / التصنيف",
+      "notes": "ملاحظات",
+      "cancel": "إلغاء",
+      "create": "إنشاء",
+      "save": "حفظ"
+    },
+    "status": {
+      "new": "جديد",
+      "contacted": "تم التواصل",
+      "qualified": "مؤهل",
+      "proposal_sent": "عرض مُرسل",
+      "negotiation": "تفاوض",
+      "won": "فوز",
+      "lost": "خسارة"
+    },
+    "source": {
+      "website": "الموقع",
+      "referral": "إحالة",
+      "social": "تواصل اجتماعي",
+      "cold_call": "اتصال بارد",
+      "event": "فعالية",
+      "other": "أخرى"
+    },
+    "priority": {
+      "low": "منخفضة",
+      "medium": "متوسطة",
+      "high": "عالية"
+    },
+    "toast": {
+      "created": "تم إنشاء العميل المحتمل",
+      "createFailed": "فشل الإنشاء",
+      "updated": "تم التحديث",
+      "updateFailed": "فشل التحديث"
+    },
+    "convert": {
+      "action": "تحويل إلى جهة اتصال",
+      "viewContact": "عرض جهة الاتصال",
+      "success": "تم تحويل العميل المحتمل إلى جهة اتصال بنجاح",
+      "failed": "فشل تحويل العميل المحتمل"
+    },
+    "board": {
+      "emptyTitle": "لا يوجد عملاء في هذه المرحلة",
+      "emptySubtitle": "اسحب العملاء المحتملين هنا لتغيير حالتهم"
+    }
+  },
+  "leadDetail": {
+    "back": "العودة للقائمة",
+    "edit": "تعديل",
+    "noCompany": "بدون شركة",
+    "changeStatus": "تغيير الحالة",
+    "tabs": {
+      "overview": "نظرة عامة",
+      "notes": "ملاحظات",
+      "activities": "الأنشطة",
+      "tasks": "المهام",
+      "attachments": "مرفقات"
+    },
+    "notes": {
+      "placeholder": "اكتب ملاحظة…",
+      "add": "إضافة ملاحظة",
+      "empty": "لا توجد ملاحظات.",
+      "saved": "تمت الإضافة",
+      "failed": "فشلت الإضافة"
+    },
+    "activities": {
+      "subject": "موضوع النشاط",
+      "description": "تفاصيل (اختياري)",
+      "log": "تسجيل نشاط",
+      "empty": "لا توجد أنشطة.",
+      "saved": "تم التسجيل",
+      "failed": "فشل التسجيل",
+      "types": {
+        "call": "مكالمة",
+        "email": "بريد",
+        "meeting": "اجتماع",
+        "note": "ملاحظة",
+        "other": "أخرى"
+      }
+    },
+    "tasks": {
+      "placeholder": "عنوان المهمة…",
+      "add": "إضافة مهمة",
+      "empty": "لا مهام مرتبطة.",
+      "saved": "تم إنشاء المهمة",
+      "failed": "فشل الإنشاء"
+    },
+    "attachments": {
+      "fileName": "اسم الملف",
+      "url": "رابط الملف",
+      "add": "إضافة مرفق",
+      "empty": "لا مرفقات.",
+      "saved": "تمت الإضافة",
+      "failed": "فشلت الإضافة"
+    },
+    "wonTask": {
+      "action": "إضافة إلى المهام",
+      "heading": "إضافة إلى المهام",
+      "title": "متابعة مع",
+      "taskTitle": "عنوان المهمة",
+      "assignee": "إسناد إلى",
+      "priority": "الأولوية",
+      "description": "الوصف",
+      "desc": "تهيئة العميل الذي تم كسبه: {{company}}",
+      "descGeneric": "تهيئة العميل الذي تم كسبه.",
+      "cancel": "إلغاء",
+      "create": "إنشاء المهمة"
+    }
+  },
+  "contacts": {
+    "title": "جهات الاتصال",
+    "description": "إدارة جهات الاتصال وعلاقات العملاء.",
+    "addContact": "إضافة جهة اتصال",
+    "searchPlaceholder": "بحث بالاسم، البريد، الهاتف، الحساب، السجل التجاري…",
+    "details": "التفاصيل",
+    "empty": "لا توجد جهات اتصال.",
+    "columns": {
+      "name": "الاسم",
+      "email": "البريد",
+      "phone": "الهاتف",
+      "account": "الحساب",
+      "classification": "التصنيف",
+      "satisfaction": "الرضا",
+      "interests": "الاهتمامات",
+      "assigned": "المسؤول المتابع",
+      "created": "تاريخ الإنشاء",
+      "actions": "إجراءات"
+    },
+    "classification": {
+      "label": "التصنيف",
+      "all": "جميع التصنيفات",
+      "actual_client": "عميل فعلي",
+      "potential_lead": "عميل محتمل",
+      "callback": "معاودة الاتصال"
+    },
+    "satisfaction": {
+      "label": "مستوى الرضا",
+      "all": "جميع مستويات الرضا",
+      "satisfied": "راضي",
+      "neutral": "محايد",
+      "unsatisfied": "غير راضي",
+      "notes": "ملاحظات الرضا / الشكاوى"
+    },
+    "interests": {
+      "label": "اهتمامات العميل",
+      "placeholder": "حدد أو اكتب اهتمامات العميل...",
+      "website": "موقع إلكتروني",
+      "store": "متجر إلكتروني",
+      "marketingOffer": "عروض وتسويق",
+      "socialMedia": "إدارة سوشيال ميديا",
+      "branding": "هوية بصرية",
+      "photography": "تصوير وإنتاج مرئي",
+      "seo": "سيو ومحركات بحث"
+    },
+    "directory": {
+      "tab": "دليل الأرقام الموحد",
+      "tableTab": "جدول جهات الاتصال",
+      "title": "دليل الأرقام وجهات الاتصال الموحد",
+      "subtitle": "كافة أرقام الهواتف والتواصل في مكان واحد للاتصال الفوري والمتابعة السريعة",
+      "callNow": "اتصال هاتف",
+      "whatsapp": "واتساب",
+      "copy": "نسخ الرقم",
+      "copied": "تم نسخ الرقم بنجاح",
+      "secondaryPhone": "هاتف بديل",
+      "whatsappPhone": "واتساب مخصص",
+      "noPhone": "لا يوجد رقم مسجل"
+    },
+    "filters": {
+      "assignedTo": "مسند إلى",
+      "unassigned": "غير مسند",
+      "classification": "التصنيف",
+      "satisfaction": "الرضا",
+      "clear": "مسح التصفية"
+    },
+    "form": {
+      "createTitle": "إنشاء جهة اتصال",
+      "editTitle": "تعديل جهة الاتصال",
+      "firstName": "الاسم الأول",
+      "lastName": "اسم العائلة",
+      "email": "البريد",
+      "phone": "الهاتف الأساسي",
+      "secondaryPhone": "هاتف إضافي (بديل)",
+      "whatsappPhone": "رقم الواتساب",
+      "jobTitle": "المسمى الوظيفي",
+      "department": "القسم",
+      "accountName": "الحساب / الشركة",
+      "classification": "تصنيف جهة الاتصال",
+      "satisfaction": "مستوى رضا العميل",
+      "satisfactionNotes": "ملاحظات حول تجربة أو رضا العميل",
+      "interests": "اهتمامات العميل (الموقع، عروض، متجر...)",
+      "commercialRegister": "السجل التجاري",
+      "commercialRegisterPlaceholder": "1010123456",
+      "commercialRegisterHint": "رقم السجل التجاري الرسمي لربطه بالحسابات لاحقاً (اختياري)",
+      "assignedTo": "الموظف المتابع",
+      "cancel": "إلغاء",
+      "create": "إنشاء",
+      "save": "حفظ"
+    },
+    "toast": {
+      "created": "تم إنشاء جهة الاتصال بنجاح",
+      "createFailed": "فشل الإنشاء",
+      "updated": "تم تحديث جهة الاتصال بنجاح",
+      "updateFailed": "فشل التحديث"
+    }
+  },
+  "contactDetail": {
+    "back": "العودة لجهات الاتصال",
+    "edit": "تعديل",
+    "noAccount": "بدون حساب",
+    "tabs": {
+      "overview": "نظرة عامة",
+      "deals": "الصفقات",
+      "tasks": "المهام",
+      "notes": "ملاحظات",
+      "attachments": "مرفقات",
+      "timeline": "الجدول الزمني"
+    },
+    "deals": {
+      "empty": "لا صفقات مرتبطة."
+    },
+    "tasks": {
+      "empty": "لا مهام مرتبطة."
+    }
+  },
+  "deals": {
+    "title": "الصفقات",
+    "description": "تتبع مسار المبيعات.",
+    "pipelineDescription": "لوحة كانبان — اسحب الصفقات بين المراحل.",
+    "searchPlaceholder": "بحث الصفقات…",
+    "empty": "لا صفقات.",
+    "addDeal": "إضافة صفقة",
+    "description": "تتبع مسار المبيعات ومراحل الصفقات.",
+    "addDeal": "إضافة صفقة",
+    "stage": {
+      "lead": "عميل محتمل",
+      "contacted": "تم التواصل",
+      "qualified": "مؤهل",
+      "proposal_sent": "عرض مُرسل",
+      "negotiation": "تفاوض",
+      "won": "فوز",
+      "lost": "خسارة"
+    },
+    "form": {
+      "createTitle": "إنشاء صفقة",
+      "editTitle": "تعديل الصفقة",
+      "title": "العنوان",
+      "contact": "جهة الاتصال",
+      "amount": "المبلغ",
+      "currency": "العملة",
+      "stage": "المرحلة",
+      "probability": "الاحتمالية (0–10)",
+      "expectedCloseDate": "تاريخ الإغلاق المتوقع",
+      "assignedTo": "المستخدم المسند",
+      "cancel": "إلغاء",
+      "create": "إنشاء",
+      "save": "حفظ"
+    },
+    "toast": {
+      "created": "تم إنشاء الصفقة",
+      "createFailed": "فشل الإنشاء",
+      "updated": "تم التحديث",
+      "updateFailed": "فشل التحديث"
+    }
+  },
+  "dealDetail": {
+    "back": "العودة للصفقات",
+    "edit": "تعديل",
+    "changeStage": "تغيير المرحلة",
+    "probability": "الاحتمالية (0–10)",
+    "tabs": {
+      "overview": "نظرة عامة",
+      "tasks": "المهام",
+      "notes": "ملاحظات",
+      "attachments": "مرفقات",
+      "timeline": "الجدول الزمني"
+    },
+    "tasks": {
+      "placeholder": "عنوان المهمة…",
+      "add": "إضافة مهمة",
+      "empty": "لا مهام مرتبطة."
+    }
+  },
+  "crmTasks": {
+    "title": "مهام CRM",
+    "description": "متابعات ومكالمات وأنشطة عبر CRM.",
+    "addTask": "إضافة مهمة",
+    "edit": "تعديل",
+    "empty": "لا توجد مهام.",
+    "columns": {
+      "title": "العنوان",
+      "type": "النوع",
+      "status": "الحالة",
+      "priority": "الأولوية",
+      "dueDate": "تاريخ الاستحقاق",
+      "assignee": "المسند إليه",
+      "actions": "إجراءات"
+    },
+    "filters": {
+      "status": "الحالة",
+      "allStatuses": "جميع الحالات"
+    },
+    "widgets": {
+      "overdue": "متأخرة",
+      "today": "مستحقة اليوم",
+      "upcoming": "قادمة"
+    },
+    "form": {
+      "createTitle": "إنشاء مهمة CRM",
+      "editTitle": "تعديل المهمة",
+      "title": "العنوان",
+      "taskType": "نوع المهمة",
+      "status": "الحالة",
+      "priority": "الأولوية",
+      "assignee": "المسند إليه",
+      "dueDate": "تاريخ الاستحقاق",
+      "description": "الوصف",
+      "cancel": "إلغاء",
+      "create": "إنشاء",
+      "save": "حفظ"
+    },
+    "taskType": {
+      "call": "مكالمة",
+      "meeting": "اجتماع",
+      "email": "بريد",
+      "follow_up": "متابعة",
+      "proposal": "عرض"
+    },
+    "status": {
+      "pending": "معلقة",
+      "in_progress": "قيد التنفيذ",
+      "completed": "مكتملة",
+      "cancelled": "ملغاة"
+    },
+    "priority": {
+      "low": "منخفضة",
+      "medium": "متوسطة",
+      "high": "عالية"
+    },
+    "toast": {
+      "created": "تم إنشاء المهمة",
+      "createFailed": "فشل الإنشاء",
+      "updated": "تم التحديث",
+      "updateFailed": "فشل التحديث"
+    }
+  },
+  "timeline": {
+    "empty": "لا نشاط بعد."
+  },
+  "attachments": {
+    "upload": "رفع ملف",
+    "download": "تحميل",
+    "unsupported": "نوع الملف غير مدعوم."
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "empty": "لا إشعارات",
+    "markAllRead": "تعليم الكل كمقروء"
+  },
+  "reports": {
+    "title": "تقارير CRM",
+    "description": "مقاييس العملاء المحتملين والمبيعات والفريق.",
+    "leads": {
+      "title": "تقارير العملاء المحتملين",
+      "newLeads": "إجمالي العملاء",
+      "conversionRate": "معدل التحويل",
+      "sources": "مصادر العملاء"
+    },
+    "sales": {
+      "title": "تقارير المبيعات",
+      "won": "صفقات فائزة",
+      "lost": "صفقات خاسرة",
+      "revenue": "إيرادات الفوز"
+    },
+    "team": {
+      "title": "أداء الفريق",
+      "empty": "لا بيانات فريق بعد.",
+      "employee": "الموظف",
+      "dealsWon": "صفقات فائزة",
+      "revenue": "الإيرادات",
+      "tasksDone": "مهام مكتملة",
+      "conversion": "تحويل العملاء"
+    }
+  },
+  "quotation": {
+    "pageTitle": "إنشاء عرض سعر",
+    "pageSubtitle": "أنشئ عرض سعر بصيغة PDF من بيانات شركتك وجهات الاتصال والخدمات المختارة. يظهر في المستند ما تحدده فقط.",
+    "createQuote": "عرض سعر جديد",
+    "quoteNumber": "رقم العرض",
+    "quoteDate": "تاريخ العرض",
+    "validityDuration": "مدة الصلاحية",
+    "validityUnit": "وحدة المدة",
+    "validityUnitOption": { "day": "يوم", "month": "شهر" },
+    "notes": "ملاحظات",
+    "notesHint": "تُعرض في أسفل عرض السعر كنص توضيحي.",
+    "vatRate": "نسبة ضريبة القيمة المضافة",
+    "selectContact": "اختيار جهة اتصال",
+    "clientName": "اسم العميل",
+    "clientCr": "السجل التجاري للعميل",
+    "recipientTitle": {
+      "label": "لقب المستلم"
+    },
+    "basePackage": "الباقة الأساسية",
+    "basePackageHint": "تظهر الإضافات المجانية كنقاط تحت وصف الباقة، وتظهر الإضافات بسعر في صفوف مستقلة.",
+    "fromCatalog": "من قائمة الأسعار",
+    "optionalAddons": "إضافات اختيارية",
+    "optionalHint": "اختر ما يحتاجه العميل فقط — العناصر غير المحددة لن تظهر في عرض السعر.",
+    "lineItems": "بنود العرض",
+    "lineItemsHint": "اختر بنداً من القائمة، أو اضغط إضافة بند جديد لكتابة خدمة مخصصة.",
+    "selectItem": "اختيار بند",
+    "selectItemPlaceholder": "اختر بنداً لإضافته…",
+    "customItem": "بند مخصص",
+    "addLine": "إضافة بند",
+    "addNewItem": "إضافة بند جديد",
+    "noLinesYet": "لا توجد بنود بعد — اختر من القائمة أو أضف بنداً جديداً",
+    "removeLine": "حذف البند",
+    "itemName": "اسم الخدمة",
+    "itemDescription": "الوصف",
+    "price": "السعر",
+    "description": "الوصف",
+    "pricesIncludeVat": "الأسعار شاملة ضريبة القيمة المضافة",
+    "total": "الإجمالي",
+    "includingVat": "شامل الضريبة",
+    "selectedItems_one": "{{count}} خدمة محددة",
+    "selectedItems_other": "{{count}} خدمات محددة",
+    "preview": "معاينة",
+    "hidePreview": "إخفاء المعاينة",
+    "downloadPdf": "تنزيل PDF",
+    "clientRequired": "اسم العميل مطلوب",
+    "itemsRequired": "يرجى اختيار خدمة واحدة على الأقل",
+    "exportSuccess": "تم تنزيل عرض السعر بنجاح",
+    "exportError": "تعذّر إنشاء ملف عرض السعر",
+    "save": "حفظ",
+    "savedQuotes": "عروض محفوظة",
+    "newQuote": "عرض جديد",
+    "untitled": "بدون اسم",
+    "saveSuccess": "تم حفظ عرض السعر",
+    "saveError": "تعذّر حفظ عرض السعر",
+    "delete": "حذف",
+    "deleteSuccess": "تم حذف عرض السعر",
+    "deleteError": "تعذّر حذف عرض السعر",
+    "recentQuotes": "العروض الأخيرة",
+    "noSavedQuotes": "لا توجد عروض محفوظة بعد",
+    "editingSaved": "تعديل عرض محفوظ",
+    "unsavedDraft": "مسودة جديدة — لم تُحفظ بعد",
+    "convertToInvoice": "تحويل إلى فاتورة",
+    "contactRequiredForInvoice": "اختر جهة اتصال من CRM لإنشاء الفاتورة",
+    "pdf": {
+      "title": "عرض سعر",
+      "date": "التاريخ",
+      "dateSuffix": "م",
+      "quoteNumber": "رقم العرض",
+      "recipientPrefix": "السيد / السيدة",
+      "recipientTitle": {
+        "mr": "السيد",
+        "mrs": "السيدة",
+        "professor": "الأستاذ"
+      },
+      "details": "تفاصيل العرض",
+      "colService": "الخدمة",
+      "colQty": "الكمية",
+      "colDescription": "الوصف",
+      "colPrice": "السعر",
+      "total": "الإجمالي",
+      "includingVat": "شامل ضريبة القيمة المضافة",
+      "currencyRiyal": "\u20C1",
+      "currencySar": "\u20C1",
+      "notes": "ملاحظات:",
+      "terms": "الشروط والأحكام:",
+      "validityNote": "سريان العرض لمدة {{duration}} {{unit}} من تاريخ إصداره",
+      "day": "يوم",
+      "days": "أيام",
+      "month": "شهر",
+      "months": "أشهر",
+      "cr": "السجل التجاري",
+      "vat": "الرقم الضريبي",
+      "crShort": "س.ت",
+      "phone": "الهاتف",
+      "email": "البريد الإلكتروني",
+      "address": "العنوان",
+      "companyShort": "شركة دي آرو"
+    }
+  },
+  "contract": {
+    "pageTitle": "عقود الخدمات",
+    "pageSubtitle": "٣ خطوات فقط: اختر العميل، املأ التفاصيل، حمّل PDF.",
+    "meta": "بيانات العقد",
+    "title": "عنوان العقد",
+    "number": "رقم العقد",
+    "date": "تاريخ العقد",
+    "pageCount": "عدد الصفحات",
+    "pageCountHint": "يُستخدم في الأحكام الختامية عبر {{pageCount}}",
+    "selectContact": "اختر العميل من جهات الاتصال",
+    "selectContactPlaceholder": "ابحث / اختر جهة اتصال…",
+    "clientLoaded": "تم تحميل بيانات العميل",
+    "stepClient": "اختر العميل",
+    "stepClientHint": "اختر من جهات الاتصال أو اكتب البيانات يدوياً.",
+    "stepDetails": "تفاصيل الخدمة",
+    "stepDetailsHint": "غيّر فقط ما تحتاجه — نص العقد يتحدث تلقائياً.",
+    "stepDownload": "حمّل PDF",
+    "stepDownloadHint": "راجع المعاينة ثم حمّل الملف.",
+    "livePreview": "معاينة مباشرة",
+    "livePreviewHint": "تتحدث مع كل تعديل",
+    "progressLabel": "التقدّم",
+    "pricingGroup": "الأسعار",
+    "advancedTitle": "خيارات متقدمة",
+    "advancedHint": "بيانات الشركة، التمهيد، حقول إضافية، والبنود القانونية",
+    "autoVatHint": "يُحسب تلقائياً من المبلغ + نسبة الضريبة",
+    "provider": "شركتنا (الطرف الأول)",
+    "providerHint": "تُملأ تلقائياً — افتح فقط إذا أردت التعديل",
+    "client": "العميل (الطرف الثاني)",
+    "preamble": "التمهيد",
+    "preambleHint": "الفقرة الافتتاحية في بداية العقد",
+    "moreFields": "حقول إضافية",
+    "moreFieldsHint": "مدة المراجعة، الجزاءات، مدينة الاختصاص…",
+    "fields": "الحقول الديناميكية",
+    "fieldsHint": "استخدم {{key}} داخل نص أي بند — القيم تتحدث فوراً في المعاينة.",
+    "addField": "إضافة حقل",
+    "removeField": "حذف الحقل",
+    "newField": "حقل جديد",
+    "fieldKey": "المفتاح",
+    "fieldLabel": "التسمية",
+    "fieldValue": "القيمة",
+    "clauses": "تعديل البنود",
+    "clausesHint": "أضف أو عدّل أو أعد ترتيب أو احذف البنود ونقاطها.",
+    "clausesEasyHint": "اختياري — افتح فقط إذا احتجت تغيير الصياغة القانونية",
+    "addClause": "إضافة بند",
+    "removeClause": "حذف البند",
+    "newClause": "بند جديد",
+    "clauseTitle": "عنوان البند",
+    "addBullet": "إضافة نقطة",
+    "removeBullet": "حذف النقطة",
+    "bulletPlaceholder": "نص البند",
+    "moveUp": "تحريك لأعلى",
+    "moveDown": "تحريك لأسفل",
+    "party": {
+      "name": "الاسم / الشركة",
+      "cr": "السجل التجاري",
+      "vat": "الرقم الضريبي",
+      "address": "العنوان",
+      "representative": "الموقّع",
+      "idNumber": "رقم الهوية",
+      "phone": "الهاتف",
+      "email": "البريد الإلكتروني"
+    },
+    "save": "حفظ",
+    "new": "عقد جديد",
+    "preview": "إظهار المعاينة",
+    "hidePreview": "إخفاء المعاينة",
+    "downloadPdf": "تحميل PDF",
+    "loadSaved": "فتح محفوظ",
+    "delete": "حذف",
+    "deleteConfirm": "هل تريد حذف هذا العقد؟",
+    "clientRequired": "اكتب اسم العميل أولاً",
+    "saveSuccess": "تم حفظ العقد",
+    "saveError": "تعذر حفظ العقد",
+    "deleteSuccess": "تم حذف العقد",
+    "deleteError": "تعذر حذف العقد",
+    "exportSuccess": "تم تحميل ملف PDF للعقد",
+    "exportError": "تعذر إنشاء ملف PDF للعقد",
+    "templates": "أنواع ونماذج العقود",
+    "templatesHint": "اختر نموذج العقد المطلوب لتحميل بنود الخدمات المناسبة والبنود القانونية المتخصصة",
+    "servicesTitle": "بنود الخدمات المطلوبة وتوجيهها لمهام الأقسام",
+    "servicesHint": "حدد الخدمات التي يحتاجها العميل؛ بمجرد التحديد والترحيل تتحول كل خدمة إلى مهمة رئيسية للقسم المختص وتتفرع لمهام فرعية متسلسلة للموظفين",
+    "convertToTasks": "ترحيل الخدمات المحددة إلى مهام الأقسام",
+    "converting": "جاري ترحيل المهام للأقسام...",
+    "convertedBanner": "تم ترحيل بنود الخدمات بنجاح إلى مهام الأقسام التنفيذية",
+    "convertedTasksCount": "تم إنشاء {{count}} مهمة رئيسية وفرعية متسلسلة في نظام المهام",
+    "viewTasks": "الانتقال لجدول المهام",
+    "addService": "إضافة بند خدمة مخصص",
+    "department": "القسم المختص",
+    "subtasksCount": "مهام فرعية متسلسلة",
+    "estimatedHours": "ساعة تقديرية",
+    "durationDays": "يوم عمل"
+  }
+}

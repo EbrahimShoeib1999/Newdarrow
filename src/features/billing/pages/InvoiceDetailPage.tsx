@@ -1,0 +1,486 @@
+import { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
+import { Button, Chip } from "@heroui/react";
+import {
+  Printer,
+  Download,
+  ArrowLeft,
+  Mail,
+  CreditCard,
+  Edit2,
+  FileCheck2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useCompany } from "@/features/companies/context/company-context";
+import {
+  useInvoice,
+  useApproveInvoiceMutation,
+  useConvertDraftInvoiceMutation,
+} from "../hooks/use-invoices";
+import { usePayments } from "../hooks/use-payments";
+import { useContactsQuery } from "@/features/crm/hooks/use-contacts";
+import { useBillingSettings } from "../hooks/use-billing-settings";
+import { useCompanyProfile } from "@/features/companies/hooks/use-company-profile";
+import { RecordPaymentModal } from "../components/RecordPaymentModal";
+import { InvoicePrintDocument } from "../components/InvoicePrintDocument";
+import { generateInvoicePdf } from "../utils/generate-invoice-pdf";
+import { formatCurrency } from "@/lib/utils";
+import { BillingMoney } from "../components/BillingMoney";
+import { getInvoiceAmountDue } from "../utils/accounting-engine";
+import { billingDateLocale } from "../utils/locale";
+import { BillingService } from "../api/billing.service";
+import {
+  createInvoiceShareToken,
+  invoicePdfShareUrl,
+  publishInvoicePdfShare,
+  publishInvoiceSnapshotShare,
+} from "../api/invoice-share.service";
+import { DocumentApprovalBar } from "@/components/shared/document-approval-bar";
+import { isInvoiceActionsUnlocked } from "@/lib/permissions/document-approval";
+
+export default function InvoiceDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { t, i18n } = useTranslation("billing");
+  const { companyId } = useCompany();
+  const queryClient = useQueryClient();
+  const printRef = useRef<HTMLDivElement>(null);
+  const publishLock = useRef(false);
+  const tokenEnsuredFor = useRef<string | null>(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const dateLocale = billingDateLocale(i18n.language);
+
+  const { data: invoice, isLoading } = useInvoice(id);
+  const approveInvoice = useApproveInvoiceMutation();
+  const convertDraft = useConvertDraftInvoiceMutation();
+  const { t: tCommon } = useTranslation("common");
+  const actionsUnlocked = isInvoiceActionsUnlocked(invoice);
+  const { data: payments = [] } = usePayments(id);
+  const { data: contactsRes } = useContactsQuery();
+  const contacts = contactsRes?.data || [];
+  const { data: settings } = useBillingSettings();
+  const { data: company } = useCompanyProfile();
+
+  const customer = contacts.find((c) => c.id === invoice?.customerId);
+
+  const pdfShareUrl = invoice?.shareToken
+    ? invoicePdfShareUrl(invoice.shareToken)
+    : "";
+
+  // Ensure share token (QR encodes https://…/i/:token) only after approval
+  useEffect(() => {
+    if (!actionsUnlocked) return;
+    if (!invoice?.id || !companyId || invoice.shareToken) return;
+    if (tokenEnsuredFor.current === invoice.id) return;
+    tokenEnsuredFor.current = invoice.id;
+    const token = createInvoiceShareToken();
+    void BillingService.invoices
+      .update(companyId, invoice.id, { shareToken: token })
+      .then(() =>
+        queryClient.invalidateQueries({
+          queryKey: ["billing", "invoices", companyId, invoice.id],
+        })
+      )
+      .catch((err) => {
+        console.error(err);
+        tokenEnsuredFor.current = null;
+      });
+  }, [invoice?.id, invoice?.shareToken, companyId, queryClient, actionsUnlocked]);
+
+  // Publish snapshot ASAP so QR /i/:token works without Storage or PDF generation
+  useEffect(() => {
+    if (!actionsUnlocked) return;
+    if (!invoice?.id || !invoice.shareToken || !companyId) return;
+
+    const fingerprint = [
+      invoice.invoiceNumber,
+      invoice.status,
+      invoice.grandTotal,
+      invoice.totalTax,
+      invoice.items.length,
+      invoice.shareToken,
+      invoice.customerName || "",
+      i18n.language,
+      "v2",
+    ].join(":");
+    const cacheKey = `invoice-snap:${invoice.id}`;
+    if (sessionStorage.getItem(cacheKey) === fingerprint) return;
+
+    void publishInvoiceSnapshotShare({
+      companyId,
+      invoice,
+      shareToken: invoice.shareToken,
+      settings,
+      company,
+      customer,
+      locale: "ar",
+    })
+      .then(() => {
+        sessionStorage.setItem(cacheKey, fingerprint);
+      })
+      .catch((err) => {
+        console.error("Failed to publish invoice snapshot share", err);
+      });
+  }, [invoice, companyId, settings, company, customer, i18n.language, actionsUnlocked]);
+
+  // Optional: attach PDF file in background (Storage may be unavailable)
+  useEffect(() => {
+    if (!actionsUnlocked) return;
+    if (
+      !invoice?.id ||
+      !invoice.shareToken ||
+      !companyId ||
+      !printRef.current ||
+      publishLock.current
+    ) {
+      return;
+    }
+
+    const fingerprint = [
+      invoice.invoiceNumber,
+      invoice.status,
+      invoice.grandTotal,
+      invoice.totalTax,
+      invoice.items.length,
+      invoice.shareToken,
+    ].join(":");
+    const cacheKey = `invoice-pdf:${invoice.id}`;
+    if (sessionStorage.getItem(cacheKey) === fingerprint && invoice.pdfUrl) {
+      return;
+    }
+
+    publishLock.current = true;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          if (!printRef.current) return;
+          const { pdfUrl } = await publishInvoicePdfShare({
+            companyId,
+            invoice,
+            printElement: printRef.current,
+            shareToken: invoice.shareToken!,
+            settings,
+            company,
+            customer,
+            locale: "ar",
+          });
+          sessionStorage.setItem(cacheKey, fingerprint);
+          sessionStorage.setItem(`invoice-snap:${invoice.id}`, fingerprint);
+          if (pdfUrl.startsWith("http")) {
+            await BillingService.invoices.update(companyId, invoice.id!, {
+              pdfUrl,
+              shareToken: invoice.shareToken,
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["billing", "invoices", companyId, invoice.id],
+            });
+          }
+        } catch (err) {
+          console.error("Failed to publish invoice PDF share", err);
+        } finally {
+          publishLock.current = false;
+        }
+      })();
+    }, 1200);
+
+    return () => {
+      window.clearTimeout(timer);
+      publishLock.current = false;
+    };
+  }, [invoice, companyId, queryClient, settings, company, customer, actionsUnlocked]);
+
+  if (isLoading) {
+    return (
+      <div className="p-10 text-center text-default-500">
+        {t("invoices.detail.loading")}
+      </div>
+    );
+  }
+
+  if (!invoice) {
+    return (
+      <div className="flex justify-center p-10">
+        <p className="text-default-500">{t("invoices.detail.invoice_not_found")}</p>
+      </div>
+    );
+  }
+
+  const amountDue = getInvoiceAmountDue(invoice);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "draft":
+        return "default";
+      case "pending":
+        return "warning";
+      case "sent":
+        return "primary";
+      case "paid":
+        return "success";
+      case "overdue":
+        return "danger";
+      case "cancelled":
+        return "warning";
+      default:
+        return "default";
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!actionsUnlocked) {
+      toast.error(tCommon("documentApproval.lockedHint"));
+      return;
+    }
+    if (!printRef.current) return;
+    setExporting(true);
+    try {
+      await generateInvoicePdf(
+        printRef.current,
+        `${invoice.invoiceNumber}.pdf`
+      );
+      if (companyId && invoice.shareToken && printRef.current) {
+        try {
+          const { pdfUrl } = await publishInvoicePdfShare({
+            companyId,
+            invoice,
+            printElement: printRef.current,
+            shareToken: invoice.shareToken,
+            settings,
+            company,
+            customer,
+            locale: "ar",
+          });
+          await BillingService.invoices.update(companyId, invoice.id!, {
+            pdfUrl,
+            shareToken: invoice.shareToken,
+          });
+          sessionStorage.setItem(
+            `invoice-pdf:${invoice.id}`,
+            [
+              invoice.invoiceNumber,
+              invoice.status,
+              invoice.grandTotal,
+              invoice.totalTax,
+              invoice.items.length,
+              invoice.shareToken,
+            ].join(":")
+          );
+        } catch {
+          /* non-fatal */
+        }
+      }
+    } catch {
+      toast.error(t("invoices.detail.pdf_failed"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleSendEmail = () => {
+    if (!actionsUnlocked) {
+      toast.error(tCommon("documentApproval.lockedHint"));
+      return;
+    }
+    if (!customer?.email) {
+      toast.error(t("invoices.detail.no_email"));
+      return;
+    }
+    const subject = encodeURIComponent(
+      t("invoices.detail.email_subject", { number: invoice.invoiceNumber })
+    );
+    const body = encodeURIComponent(
+      t("invoices.detail.email_body", {
+        number: invoice.invoiceNumber,
+        amount: formatCurrency(invoice.grandTotal, invoice.currency),
+      })
+    );
+    window.open(`mailto:${customer.email}?subject=${subject}&body=${body}`);
+    toast.success(t("invoices.detail.email_opened"));
+  };
+
+  return (
+    <div className="mx-auto max-w-[220mm] space-y-6 pb-20 animate-in fade-in duration-500">
+      <div className="print:hidden">
+        <DocumentApprovalBar
+          document={invoice}
+          isSaved={Boolean(invoice.id)}
+          requiresAction={invoice.status === "draft" || invoice.status === "pending"}
+          isApproving={approveInvoice.isPending}
+          onApprove={
+            invoice.status === "draft"
+              ? undefined
+              : () => {
+                  if (invoice.id) approveInvoice.mutate(invoice.id);
+                }
+          }
+        />
+      </div>
+      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 border-b border-default-100 bg-background/80 py-4 backdrop-blur-md print:hidden">
+        <div className="flex min-w-0 items-center gap-4">
+          <Button
+            isIconOnly
+            variant="light"
+            aria-label={t("actions.back")}
+            onPress={() => navigate(-1)}
+          >
+            <ArrowLeft className="h-5 w-5 rtl:rotate-180" />
+          </Button>
+          <div className="min-w-0">
+            <h1 className="flex flex-wrap items-center gap-3 text-2xl font-bold">
+              <span dir="ltr">{invoice.invoiceNumber}</span>
+              <Chip
+                color={getStatusColor(invoice.status)}
+                variant="flat"
+                size="sm"
+                className="font-bold text-[10px]"
+              >
+                {t(`invoices.status.${invoice.status}`)}
+              </Chip>
+              {invoice.pdfUrl ? (
+                <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                  {t("invoices.detail.qr_pdf_ready")}
+                </span>
+              ) : null}
+            </h1>
+            <p className="text-sm text-default-500">
+              {t("invoices.detail.issue_datetime")}:{" "}
+              {invoice.issueDate.toLocaleString(dateLocale, {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {invoice.status === "draft" && (
+            <Button
+              color="success"
+              className="font-semibold text-white"
+              startContent={<FileCheck2 className="h-4 w-4" />}
+              isLoading={convertDraft.isPending}
+              onPress={() => {
+                if (invoice.id) convertDraft.mutate(invoice.id);
+              }}
+            >
+              {t("invoices.detail.convert_draft")}
+            </Button>
+          )}
+          {(invoice.status === "draft" || invoice.status === "pending") && (
+            <Button
+              color="primary"
+              variant="flat"
+              startContent={<Edit2 className="h-4 w-4" />}
+              onPress={() => navigate(`/billing/invoices/${invoice.id}/edit`)}
+            >
+              {t("invoices.detail.edit_invoice")}
+            </Button>
+          )}
+          {amountDue > 0 &&
+            invoice.status !== "draft" &&
+            invoice.status !== "pending" &&
+            invoice.status !== "cancelled" && (
+              <Button
+                color="success"
+                variant="flat"
+                startContent={<CreditCard className="h-4 w-4" />}
+                isDisabled={!actionsUnlocked}
+                onPress={() => setPaymentOpen(true)}
+              >
+                {t("invoices.detail.record_payment")}
+              </Button>
+            )}
+          <Button
+            variant="flat"
+            startContent={<Mail className="h-4 w-4" />}
+            isDisabled={!actionsUnlocked}
+            onPress={handleSendEmail}
+          >
+            {t("invoices.detail.send_email")}
+          </Button>
+          <Button
+            variant="flat"
+            isIconOnly
+            aria-label={t("actions.download_pdf")}
+            isLoading={exporting}
+            isDisabled={!actionsUnlocked}
+            onPress={handleDownloadPdf}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="flat"
+            isIconOnly
+            aria-label={t("actions.print")}
+            isDisabled={!actionsUnlocked}
+            onPress={() => window.print()}
+          >
+            <Printer className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div
+        ref={printRef}
+        className="overflow-x-auto rounded-lg border border-default-200 bg-default-50/50 p-2 shadow-sm print:border-none print:bg-white print:p-0 print:shadow-none"
+      >
+        <InvoicePrintDocument
+          invoice={invoice}
+          settings={settings}
+          company={company}
+          customer={customer}
+          amountDue={amountDue}
+          pdfShareUrl={pdfShareUrl || null}
+        />
+      </div>
+
+      {payments.length > 0 && (
+        <div className="rounded-lg border border-default-200 bg-content1 p-4 print:hidden">
+          <h4 className="mb-3 text-xs font-bold uppercase tracking-widest text-default-400">
+            {t("payments.history")}
+          </h4>
+          <div className="space-y-2">
+            {payments.map((p) => (
+              <div key={p.id} className="flex justify-between gap-4 text-sm">
+                <span>
+                  {p.date.toLocaleDateString(dateLocale)}
+                  {p.methodName ? ` — ${p.methodName}` : ""}
+                  {p.reference ? ` (${p.reference})` : ""}
+                  {p.voucherId ? (
+                    <>
+                      {" · "}
+                      <Link
+                        to={`/billing/receipt-vouchers/${p.voucherId}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {t("payments.view_voucher")}
+                      </Link>
+                    </>
+                  ) : null}
+                </span>
+                <BillingMoney
+                  amount={p.amount}
+                  currency={p.currency}
+                  className="font-medium text-success"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <RecordPaymentModal
+        invoice={invoice}
+        isOpen={paymentOpen}
+        onOpenChange={setPaymentOpen}
+      />
+    </div>
+  );
+}

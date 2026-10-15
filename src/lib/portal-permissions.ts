@@ -1,0 +1,63 @@
+import type { UserRole } from "@/features/auth/types/auth.types";
+import {
+  canUserAccessPortal,
+  resolveUserPortals,
+} from "@/lib/permissions/portal-access";
+
+export type PortalId = "tasks" | "crm" | "people" | "billing" | "chat" | "projects";
+
+export const PORTAL_PATHS: Record<PortalId, string> = {
+  tasks: "/tasks",
+  crm: "/crm",
+  people: "/people",
+  billing: "/billing",
+  chat: "/chat",
+  projects: "/projects",
+};
+
+/** @deprecated Use ROLE_PERMISSIONS from @/lib/permissions */
+export const PORTAL_ACCESS: Record<PortalId, readonly UserRole[]> = {
+  tasks: ["super_admin", "admin", "manager", "employee"],
+  crm: ["super_admin", "admin", "manager", "employee", "viewer"],
+  people: ["super_admin", "admin", "manager", "employee"],
+  billing: ["super_admin", "admin", "manager"],
+  chat: ["super_admin", "admin", "manager", "employee", "viewer"],
+  projects: ["super_admin", "admin", "manager", "employee"],
+};
+
+export function canAccessPortal(
+  role: UserRole | undefined,
+  portal: PortalId,
+  portalAccess?: PortalId[] | null
+): boolean {
+  return canUserAccessPortal(role, portal, portalAccess);
+}
+
+export function getAccessiblePortals(
+  role: UserRole | undefined,
+  portalAccess?: PortalId[] | null
+): PortalId[] {
+  return resolveUserPortals(role, portalAccess);
+}
+
+export function getPortalFromPath(pathname: string): PortalId | "picker" | "settings" | null {
+  if (pathname === "/" || pathname === "" || pathname === "/apps") return "picker";
+  if (pathname.startsWith("/tasks")) return "tasks";
+  if (pathname.startsWith("/crm")) return "crm";
+  if (pathname.startsWith("/people")) return "people";
+  if (pathname.startsWith("/billing")) return "billing";
+  if (pathname.startsWith("/chat")) return "chat";
+  if (pathname.startsWith("/projects")) return "projects";
+  if (pathname.startsWith("/settings")) return "settings";
+  if (pathname === "/profile" || pathname === "/notifications" || pathname === "/seed") return null;
+  return null;
+}
+
+export function getDefaultPortalPath(
+  role: UserRole | undefined,
+  portalAccess?: PortalId[] | null
+): string {
+  const portals = getAccessiblePortals(role, portalAccess);
+  if (portals.length === 1) return PORTAL_PATHS[portals[0]];
+  return "/";
+}

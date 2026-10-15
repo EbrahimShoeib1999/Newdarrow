@@ -1,0 +1,505 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Shared finish for the Tasks and HR workspaces. Keep table scrolling inside
+   each section so narrow screens never widen the whole portal. */
+.portal-workspace {
+  color: hsl(var(--heroui-foreground));
+}
+
+.portal-workspace table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.portal-workspace table thead th {
+  background: hsl(var(--heroui-default-100) / 0.62);
+  color: hsl(var(--heroui-default-600));
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.portal-workspace table tbody tr {
+  transition: background-color 160ms ease;
+}
+
+.portal-workspace table tbody tr:hover {
+  background: hsl(var(--heroui-primary) / 0.045);
+}
+
+.portal-workspace table tbody tr.report-clickable-row {
+  cursor: pointer;
+}
+
+.portal-workspace table tbody tr.report-clickable-row:focus-visible {
+  outline: 2px solid hsl(var(--heroui-primary));
+  outline-offset: -2px;
+}
+
+.portal-workspace table tbody td {
+  border-bottom: 1px solid hsl(var(--heroui-default-100) / 0.7);
+}
+
+.portal-workspace table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.portal-workspace table tbody tr.attendance-day-divider > td {
+  border-top: 10px solid hsl(var(--heroui-background));
+}
+
+.portal-workspace .day-group-tone-0 { --day-rgb: 14 165 233; }
+.portal-workspace .day-group-tone-1 { --day-rgb: 16 185 129; }
+.portal-workspace .day-group-tone-2 { --day-rgb: 245 158 11; }
+.portal-workspace .day-group-tone-3 { --day-rgb: 139 92 246; }
+
+.portal-workspace table tbody tr[class*="day-group-tone-"] > td {
+  background: rgb(var(--day-rgb) / 0.09);
+}
+
+.portal-workspace table tbody tr[class*="day-group-tone-"]:hover > td {
+  background: rgb(var(--day-rgb) / 0.15);
+}
+
+.portal-workspace .report-day-card {
+  border-color: rgb(var(--day-rgb) / 0.3);
+  background: rgb(var(--day-rgb) / 0.075);
+}
+
+.portal-workspace .report-day-heading {
+  border-inline-start: 3px solid rgb(var(--day-rgb) / 0.7);
+  background: rgb(var(--day-rgb) / 0.09);
+}
+
+.dark .portal-workspace table tbody tr[class*="day-group-tone-"] > td,
+.dark .portal-workspace .report-day-card,
+.dark .portal-workspace .report-day-heading {
+  background: rgb(var(--day-rgb) / 0.13);
+}
+
+.portal-workspace table tbody tr.attendance-day-divider > td:first-child {
+  box-shadow: inset 3px 0 hsl(var(--heroui-primary) / 0.55);
+}
+
+[dir="rtl"] .portal-workspace table tbody tr.attendance-day-divider > td:first-child {
+  box-shadow: inset -3px 0 hsl(var(--heroui-primary) / 0.55);
+}
+
+.portal-workspace :is(button, a):focus-visible {
+  outline: 2px solid hsl(var(--heroui-primary));
+  outline-offset: 2px;
+}
+
+@media (max-width: 639px) {
+  .portal-workspace table th,
+  .portal-workspace table td {
+    white-space: nowrap;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/70 dark:bg-black/40 backdrop-blur-md border border-white/20 dark:border-white/10;
+  }
+  
+  .glass-card {
+    @apply bg-white/80 dark:bg-content1/80 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-xl;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  }
+
+  .bg-dashboard-gradient {
+    @apply bg-gradient-to-br from-[#F8F9FB] to-[#E2E8F0] dark:from-background dark:to-content1;
+  }
+
+  .shadow-premium {
+    @apply shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)];
+  }
+
+  /* References the live --heroui-primary CSS variable (not a hardcoded hex)
+     so the glow follows the active theme, including per-company brand overrides. */
+  .shadow-glow {
+    @apply shadow-[0_0_20px_hsl(var(--heroui-primary)/0.3)] dark:shadow-[0_0_20px_hsl(var(--heroui-primary)/0.2)];
+  }
+
+  .bg-primary-gradient {
+    @apply bg-gradient-to-r from-primary to-secondary;
+  }
+
+  .card-hover-lift {
+    @apply hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .kanban-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(161 161 170 / 0.7) rgba(0, 0, 0, 0.05);
+    scroll-behavior: smooth;
+  }
+
+  .kanban-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 10px;
+  }
+
+  .kanban-scroll::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 9999px;
+    margin: 2px;
+  }
+
+  .kanban-scroll::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-primary/50;
+  }
+
+  .kanban-scroll::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/80;
+  }
+
+  .kanban-scroll-always {
+    overflow-x: scroll !important;
+    scrollbar-width: auto !important;
+    scrollbar-color: hsl(var(--heroui-primary)) rgba(0, 0, 0, 0.12) !important;
+  }
+
+  .kanban-scroll-always::-webkit-scrollbar {
+    height: 16px !important;
+    width: 16px !important;
+    display: block !important;
+    background: rgba(0, 0, 0, 0.05) !important;
+  }
+
+  .kanban-scroll-always::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.12) !important;
+    border-radius: 9999px !important;
+    margin-inline: 8px !important;
+  }
+
+  .dark .kanban-scroll-always::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.12) !important;
+  }
+
+  .kanban-scroll-always::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--heroui-primary)) !important;
+    border-radius: 9999px !important;
+    border: 3px solid rgba(255, 255, 255, 0.8) !important;
+    min-width: 100px !important;
+    cursor: pointer !important;
+  }
+
+  .dark .kanban-scroll-always::-webkit-scrollbar-thumb {
+    border: 3px solid rgba(0, 0, 0, 0.4) !important;
+  }
+
+  .kanban-scroll-always::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--heroui-primary) / 0.85) !important;
+  }
+
+  .kanban-scroll-x {
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-inline: 0.5rem;
+  }
+
+  .kanban-column-scroll {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-scroll {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+  }
+
+  .chat-surface {
+    background-color: hsl(var(--heroui-background));
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--heroui-primary) / 0.07), transparent),
+      radial-gradient(circle at 1px 1px, hsl(var(--heroui-default-300) / 0.35) 1px, transparent 0);
+    background-size: auto, 22px 22px;
+  }
+
+  .dark .chat-surface {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--heroui-primary) / 0.12), transparent),
+      radial-gradient(circle at 1px 1px, hsl(var(--heroui-default-100) / 0.45) 1px, transparent 0);
+  }
+
+  .chat-composer-shell {
+    @apply border-t border-default-100/80 bg-content1/95 backdrop-blur-xl;
+  }
+
+  .chat-bubble-mine {
+    @apply rounded-2xl rounded-ee-md bg-primary text-primary-foreground shadow-sm;
+  }
+
+  .chat-bubble-theirs {
+    @apply rounded-2xl rounded-es-md bg-content1 text-default-900 shadow-sm ring-1 ring-default-100/80;
+  }
+
+  .kanban-column-collapsed-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Text selection — brand highlight */
+::selection {
+  background-color: hsl(var(--heroui-primary));
+  color: hsl(var(--heroui-primary-foreground));
+}
+
+::-moz-selection {
+  background-color: hsl(var(--heroui-primary));
+  color: hsl(var(--heroui-primary-foreground));
+}
+
+/* Brand scrollbar */
+html,
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--heroui-primary) / 0.65) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background-image: linear-gradient(135deg, hsl(var(--heroui-primary)) 0%, hsl(var(--heroui-secondary)) 100%);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-image: linear-gradient(135deg, hsl(var(--heroui-primary) / 0.8) 0%, hsl(var(--heroui-secondary) / 0.8) 100%);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Hide the up/down/left/right scrollbar arrow buttons */
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+}
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-arabic: "Cairo", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+    --header-height: 3.5rem;
+  }
+
+  @media (min-width: 640px) {
+    :root {
+      --header-height: 4rem;
+    }
+  }
+
+  * {
+    @apply border-default-200 transition-colors duration-200;
+  }
+  
+  body {
+    @apply bg-dashboard-gradient text-foreground min-h-screen;
+    font-family: var(--font-sans);
+  }
+}
+
+/* Custom Sidebar Colors to match HeroUI Theme */
+.bg-sidebar {
+  @apply bg-white/50 dark:bg-background/50 backdrop-blur-xl;
+}
+
+.text-sidebar-foreground {
+  @apply text-foreground;
+}
+
+.border-sidebar-border {
+  @apply border-default-100;
+}
+
+.bg-sidebar-accent {
+  @apply bg-default-100;
+}
+
+.bg-sidebar-primary {
+  @apply bg-primary shadow-glow;
+}
+
+.text-sidebar-primary-foreground {
+  @apply text-primary-foreground;
+}
+
+/* RTL-specific overrides */
+[dir="rtl"] body {
+  font-family: var(--font-arabic);
+}
+
+/* Cairo for Arabic text shown while the UI is in English */
+.font-cairo {
+  font-family: var(--font-arabic);
+}
+
+/* Keep English text on the English font while the UI is in Arabic */
+.font-eng {
+  font-family: var(--font-sans);
+}
+
+/* Print Optimization Rules */
+@media print {
+  html,
+  body,
+  #root {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide navigation, sidebars, header buttons, backdrops, and close buttons */
+  header,
+  aside,
+  nav,
+  .print\:hidden,
+  .no-print,
+  button,
+  [data-slot="backdrop"],
+  [data-slot="close-button"] {
+    display: none !important;
+  }
+
+  /* Reset HeroUI Modal & Drawer containers for print */
+  [role="dialog"],
+  [data-slot="base"],
+  [data-slot="content"],
+  [data-slot="body"] {
+    display: block !important;
+    position: static !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Force report document sheet to fill page continuously */
+  #printable-client-report {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
+  /* Ensure text colors in print preview are crisp black & 100% visible */
+  #printable-client-report * {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    text-shadow: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* Subtle background fills for badges and callout boxes */
+  #printable-client-report .bg-emerald-500\/10,
+  #printable-client-report .bg-amber-500\/10,
+  #printable-client-report .bg-primary-50\/50,
+  #printable-client-report .bg-default-50 {
+    background-color: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl,
+  .shadow-premium,
+  .shadow-glow {
+    box-shadow: none !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  th,
+  td {
+    border: 1px solid #d1d5db !important;
+    padding: 6px 10px !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm 10mm 10mm 10mm;
+  }
+}

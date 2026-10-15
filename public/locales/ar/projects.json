@@ -1,0 +1,71 @@
+{
+  "nav": {
+    "projects_overview": "المشاريع",
+    "all_projects": "كل المشاريع",
+    "my_projects": "مشاريعي",
+    "completed_projects": "المكتملة"
+  },
+  "title": "المشاريع",
+  "subtitle": "خطط وتابع وسلّم مشاريع فريقك",
+  "add": "مشروع جديد",
+  "search": "ابحث في المشاريع…",
+  "empty": "لا توجد مشاريع بعد. أنشئ أول مشروع للبدء.",
+  "emptyMine": "لست عضوًا في أي مشروع بعد.",
+  "emptyCompleted": "لا توجد مشاريع مكتملة بعد.",
+  "memberCount": "{{count}} عضو",
+  "noMembers": "لا يوجد أعضاء",
+  "start": "البداية",
+  "end": "النهاية",
+  "dates": "{{start}} ← {{end}}",
+  "noDates": "لا توجد تواريخ",
+  "columns": {
+    "name": "المشروع",
+    "status": "الحالة",
+    "members": "الأعضاء",
+    "timeline": "الجدول الزمني",
+    "actions": "إجراءات"
+  },
+  "filters": {
+    "all": "الكل",
+    "active": "نشط",
+    "on_hold": "معلّق",
+    "completed": "مكتمل",
+    "cancelled": "ملغى"
+  },
+  "status": {
+    "active": "نشط",
+    "completed": "مكتمل",
+    "on_hold": "معلّق",
+    "cancelled": "ملغى"
+  },
+  "form": {
+    "createTitle": "إنشاء مشروع",
+    "editTitle": "تعديل مشروع",
+    "name": "اسم المشروع",
+    "description": "الوصف",
+    "status": "الحالة",
+    "members": "أعضاء الفريق",
+    "membersPlaceholder": "اختر الأعضاء",
+    "startDate": "تاريخ البداية",
+    "endDate": "تاريخ النهاية",
+    "save": "حفظ",
+    "cancel": "إلغاء"
+  },
+  "actions": {
+    "edit": "تعديل",
+    "delete": "حذف",
+    "view": "عرض"
+  },
+  "toast": {
+    "created": "تم إنشاء المشروع",
+    "updated": "تم تحديث المشروع",
+    "deleted": "تم حذف المشروع",
+    "createFailed": "فشل إنشاء المشروع",
+    "updateFailed": "فشل تحديث المشروع",
+    "deleteFailed": "فشل حذف المشروع"
+  },
+  "deleteConfirm": {
+    "title": "حذف المشروع؟",
+    "message": "سيتم حذف \"{{name}}\" نهائيًا."
+  }
+}

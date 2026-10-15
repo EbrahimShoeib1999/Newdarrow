@@ -1,0 +1,218 @@
+{
+  "appName": "D-Arrow Business",
+  "nav": {
+    "dashboard": "Dashboard",
+    "crm": "CRM",
+    "projects": "Projects",
+    "tasks": "Tasks",
+    "taskList": "Task List",
+    "taskBoard": "Task Board",
+    "sprints": "Sprints",
+    "meetings": "Meetings",
+    "analytics": "Analytics",
+    "seed": "Seed Data",
+    "people": "People & HR",
+    "settings": "Settings",
+    "leave": "Leave",
+    "approvals": "Approvals",
+    "timesheets": "Timesheets",
+    "attendance_settings": "Work Locations & Geofence",
+    "performance": "Performance",
+    "daily_reports": "Daily Reports",
+    "team_and_roles": "Team, Roles & Settings",
+    "team_members": "Team Members & Invites",
+    "roles_permissions": "Roles & Permissions",
+    "company_settings": "Company Settings",
+    "hr_settings": "Settings Hub"
+  },
+  "portals": {
+    "pickerTitle": "Choose the system",
+    "pickerSubtitle": "Select a portal to get started",
+    "allApps": "All apps",
+    "switchPortal": "Switch portal",
+    "dragHint": "Drag to move · Click to switch · Double-click to reset",
+    "dragHintCustom": "Drag to reposition · Double-click to reset position",
+    "active": "Active",
+    "deniedTitle": "Access denied",
+    "tasks": {
+      "title": "Tasks",
+      "short": "Tasks",
+      "description": "Comprehensive task and project management with development cycles, progress tracking, and efficient work organization",
+      "stat": "{{count}} open tasks",
+      "denied": "You do not have access to the Tasks portal."
+    },
+    "crm": {
+      "title": "CRM",
+      "short": "CRM",
+      "description": "Integrated customer relationship management system with lead tracking, deal management, and automated sales pipeline",
+      "stat": "{{count}} leads",
+      "denied": "You do not have access to the CRM portal."
+    },
+    "people": {
+      "title": "People & HR",
+      "short": "People",
+      "description": "Comprehensive human resources management including employee management, leave requests, approval system, and performance evaluation",
+      "stat": "{{count}} pending approvals",
+      "denied": "You do not have access to the People portal."
+    },
+    "billing": {
+      "title": "Accounting",
+      "short": "Accounting",
+      "description": "Integrated accounting system with invoice management, journal entries, financial reporting, and payment tracking",
+      "stat": "{{count}} unpaid invoices",
+      "denied": "You do not have access to the Accounting portal."
+    },
+    "chat": {
+      "title": "Chat",
+      "short": "Chat",
+      "description": "Real-time team messaging with direct messages, presence, and typing indicators",
+      "stat": "{{count}} conversations",
+      "denied": "You do not have access to the Chat portal."
+    },
+    "projects": {
+      "title": "Projects",
+      "short": "Projects",
+      "description": "Plan, track, and deliver projects with team members, timelines, and status progress",
+      "stat": "{{count}} active projects",
+      "denied": "You do not have access to the Projects portal."
+    },
+    "noPortals": "No portals are assigned to your account. Contact your super admin."
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search...",
+    "filter": "Filter",
+    "reset": "Reset",
+    "confirm": "Confirm",
+    "back": "Back",
+    "loading": "Loading...",
+    "noResults": "No results found",
+    "viewAll": "View All",
+    "export": "Export",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
+  },
+  "language": {
+    "en": "English",
+    "ar": "العربية"
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "user": {
+    "profile": "Profile",
+    "settings": "Settings",
+    "logout": "Logout"
+  },
+  "notFound": {
+    "comingSoon": "Coming Soon",
+    "description": "This feature is currently under development. We're working hard to bring you something amazing!",
+    "goBack": "Go Back",
+    "returnToDashboard": "Return to Dashboard",
+    "businessSuite": "D-Arrow Business Suite"
+  },
+  "seed": {
+    "title": "System Seeding",
+    "description": "Populate your Firestore database with demo data for testing.",
+    "cardTitle": "Seed Demo Data",
+    "cardSubtitle": "This will populate users, tasks, and comments.",
+    "instructions": "Clicking the button below will initialize your database with mock data. This is perfect for demonstrating the multi-tenant CRM and Task features.",
+    "startButton": "Start Seeding",
+    "loading": "Writing to Firestore...",
+    "success": "Seeding Successful!",
+    "successMessage": "The database has been populated with mock tasks and users. You can now explore the dashboard.",
+    "againButton": "Seed Again",
+    "failed": "Seeding Failed",
+    "retryButton": "Retry Seeding",
+    "whatWillBeSeeded": "What will be seeded?",
+    "items": {
+      "company": "Default Company: default-company",
+      "users": "Mock Users with Roles",
+      "tasks": "Task Collections for Company",
+      "activity": "Recent Activity & Comments",
+      "projects": "Project Assignments",
+      "stats": "Status & Priority Stats"
+    }
+  },
+  "errors": {
+    "somethingWentWrong": "Something went wrong",
+    "tryAgain": "Try Again",
+    "goBack": "Go Back",
+    "home": "Home",
+    "errorRecovery": "D-Arrow Business HRMS • Error Recovery System",
+    "unexpected": "An unexpected error occurred."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllAsRead": "Mark all as read",
+    "enableBrowser": "Enable browser alerts to get notified outside the app",
+    "browserEnabled": "Browser alerts enabled.",
+    "browserDenied": "Notification permission was denied. You can re-enable it in site settings.",
+    "empty": "No notifications yet.",
+    "viewAll": "View all notifications",
+    "pageTitle": "All notifications",
+    "pageSubtitle": "New and previous alerts in one place",
+    "searchPlaceholder": "Search notifications...",
+    "filterAll": "All",
+    "filterUnread": "Unread",
+    "filterRead": "Read",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "earlier": "Earlier",
+    "types": {
+      "task_created": {
+        "title": "Task Created",
+        "message": "The task \"{{taskTitle}}\" was created by {{actionBy}}."
+      },
+      "task_updated": {
+        "title": "Task Updated",
+        "message": "The task \"{{taskTitle}}\" was updated by {{actionBy}}."
+      },
+      "task_assigned": {
+        "title": "Task Assigned",
+        "message": "The task \"{{taskTitle}}\" was assigned by {{actionBy}}."
+      },
+      "attendance_started": {
+        "title": "Attendance Started",
+        "message": "{{employeeName}} has started work."
+      },
+      "attendance_resumed": {
+        "title": "Attendance Resumed",
+        "message": "{{employeeName}} has resumed work."
+      },
+      "attendance_completed": {
+        "title": "Attendance Completed",
+        "message": "{{employeeName}} has checked out. Total time: {{totalTime}}."
+      },
+      "chat_mention": {
+        "title": "{{name}} mentioned you",
+        "message": "{{message}}"
+      },
+      "chat_message": {
+        "title": "{{name}} sent a message",
+        "message": "{{message}}"
+      },
+      "document_approval": {
+        "title": "Document awaiting approval",
+        "message": "{{name}}: {{message}}"
+      }
+    }
+  },
+  "documentApproval": {
+    "pending": "Pending approval",
+    "approved": "Approved",
+    "approve": "Approve",
+    "lockedHint": "Printing, sending, and other actions stay locked until an admin, manager, or super admin approves this document.",
+    "approverHint": "Review this document, then approve it to unlock print and other actions.",
+    "approvedHint": "This document is approved. Print and other actions are available.",
+    "approveSuccess": "Document approved",
+    "approveError": "Could not approve the document",
+    "mustSaveFirst": "Save the document first, then wait for approval."
+  }
+}
