@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test:crm-workflow": "npx tsx scripts/test-crm-delivery-workflow.ts",
+    "test:contract-regression": "npx tsx scripts/test-contract-save-regression.ts",
     "test:rules": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project rules-check \"node scripts/test-firestore-rules.mjs\"",
     "test:workflows": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project workflow-check \"node scripts/test-live-workflows.mjs\"",
     "preview": "vite preview"
