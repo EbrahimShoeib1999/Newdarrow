@@ -22,10 +22,11 @@ import {
   ListTodo,
   MessageSquare,
   FolderKanban,
+  Globe2,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, Link } from "react-router-dom";
 import type { PortalId } from "@/lib/portal-permissions";
 import {
   getNavTreeForPortal,
@@ -99,7 +100,7 @@ const GROUP_TITLES_AR: Record<string, string> = {
   contracts_reports: "عروض الأسعار والتقارير",
   attendance_leave: "الحضور والإجازات",
   performance: "تقييم الأداء",
-  work_sprints: "إدارة العمل والدورات",
+  work_sprints: "إدارة العمل ودورات التطوير والأهداف",
   messages: "المحادثات والرسائل",
   projects_general: "إدارة المشاريع",
 };
@@ -115,7 +116,7 @@ const GROUP_TITLES_EN: Record<string, string> = {
   attendance_leave: "Attendance & leave",
   performance: "Performance",
   team_settings: "Team & settings",
-  work_sprints: "Work & sprints",
+  work_sprints: "Work & Development Cycles",
   messages: "Messages",
   projects_general: "Projects",
 };
@@ -843,6 +844,28 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
             </button>
           )}
 
+        {/* Dedicated Landing Page Navigation Item */}
+        <Tooltip
+          isDisabled={!sidebarCollapsed}
+          content={isRtl ? "الصفحة التعريفية (الرئيسية)" : "Public Landing Page"}
+          placement={isRtl ? "left" : "right"}
+        >
+          <Link
+            to="/"
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs md:text-sm font-bold transition-all",
+              "text-default-700 hover:bg-default-200/60 hover:text-foreground",
+              sidebarCollapsed && "justify-center px-0"
+            )}
+          >
+            <Globe2 className="h-4.5 w-4.5 shrink-0 text-primary" />
+            {!sidebarCollapsed && (
+              <span className="truncate">{isRtl ? "الصفحة التعريفية" : "Landing Page"}</span>
+            )}
+          </Link>
+        </Tooltip>
+
+        {portals.length > 1 && (
           <Tooltip
             isDisabled={!sidebarCollapsed}
             content={t("portals.allApps")}
@@ -863,6 +886,7 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
               )}
             </button>
           </Tooltip>
+        )}
         </div>
       )}
     </aside>

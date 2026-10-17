@@ -12,11 +12,13 @@ import {
   Paperclip,
   User,
   FileSignature,
+  Workflow,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { FieldBox } from "@/components/shared/field-box";
 import { useDealQuery, useUpdateDealMutation } from "../hooks/use-deals";
 import { useContactQuery } from "../hooks/use-contacts";
+import { useContractsQuery } from "../hooks/use-contracts";
 import { useCrmPermissions } from "../hooks/use-crm-permissions";
 import {
   useCrmEntityActivities,
@@ -69,6 +71,11 @@ export function DealDetailPage() {
   const uploadAttachment = useUploadCrmAttachmentMutation("deal", dealId);
   const deleteAttachment = useDeleteCrmAttachmentMutation("deal", dealId);
 
+  const { data: contractsRes } = useContractsQuery();
+  const dealContracts = (contractsRes?.data ?? []).filter(
+    (c) => c.dealId === dealId || c.form?.dealId === dealId
+  );
+
   if (isLoading || !dealRes) return <LoadingSpinner />;
   const deal = dealRes.data;
   const contact = deal.contactId && contactRes ? contactRes.data : null;
@@ -99,7 +106,11 @@ export function DealDetailPage() {
                     variant="solid"
                     startContent={<FileSignature className="h-4 w-4" />}
                     className="rounded-full font-bold text-white shadow-sm shadow-success/30"
-                    onPress={() => navigate("/crm/contracts")}
+                    onPress={() =>
+                      navigate(
+                        `/crm/contracts?dealId=${deal.id}&contactId=${deal.contactId || ""}&amount=${deal.amount}`
+                      )
+                    }
                   >
                     صياغة وتوقيع العقد
                   </Button>
@@ -134,6 +145,7 @@ export function DealDetailPage() {
                   { key: "tasks", label: t("dealDetail.tabs.tasks"), count: tasks.length, icon: ListTodo },
                   { key: "notes", label: t("dealDetail.tabs.notes"), count: notes.length, icon: StickyNote },
                   { key: "files", label: t("dealDetail.tabs.attachments"), count: attachments.length, icon: Paperclip },
+                  { key: "contracts", label: "العقود", count: dealContracts.length, icon: FileSignature },
                 ]}
               />
             }
@@ -165,8 +177,61 @@ export function DealDetailPage() {
                 <FieldBox label={t("deals.form.expectedCloseDate")} icon={<Calendar className="h-3.5 w-3.5" />}>
                   {deal.expectedCloseDate ? formatDate(deal.expectedCloseDate) : "—"}
                 </FieldBox>
+                {deal.leadId && (
+                  <FieldBox label={t("deals.form.lead") || "العميل المحتمل"} icon={<Workflow className="h-3.5 w-3.5" />}>
+                    <Link to={`/crm/leads/${deal.leadId}`} className="text-primary font-bold hover:underline">
+                      عرض العميل المحتمل المرتبط
+                    </Link>
+                  </FieldBox>
+                )}
               </CardBody>
             </Card>
+
+            {/* Linked Contracts Card */}
+            {dealContracts.length > 0 && (
+              <Card className="border border-default-200">
+                <CardBody className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-sm flex items-center gap-2">
+                      <FileSignature className="h-4 w-4 text-primary" />
+                      العقود المرتبطة بالصفقة ({dealContracts.length})
+                    </h3>
+                    <Button
+                      size="sm"
+                      variant="light"
+                      color="primary"
+                      as={Link}
+                      to={`/crm/contracts?dealId=${deal.id}`}
+                    >
+                      فتح محرر العقود
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {dealContracts.map((c) => (
+                      <div
+                        key={c.id}
+                        className="p-3 bg-default-50 rounded-2xl border border-default-100 flex items-center justify-between"
+                      >
+                        <div>
+                          <p className="font-bold text-sm">{c.title}</p>
+                          <p className="text-xs text-default-400">
+                            رقم العقد: {c.form?.contractNumber || "—"}
+                          </p>
+                        </div>
+                        <Chip
+                          size="sm"
+                          color={c.status === "final" ? "success" : "warning"}
+                          variant="flat"
+                        >
+                          {c.status === "final" ? "معتمد" : "مسودة"}
+                        </Chip>
+                      </div>
+                    ))}
+                  </div>
+                </CardBody>
+              </Card>
+            )}
+
             <Card className="border border-default-200">
               <CardBody className="p-5 space-y-3">
                 <h3 className="font-bold text-sm flex items-center gap-2">

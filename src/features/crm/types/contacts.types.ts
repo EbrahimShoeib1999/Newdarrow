@@ -1,14 +1,31 @@
 import type { CrmBaseFields } from "./crm.common.types";
 
 export type ContactClassification =
-  | "actual_client" // عميل فعلي
-  | "potential_lead" // عميل محتمل
-  | "callback"; // معاودة الاتصال
+  | "actual_client"
+  | "potential_lead"
+  | "callback"
+  | (string & {});
 
 export type CustomerSatisfaction =
-  | "satisfied" // راضي
-  | "neutral" // محايد
-  | "unsatisfied"; // غير راضي
+  | "satisfied"
+  | "neutral"
+  | "unsatisfied";
+
+export type ContactSource =
+  | "website"
+  | "referral"
+  | "social_media"
+  | "cold_call"
+  | "event"
+  | "whatsapp"
+  | "other"
+  | (string & {});
+
+export type ContactStatus =
+  | "active"
+  | "inactive"
+  | "archived"
+  | (string & {});
 
 export interface Contact extends CrmBaseFields {
   firstName: string;
@@ -24,6 +41,8 @@ export interface Contact extends CrmBaseFields {
   satisfaction?: CustomerSatisfaction;
   satisfactionNotes?: string;
   interests?: string[];
+  source?: ContactSource;
+  status?: ContactStatus;
   /** Commercial register (السجل التجاري) for future account linking */
   commercialRegister?: string;
   /** Tax number for billing (الرقم الضريبي) */
@@ -42,5 +61,7 @@ export interface ContactFilters {
   ownerId?: string;
   classification?: ContactClassification;
   satisfaction?: CustomerSatisfaction;
+  source?: string;
+  status?: string;
   assignedTo?: string;
 }

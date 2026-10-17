@@ -28,13 +28,21 @@ interface DealFormModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   deal?: Deal | null;
+  initialLeadId?: string | null;
+  initialContactId?: string | null;
 }
 
 function contactLabel(firstName: string, lastName: string) {
   return `${firstName} ${lastName}`.trim() || firstName;
 }
 
-export function DealFormModal({ isOpen, onOpenChange, deal }: DealFormModalProps) {
+export function DealFormModal({
+  isOpen,
+  onOpenChange,
+  deal,
+  initialLeadId,
+  initialContactId,
+}: DealFormModalProps) {
   const { t } = useTranslation("crm");
   const { data: users } = useAllUsers();
   const { data: contactsRes } = useContactsQuery();
@@ -53,7 +61,8 @@ export function DealFormModal({ isOpen, onOpenChange, deal }: DealFormModalProps
     resolver: zodResolver(dealFormSchema),
     defaultValues: {
       title: "",
-      contactId: null,
+      contactId: initialContactId ?? null,
+      leadId: initialLeadId ?? null,
       amount: 0,
       currency: "SAR",
       stage: "lead",
@@ -69,6 +78,7 @@ export function DealFormModal({ isOpen, onOpenChange, deal }: DealFormModalProps
       reset({
         title: deal.title,
         contactId: deal.contactId ?? null,
+        leadId: deal.leadId ?? null,
         amount: deal.amount,
         currency: normalizeCurrencyCode(deal.currency),
         stage: normalizeDealStage(deal.stage),
@@ -79,7 +89,8 @@ export function DealFormModal({ isOpen, onOpenChange, deal }: DealFormModalProps
     } else {
       reset({
         title: "",
-        contactId: null,
+        contactId: initialContactId ?? null,
+        leadId: initialLeadId ?? null,
         amount: 0,
         currency: "SAR",
         stage: "lead",
@@ -88,7 +99,7 @@ export function DealFormModal({ isOpen, onOpenChange, deal }: DealFormModalProps
         assignedTo: null,
       });
     }
-  }, [isOpen, deal, reset]);
+  }, [isOpen, deal, initialContactId, initialLeadId, reset]);
 
   const onSubmit = async (values: DealFormValues) => {
     const dto = toCreateDealDTO(values);

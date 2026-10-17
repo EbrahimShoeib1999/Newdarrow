@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Button,
   Chip,
@@ -26,6 +26,10 @@ import {
   Play,
   Sparkles,
   CalendarCheck,
+  Globe2,
+  Building2,
+  Search,
+  RotateCcw,
 } from "lucide-react";
 import { useSprintsQuery } from "../hooks/use-tasks";
 import { TaskService } from "../api/tasks.service";
@@ -37,7 +41,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { TasksPageHeader, TasksPanel } from "../components/tasks-ui";
-import type { Sprint } from "../types/task.types";
+import type { Sprint, SprintScope } from "../types/task.types";
 
 /**
  * Calculates date metrics for a sprint relative to today's date
@@ -93,24 +97,48 @@ export function SprintsPage() {
   const { data: sprintsResponse, isLoading } = useSprintsQuery();
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
 
+  const [scopeFilter, setScopeFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
   const [newSprint, setNewSprint] = useState<{
     name: string;
     startDate: string;
     endDate: string;
     goal: string;
     status: NonNullable<Sprint["status"]>;
+    scope: SprintScope;
   }>({
     name: "",
     startDate: "",
     endDate: "",
     goal: "",
     status: "planned",
+    scope: "department",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [editingSprintId, setEditingSprintId] = useState<string | null>(null);
 
   const sprints = sprintsResponse?.data || [];
+
+  const filteredSprints = useMemo(() => {
+    return sprints.filter((s) => {
+      if (scopeFilter !== "all" && (s.scope || "department") !== scopeFilter) {
+        return false;
+      }
+      if (statusFilter !== "all" && s.status !== statusFilter) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = s.name.toLowerCase().includes(q);
+        const matchesGoal = s.goal?.toLowerCase().includes(q);
+        if (!matchesName && !matchesGoal) return false;
+      }
+      return true;
+    });
+  }, [sprints, scopeFilter, statusFilter, searchQuery]);
 
   const handleSaveSprint = async () => {
     if (!newSprint.name || !newSprint.startDate || !newSprint.endDate) {
@@ -132,7 +160,7 @@ export function SprintsPage() {
       }
       queryClient.invalidateQueries({ queryKey: ["sprints", companyId] });
       onOpenChange();
-      setNewSprint({ name: "", startDate: "", endDate: "", goal: "", status: "planned" });
+      setNewSprint({ name: "", startDate: "", endDate: "", goal: "", status: "planned", scope: "department" });
       setEditingSprintId(null);
     } catch {
       toast.error(
@@ -237,8 +265,24 @@ export function SprintsPage() {
       endDate: sprint.endDate,
       goal: sprint.goal || "",
       status: sprint.status || "planned",
+      scope: sprint.scope || "department",
     });
     onOpen();
+  };
+
+  const getScopeChip = (scope?: SprintScope) => {
+    const isCompany = scope === "company";
+    return (
+      <Chip
+        color={isCompany ? "secondary" : "default"}
+        variant="flat"
+        size="sm"
+        startContent={isCompany ? <Globe2 className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
+        className="font-bold text-xs"
+      >
+        {isCompany ? t("sprints.scopeCompany") : t("sprints.scopeDepartment")}
+      </Chip>
+    );
   };
 
   const getStatusChip = (status: string, metrics?: ReturnType<typeof getSprintDateMetrics>) => {
@@ -327,7 +371,14 @@ export function SprintsPage() {
               startContent={<Plus className="h-4 w-4" />}
               onPress={() => {
                 setEditingSprintId(null);
-                setNewSprint({ name: "", startDate: "", endDate: "", goal: "", status: "planned" });
+                setNewSprint({
+                  name: "",
+                  startDate: "",
+                  endDate: "",
+                  goal: "",
+                  status: "planned",
+                  scope: "department",
+                });
                 onOpen();
               }}
             >
@@ -336,6 +387,79 @@ export function SprintsPage() {
           </div>
         }
       />
+
+      {/* Scope, Status, and Search Filters */}
+      {sprints.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-default-200/80 bg-background/80 p-4 shadow-sm backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-1 flex-wrap items-center gap-3">
+            <Input
+              size="sm"
+              placeholder={isAr ? "البحث بالاسم أو الهدف..." : "Search by name or goal..."}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              startContent={<Search className="h-4 w-4 text-default-400" />}
+              isClearable
+              onClear={() => setSearchQuery("")}
+              className="w-full sm:max-w-xs"
+              classNames={{ inputWrapper: "rounded-xl" }}
+            />
+
+            <Select
+              size="sm"
+              aria-label={t("sprints.scopeLabel")}
+              selectedKeys={[scopeFilter]}
+              onChange={(e) => setScopeFilter(e.target.value || "all")}
+              className="w-full sm:w-48"
+              classNames={{ trigger: "rounded-xl" }}
+            >
+              <SelectItem key="all">{t("sprints.scopeAll")}</SelectItem>
+              <SelectItem key="department" startContent={<Building2 className="h-3.5 w-3.5" />}>
+                {t("sprints.scopeDepartment")}
+              </SelectItem>
+              <SelectItem key="company" startContent={<Globe2 className="h-3.5 w-3.5" />}>
+                {t("sprints.scopeCompany")}
+              </SelectItem>
+            </Select>
+
+            <Select
+              size="sm"
+              aria-label={t("sprints.statusAll")}
+              selectedKeys={[statusFilter]}
+              onChange={(e) => setStatusFilter(e.target.value || "all")}
+              className="w-full sm:w-44"
+              classNames={{ trigger: "rounded-xl" }}
+            >
+              <SelectItem key="all">{t("sprints.statusAll")}</SelectItem>
+              <SelectItem key="active">{t("sprints.statusActive")}</SelectItem>
+              <SelectItem key="planned">{t("sprints.statusPlanned")}</SelectItem>
+              <SelectItem key="completed">{t("sprints.statusCompleted")}</SelectItem>
+            </Select>
+
+            {(scopeFilter !== "all" || statusFilter !== "all" || searchQuery) && (
+              <Button
+                size="sm"
+                variant="flat"
+                color="danger"
+                startContent={<RotateCcw className="h-3.5 w-3.5" />}
+                onPress={() => {
+                  setScopeFilter("all");
+                  setStatusFilter("all");
+                  setSearchQuery("");
+                }}
+                className="font-semibold rounded-xl"
+              >
+                {isAr ? "إعادة ضبط الفلاتر" : "Reset Filters"}
+              </Button>
+            )}
+          </div>
+
+          <div className="text-xs font-bold text-default-400">
+            {isAr
+              ? `عرض ${filteredSprints.length} من إجمالي ${sprints.length}`
+              : `Showing ${filteredSprints.length} of ${sprints.length}`}
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-20">
@@ -353,7 +477,14 @@ export function SprintsPage() {
               startContent={<Plus className="h-4 w-4" />}
               onPress={() => {
                 setEditingSprintId(null);
-                setNewSprint({ name: "", startDate: "", endDate: "", goal: "", status: "planned" });
+                setNewSprint({
+                  name: "",
+                  startDate: "",
+                  endDate: "",
+                  goal: "",
+                  status: "planned",
+                  scope: "department",
+                });
                 onOpen();
               }}
             >
@@ -361,9 +492,34 @@ export function SprintsPage() {
             </Button>
           </div>
         </TasksPanel>
+      ) : filteredSprints.length === 0 ? (
+        <TasksPanel title={isAr ? "لا توجد نتائج مطابقة للفلاتر" : "No matching results"}>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Search className="mb-3 h-10 w-10 text-default-300" />
+            <p className="text-sm text-default-500">
+              {isAr
+                ? "لم نجد أي دورات تطوير أو أهداف تطابق الفلاتر المحددة."
+                : "No development courses or goals match your filter criteria."}
+            </p>
+            <Button
+              color="primary"
+              variant="flat"
+              size="sm"
+              className="mt-4 font-bold rounded-xl"
+              startContent={<RotateCcw className="h-4 w-4" />}
+              onPress={() => {
+                setScopeFilter("all");
+                setStatusFilter("all");
+                setSearchQuery("");
+              }}
+            >
+              {isAr ? "إعادة ضبط الفلاتر" : "Reset Filters"}
+            </Button>
+          </div>
+        </TasksPanel>
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {sprints.map((sprint) => {
+          {filteredSprints.map((sprint) => {
             const metrics = getSprintDateMetrics(sprint.startDate, sprint.endDate);
             const isActive =
               sprint.status === "active" ||
@@ -382,7 +538,10 @@ export function SprintsPage() {
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 border-b border-default-100/80 bg-default-50/60 px-5 py-3.5">
-                    {getStatusChip(sprint.status, metrics || undefined)}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {getStatusChip(sprint.status, metrics || undefined)}
+                      {getScopeChip(sprint.scope)}
+                    </div>
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <Button
                         size="sm"
@@ -495,13 +654,35 @@ export function SprintsPage() {
               </ModalHeader>
               <ModalBody className="space-y-4 p-5">
                 <Input
-                  label={t("sprints.nameLabel", "اسم الدورة (Sprint Name)")}
-                  placeholder={t("sprints.namePlaceholder", "مثال: Sprint 1 - تطوير ميزات المستندات")}
+                  label={t("sprints.nameLabel")}
+                  placeholder={t("sprints.namePlaceholder")}
                   variant="bordered"
                   value={newSprint.name}
                   onChange={(e) => setNewSprint({ ...newSprint, name: e.target.value })}
                   classNames={{ inputWrapper: "rounded-2xl" }}
                 />
+
+                {/* Scope selection with Department-specific and Company-wide choices */}
+                <Select
+                  label={t("sprints.scopeLabel")}
+                  placeholder={t("sprints.scopePlaceholder")}
+                  selectedKeys={[newSprint.scope]}
+                  onChange={(e) =>
+                    setNewSprint({
+                      ...newSprint,
+                      scope: (e.target.value || "department") as SprintScope,
+                    })
+                  }
+                  variant="bordered"
+                  classNames={{ trigger: "rounded-2xl" }}
+                >
+                  <SelectItem key="department" startContent={<Building2 size={14} />}>
+                    {t("sprints.scopeDepartment")}
+                  </SelectItem>
+                  <SelectItem key="company" startContent={<Globe2 size={14} />}>
+                    {t("sprints.scopeCompany")}
+                  </SelectItem>
+                </Select>
 
                 <Select
                   label={isAr ? "حالة الدورة (Status)" : "Sprint Status"}
@@ -541,8 +722,8 @@ export function SprintsPage() {
                   />
                 </div>
                 <Input
-                  label={t("sprints.goalLabel", "هدف الدورة (Sprint Goal)")}
-                  placeholder={t("sprints.goalPlaceholder", "اكتب الأهداف الرئيسية المطلوب تحقيقها...")}
+                  label={t("sprints.goalLabel")}
+                  placeholder={t("sprints.goalPlaceholder")}
                   variant="bordered"
                   value={newSprint.goal}
                   onChange={(e) => setNewSprint({ ...newSprint, goal: e.target.value })}

@@ -38,7 +38,7 @@ export default function HrSettingsHubPage() {
         <CardBody className="p-4 sm:p-6">
           <Tabs
             selectedKey={selectedTab}
-            onSelectionChange={(key) => setSelectedTab(String(key))}
+            onSelectionChange={(key: any) => setSelectedTab(String(key))}
             variant="solid"
             color="primary"
             radius="full"

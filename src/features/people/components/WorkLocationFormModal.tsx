@@ -222,7 +222,7 @@ export function WorkLocationFormModal({
                   maxValue={1000}
                   step={5}
                   value={radius}
-                  onChange={(v) => setRadius(Array.isArray(v) ? v[0] : v)}
+                  onChange={(v: any) => setRadius(Array.isArray(v) ? v[0] : v)}
                 />
 
                 <div className="flex flex-wrap gap-1.5">

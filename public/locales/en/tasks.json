@@ -12,13 +12,13 @@
       "newTask": "New Task",
       "openBoard": "Open Board",
       "openList": "Open List",
-      "openSprints": "Sprints"
+      "openSprints": "Development Courses and Goals"
     },
     "sections": {
       "work": "Work",
       "work_desc": "Kanban board and list views for daily execution",
       "planning": "Planning",
-      "planning_desc": "Sprints, goals, and focused work cycles",
+      "planning_desc": "Development courses, goals, and focused work cycles",
       "insights": "Insights",
       "insights_desc": "Charts, metrics, and recent activity"
     },
@@ -36,8 +36,8 @@
         "desc": "Sortable table with filters for assignee, sprint, status, and priority"
       },
       "sprints": {
-        "title": "Sprints",
-        "desc": "Plan iteration cycles, set goals, and group tasks by sprint"
+        "title": "Development Courses and Goals",
+        "desc": "Plan iteration cycles, set goals, and group tasks by development course"
       },
       "newTask": {
         "title": "Create Task",
@@ -61,7 +61,7 @@
     "quickActions": "Quick Actions",
     "openBoard": "Open Board",
     "openList": "Open List",
-    "openSprints": "Sprints",
+    "openSprints": "Development Courses and Goals",
     "viewAll": "View All",
     "noRecent": "No recent tasks",
     "noData": "No data yet"
@@ -355,33 +355,39 @@
     "approveOnly": "managers only"
   },
   "sprints": {
-    "title": "Sprints",
-    "subtitle": "Manage your team iteration cycles and goals.",
-    "description": "Define sprint windows and goals, then filter the board and list by active sprint.",
-    "newSprint": "New Sprint",
-    "editSprint": "Edit Sprint",
-    "createSprint": "Create New Sprint",
-    "nameLabel": "Sprint Name",
+    "title": "Development Courses and Goals",
+    "subtitle": "Manage your team iteration cycles, developmental milestones, and goals.",
+    "description": "Define development cycles, scope, and goals, then filter the board and list by active cycle.",
+    "newSprint": "New Development Course / Goal",
+    "editSprint": "Edit Development Course / Goal",
+    "createSprint": "Create New Development Course and Goal",
+    "nameLabel": "Course / Goal Name",
     "namePlaceholder": "e.g. Sprint 24: Core Features",
+    "scopeLabel": "Scope",
+    "scopePlaceholder": "Select scope",
+    "scopeDepartment": "Department-specific",
+    "scopeCompany": "Company-wide",
+    "scopeAll": "All Scopes",
     "startDate": "Start Date",
     "endDate": "End Date",
-    "goalLabel": "Goal",
-    "goalPlaceholder": "What do you want to achieve?",
+    "goalLabel": "Goal & Milestones",
+    "goalPlaceholder": "What strategic goals do you want to achieve?",
     "cancel": "Cancel",
     "saveChanges": "Save Changes",
-    "createBtn": "Create Sprint",
+    "createBtn": "Create Course / Goal",
     "statusActive": "Active",
     "statusCompleted": "Completed",
     "statusPlanned": "Planned",
+    "statusAll": "All Statuses",
     "msgFillRequired": "Please fill all required fields",
-    "msgUpdateSuccess": "Sprint updated successfully",
-    "msgCreateSuccess": "Sprint created successfully",
-    "msgUpdateError": "Failed to update sprint",
-    "msgCreateError": "Failed to create sprint",
-    "viewTasks": "View sprint tasks",
-    "duration": "Sprint duration",
-    "noSprints": "No sprints yet",
-    "noSprintsHint": "Create a sprint to group tasks into a focused work cycle"
+    "msgUpdateSuccess": "Development course and goal updated successfully",
+    "msgCreateSuccess": "Development course and goal created successfully",
+    "msgUpdateError": "Failed to update development course and goal",
+    "msgCreateError": "Failed to create development course and goal",
+    "viewTasks": "View course tasks",
+    "duration": "Course duration",
+    "noSprints": "No development courses or goals yet",
+    "noSprintsHint": "Create a development course to group tasks into a focused work cycle"
   },
   "toast": {
     "created": "Task created successfully",

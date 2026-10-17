@@ -8,7 +8,6 @@ import {
   Input,
   Select,
   SelectItem,
-  Textarea,
   Chip,
 } from "@heroui/react";
 import { useForm, Controller } from "react-hook-form";
@@ -23,8 +22,10 @@ import {
   type ContactFormValues,
 } from "../schemas/contact.schema";
 import { useCreateContactMutation, useUpdateContactMutation } from "../hooks/use-contacts";
-import type { Contact } from "../types/contacts.types";
-import { Heart, MessageSquare, Phone, Plus, Smile, UserCheck } from "lucide-react";
+import { useContactClassifications } from "../hooks/use-contact-classifications";
+import type { ContactClassificationItem } from "../types/classification.types";
+import type { Contact, ContactSource, ContactStatus } from "../types/contacts.types";
+import { MessageSquare, Phone, Plus, Smile, UserCheck, Tag, Globe, CheckCircle2 } from "lucide-react";
 
 interface ContactFormModalProps {
   isOpen: boolean;
@@ -44,8 +45,10 @@ const COMMON_INTERESTS = [
 ];
 
 export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormModalProps) {
-  const { t } = useTranslation("crm");
+  const { t, i18n } = useTranslation("crm");
+  const isAr = i18n.language === "ar";
   const { data: users } = useAllUsers();
+  const { classifications, activeClassifications } = useContactClassifications();
   const createContact = useCreateContactMutation();
   const updateContact = useUpdateContactMutation();
   const isEdit = !!contact;
@@ -73,6 +76,8 @@ export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormM
       department: "",
       accountName: "",
       classification: "actual_client",
+      source: "website",
+      status: "active",
       satisfaction: "satisfied",
       satisfactionNotes: "",
       interests: [],
@@ -118,6 +123,8 @@ export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormM
         department: contact.department ?? "",
         accountName: contact.accountName ?? "",
         classification: contact.classification ?? "actual_client",
+        source: contact.source ?? "website",
+        status: contact.status ?? "active",
         satisfaction: contact.satisfaction ?? "satisfied",
         satisfactionNotes: contact.satisfactionNotes ?? "",
         interests: contact.interests ?? [],
@@ -137,7 +144,9 @@ export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormM
         jobTitle: "",
         department: "",
         accountName: "",
-        classification: "actual_client",
+        classification: activeClassifications[0]?.key || "actual_client",
+        source: "website",
+        status: "active",
         satisfaction: "satisfied",
         satisfactionNotes: "",
         interests: [],
@@ -148,7 +157,7 @@ export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormM
       });
     }
     setCustomInterestInput("");
-  }, [isOpen, contact, reset]);
+  }, [isOpen, contact, reset, activeClassifications]);
 
   const onSubmit = async (values: ContactFormValues) => {
     const dto = toCreateContactDTO(values);
@@ -182,60 +191,120 @@ export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormM
               {isEdit ? t("contacts.form.editTitle") : t("contacts.form.createTitle")}
             </ModalHeader>
             <ModalBody>
-              {/* Classification and Assigned Employee Header */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3.5 bg-primary-50/40 dark:bg-primary-950/20 rounded-2xl border border-primary-200/50">
-                <Controller
-                  name="classification"
-                  control={control}
-                  render={({ field }) => (
-                    <Select
-                      {...selectFieldProps()}
-                      label={t("contacts.form.classification")}
-                      selectedKeys={field.value ? [field.value] : ["actual_client"]}
-                      onSelectionChange={(keys) => {
-                        const v = Array.from(keys)[0] as "actual_client" | "potential_lead" | "callback";
-                        field.onChange(v ?? "actual_client");
-                      }}
-                      color="primary"
-                      variant="bordered"
-                    >
-                      <SelectItem key="actual_client" textValue={t("contacts.classification.actual_client")}>
-                        🟢 {t("contacts.classification.actual_client")}
-                      </SelectItem>
-                      <SelectItem key="potential_lead" textValue={t("contacts.classification.potential_lead")}>
-                        🟡 {t("contacts.classification.potential_lead")}
-                      </SelectItem>
-                      <SelectItem key="callback" textValue={t("contacts.classification.callback")}>
-                        🔵 {t("contacts.classification.callback")}
-                      </SelectItem>
-                    </Select>
-                  )}
-                />
+              {/* Classification, Source, Status, and Assigned Employee Header */}
+              <div className="space-y-3 p-3.5 bg-primary-50/40 dark:bg-primary-950/20 rounded-2xl border border-primary-200/50">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Controller
+                    name="classification"
+                    control={control}
+                    render={({ field }) => (
+                      <Select
+                        {...selectFieldProps()}
+                        label={t("contacts.form.classification")}
+                        startContent={<Tag className="h-4 w-4 text-primary" />}
+                        selectedKeys={field.value ? [field.value] : []}
+                        onSelectionChange={(keys) => {
+                          const v = Array.from(keys)[0] as string | undefined;
+                          field.onChange(v ?? "actual_client");
+                        }}
+                        color="primary"
+                        variant="bordered"
+                      >
+                        {classifications.map((c: ContactClassificationItem) => {
+                          const label = isAr ? c.nameAr : c.nameEn;
+                          return (
+                            <SelectItem key={c.key} textValue={label}>
+                              <div className="flex items-center gap-2">
+                                <span>{c.emoji || "🏷️"}</span>
+                                <span>{label}</span>
+                                {c.isCustom && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                                    {isAr ? "مخصص" : "Custom"}
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </Select>
+                    )}
+                  />
 
-                <Controller
-                  name="assignedTo"
-                  control={control}
-                  render={({ field }) => (
-                    <Select
-                      {...selectFieldProps()}
-                      label={t("contacts.form.assignedTo")}
-                      startContent={<UserCheck className="h-4 w-4 text-primary" />}
-                      selectedKeys={field.value ? [field.value] : []}
-                      onSelectionChange={(keys) => {
-                        const v = Array.from(keys)[0] as string | undefined;
-                        field.onChange(v ?? null);
-                      }}
-                      color="primary"
-                      variant="bordered"
-                    >
-                      {(users ?? []).map((u) => (
-                        <SelectItem key={u.id} textValue={u.name ?? u.id}>
-                          {u.name}
-                        </SelectItem>
-                      ))}
-                    </Select>
-                  )}
-                />
+                  <Controller
+                    name="assignedTo"
+                    control={control}
+                    render={({ field }) => (
+                      <Select
+                        {...selectFieldProps()}
+                        label={t("contacts.form.assignedTo")}
+                        startContent={<UserCheck className="h-4 w-4 text-primary" />}
+                        selectedKeys={field.value ? [field.value] : []}
+                        onSelectionChange={(keys) => {
+                          const v = Array.from(keys)[0] as string | undefined;
+                          field.onChange(v ?? null);
+                        }}
+                        color="primary"
+                        variant="bordered"
+                      >
+                        {(users ?? []).map((u) => (
+                          <SelectItem key={u.id} textValue={u.name ?? u.id}>
+                            {u.name}
+                          </SelectItem>
+                        ))}
+                      </Select>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Controller
+                    name="source"
+                    control={control}
+                    render={({ field }) => (
+                      <Select
+                        {...selectFieldProps()}
+                        label={t("contacts.form.source")}
+                        startContent={<Globe className="h-4 w-4 text-default-500" />}
+                        selectedKeys={field.value ? [field.value] : ["website"]}
+                        onSelectionChange={(keys) => {
+                          const v = Array.from(keys)[0] as ContactSource | undefined;
+                          field.onChange(v ?? "website");
+                        }}
+                        variant="bordered"
+                      >
+                        <SelectItem key="website" textValue={t("contacts.source.website")}>{t("contacts.source.website")}</SelectItem>
+                        <SelectItem key="referral" textValue={t("contacts.source.referral")}>{t("contacts.source.referral")}</SelectItem>
+                        <SelectItem key="social_media" textValue={t("contacts.source.social_media")}>{t("contacts.source.social_media")}</SelectItem>
+                        <SelectItem key="cold_call" textValue={t("contacts.source.cold_call")}>{t("contacts.source.cold_call")}</SelectItem>
+                        <SelectItem key="event" textValue={t("contacts.source.event")}>{t("contacts.source.event")}</SelectItem>
+                        <SelectItem key="whatsapp" textValue={t("contacts.source.whatsapp")}>{t("contacts.source.whatsapp")}</SelectItem>
+                        <SelectItem key="other" textValue={t("contacts.source.other")}>{t("contacts.source.other")}</SelectItem>
+                      </Select>
+                    )}
+                  />
+
+                  <Controller
+                    name="status"
+                    control={control}
+                    render={({ field }) => (
+                      <Select
+                        {...selectFieldProps()}
+                        label={t("contacts.form.status")}
+                        startContent={<CheckCircle2 className="h-4 w-4 text-default-500" />}
+                        selectedKeys={field.value ? [field.value] : ["active"]}
+                        onSelectionChange={(keys) => {
+                          const v = Array.from(keys)[0] as ContactStatus | undefined;
+                          field.onChange(v ?? "active");
+                        }}
+                        variant="bordered"
+                      >
+                        <SelectItem key="active" textValue={t("contacts.status.active")}>{t("contacts.status.active")}</SelectItem>
+                        <SelectItem key="inactive" textValue={t("contacts.status.inactive")}>{t("contacts.status.inactive")}</SelectItem>
+                        <SelectItem key="archived" textValue={t("contacts.status.archived")}>{t("contacts.status.archived")}</SelectItem>
+                      </Select>
+                    )}
+                  />
+                </div>
               </div>
 
               {/* Name Details */}

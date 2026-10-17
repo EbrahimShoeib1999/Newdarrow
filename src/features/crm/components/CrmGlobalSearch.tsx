@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Input,
-  Listbox,
-  ListboxItem,
   Popover,
   PopoverTrigger,
   PopoverContent,
@@ -93,24 +91,29 @@ export function CrmGlobalSearch() {
           classNames={{ inputWrapper: "rounded-full bg-default-100 border-none" }}
         />
       </PopoverTrigger>
-      <PopoverContent className="p-0 w-72">
-        <Listbox aria-label={t("ui.search.results")} onAction={(key) => {
-          const item = results.find((r) => r.id === key);
-          if (item) {
-            navigate(item.href);
-            setQuery("");
-            setOpen(false);
-          }
-        }}>
+      <PopoverContent className="p-1 w-72">
+        <div className="flex flex-col max-h-72 overflow-y-auto divide-y divide-default-100">
           {results.map((r) => (
-            <ListboxItem key={r.id} startContent={<r.icon className="h-4 w-4 text-default-400" />}>
-              <div>
-                <p className="text-sm font-semibold">{r.label}</p>
-                <p className="text-[10px] text-default-400">{r.sub}</p>
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => {
+                navigate(r.href);
+                setQuery("");
+                setOpen(false);
+              }}
+              className="flex items-center gap-3 p-2.5 text-start hover:bg-default-100 rounded-xl transition-colors w-full group"
+            >
+              <r.icon className="h-4 w-4 text-default-400 group-hover:text-primary shrink-0 transition-colors" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold truncate text-foreground group-hover:text-primary transition-colors">
+                  {r.label}
+                </p>
+                <p className="text-[10px] text-default-400 truncate">{r.sub}</p>
               </div>
-            </ListboxItem>
+            </button>
           ))}
-        </Listbox>
+        </div>
       </PopoverContent>
     </Popover>
   );

@@ -66,8 +66,8 @@ type TaskFormValues = {
   sprintId?: string | null;
   dueDate?: string | null;
   department?: string | null;
-  estimatedHours?: number | null;
-  sequenceOrder?: number | null;
+  estimatedHours?: number | string | null;
+  sequenceOrder?: number | string | null;
 };
 
 const taskSchema = z
@@ -105,14 +105,14 @@ const taskSchema = z
 const taskFormResolver: Resolver<TaskFormValues> = (values, context, options) =>
   zodResolver(taskSchema)(
     {
-      ...(values as TaskFormValues),
+      ...(values as any),
       status: normalizeTaskStatusValue(values.status),
       priority: normalizeTaskPriorityValue(values.priority),
       type: normalizeTaskTypeValue(values.type),
     },
     context,
     options
-  );
+  ) as any;
 
 interface TaskFormProps {
   defaultValues?: Partial<Task>;

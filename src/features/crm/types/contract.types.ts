@@ -67,6 +67,7 @@ export interface ContractFormDraft {
   pageCount: string;
   signatureDateIso: string;
   contactId?: string;
+  dealId?: string;
 }
 
 export type ContractStatus = "draft" | "final";
@@ -77,6 +78,7 @@ export interface SavedContract {
   status: ContractStatus;
   form: ContractFormDraft;
   contactId?: string;
+  dealId?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

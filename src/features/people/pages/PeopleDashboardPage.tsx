@@ -628,7 +628,7 @@ export default function PeopleDashboardPage() {
         color="primary"
         variant="underlined"
         selectedKey={activeTab}
-        onSelectionChange={(key) => setActiveTab(key as MainTab)}
+        onSelectionChange={(key: any) => setActiveTab(key as MainTab)}
         classNames={{
           tabList:
             "gap-6 w-full relative rounded-none p-0 border-b border-divider",

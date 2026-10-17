@@ -465,7 +465,7 @@ export default function EmployeeProfilePage() {
             aria-label={t("profile.tab_overview")}
             variant="underlined"
             selectedKey={activeTab}
-            onSelectionChange={(key) => setActiveTab(String(key))}
+            onSelectionChange={(key: any) => setActiveTab(String(key))}
             classNames={{
               tabList: "w-full gap-1 overflow-x-auto rounded-none border-b border-default-100 bg-default-50/60 px-3 sm:px-5",
               cursor: "h-1 w-full rounded-full bg-primary",

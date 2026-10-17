@@ -30,18 +30,37 @@
     "active": "Active",
     "on_hold": "On hold",
     "completed": "Completed",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "archived": "Archived"
   },
   "status": {
     "active": "Active",
     "completed": "Completed",
     "on_hold": "On hold",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "archived": "Archived"
+  },
+  "priority": {
+    "low": "Low Priority",
+    "medium": "Medium Priority",
+    "high": "High Priority",
+    "urgent": "Urgent"
   },
   "form": {
     "createTitle": "Create project",
     "editTitle": "Edit project",
     "name": "Project name",
+    "slug": "Project Slug (Readable URL Key)",
+    "slugPlaceholder": "e.g. mobile-app-v2",
+    "priority": "Priority",
+    "category": "Category",
+    "categoryPlaceholder": "e.g. Product, Marketing, Infrastructure",
+    "tags": "Tags (comma separated)",
+    "tagsPlaceholder": "e.g. q4, redesign, high-impact",
+    "customFields": "Custom Project Fields & Metadata",
+    "addCustomField": "Add Custom Field",
+    "customFieldKey": "Field Name",
+    "customFieldValue": "Field Value",
     "description": "Description",
     "status": "Status",
     "members": "Team members",
@@ -54,6 +73,8 @@
   "actions": {
     "edit": "Edit",
     "delete": "Delete",
+    "archive": "Archive",
+    "unarchive": "Restore from Archive",
     "view": "View"
   },
   "toast": {

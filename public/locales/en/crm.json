@@ -238,7 +238,26 @@
       "all": "All Classifications",
       "actual_client": "Actual Client",
       "potential_lead": "Potential Lead",
-      "callback": "Call Back"
+      "callback": "Call Back",
+      "manage": "Manage Classifications"
+    },
+    "source": {
+      "label": "Source",
+      "all": "All Sources",
+      "website": "Website",
+      "referral": "Referral",
+      "social_media": "Social Media",
+      "cold_call": "Cold Call",
+      "event": "Event / Exhibition",
+      "whatsapp": "WhatsApp",
+      "other": "Other"
+    },
+    "status": {
+      "label": "Status",
+      "all": "All Statuses",
+      "active": "Active",
+      "inactive": "Inactive",
+      "archived": "Archived"
     },
     "satisfaction": {
       "label": "Customer Satisfaction",
@@ -276,6 +295,8 @@
       "assignedTo": "Assigned to",
       "unassigned": "Unassigned",
       "classification": "Classification",
+      "source": "Source",
+      "status": "Status",
       "satisfaction": "Satisfaction",
       "clear": "Clear filters"
     },
@@ -292,6 +313,8 @@
       "department": "Department",
       "accountName": "Account",
       "classification": "Contact Classification",
+      "source": "Source",
+      "status": "Contact Status",
       "satisfaction": "Satisfaction Status",
       "satisfactionNotes": "Satisfaction Notes / Feedback",
       "interests": "Client Interests (Website, Offer, Store...)",

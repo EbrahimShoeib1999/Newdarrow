@@ -151,7 +151,7 @@ export default function NotificationsPage() {
           />
           <Tabs
             selectedKey={filter}
-            onSelectionChange={(key) => setFilter(key as FilterKey)}
+            onSelectionChange={(key: any) => setFilter(key as FilterKey)}
             size="sm"
             variant="solid"
             classNames={{ tabList: "rounded-2xl" }}

@@ -4,7 +4,15 @@ import type {
   CustomerSatisfaction,
 } from "../types/contacts.types";
 
-export type ContactSortField = "name" | "email" | "accountName" | "createdAt" | "classification" | "satisfaction";
+export type ContactSortField =
+  | "name"
+  | "email"
+  | "accountName"
+  | "createdAt"
+  | "classification"
+  | "satisfaction"
+  | "source"
+  | "status";
 export type ContactSortOrder = "asc" | "desc";
 
 export interface ContactsListParams {
@@ -12,6 +20,8 @@ export interface ContactsListParams {
   assignedTo?: string;
   classification?: ContactClassification | "all";
   satisfaction?: CustomerSatisfaction | "all";
+  source?: string;
+  status?: string;
   sortField?: ContactSortField;
   sortOrder?: ContactSortOrder;
   page?: number;
@@ -38,6 +48,8 @@ function contactMatchesSearch(contact: Contact, search: string): boolean {
     contact.commercialRegister,
     contact.jobTitle,
     contact.department,
+    contact.source,
+    contact.status,
     interestsStr,
   ]
     .filter(Boolean)
@@ -60,6 +72,13 @@ export function filterContacts(contacts: Contact[], params: ContactsListParams):
     }
     if (params.satisfaction && params.satisfaction !== "all") {
       if (contact.satisfaction !== params.satisfaction) return false;
+    }
+    if (params.source && params.source !== "all") {
+      if ((contact.source || "").toLowerCase() !== params.source.toLowerCase()) return false;
+    }
+    if (params.status && params.status !== "all") {
+      const contactStatus = contact.status || "active";
+      if (contactStatus.toLowerCase() !== params.status.toLowerCase()) return false;
     }
     return true;
   });
@@ -94,6 +113,14 @@ export function sortContacts(
       case "satisfaction":
         av = a.satisfaction || "";
         bv = b.satisfaction || "";
+        break;
+      case "source":
+        av = (a.source || "").toLowerCase();
+        bv = (b.source || "").toLowerCase();
+        break;
+      case "status":
+        av = (a.status || "active").toLowerCase();
+        bv = (b.status || "active").toLowerCase();
         break;
       case "createdAt":
       default:

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Accordion,
   AccordionItem,
@@ -26,10 +26,7 @@ import {
   Workflow,
   CheckCircle2,
   Layers,
-  Send,
-  Calendar,
   Clock,
-  Briefcase,
   ExternalLink,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -317,6 +314,12 @@ export function ContractBuilderForm() {
   const [exporting, setExporting] = useState(false);
   const [providerSynced, setProviderSynced] = useState(false);
 
+  const [searchParams] = useSearchParams();
+  const paramDealId = searchParams.get("dealId");
+  const paramContactId = searchParams.get("contactId");
+  const paramAmount = searchParams.get("amount");
+  const [paramsApplied, setParamsApplied] = useState(false);
+
   useEffect(() => {
     if (providerSynced || !profile) return;
     setForm((prev) => ({
@@ -334,6 +337,43 @@ export function ContractBuilderForm() {
     }));
     setProviderSynced(true);
   }, [profile, company, providerSynced]);
+
+  useEffect(() => {
+    if (paramsApplied || (!paramDealId && !paramContactId && !paramAmount)) return;
+    setForm((prev) => {
+      const next = { ...prev };
+      if (paramDealId) next.dealId = paramDealId;
+      if (paramContactId) {
+        next.contactId = paramContactId;
+        const matchingContact = contacts.find((c) => c.id === paramContactId);
+        if (matchingContact) {
+          const clientName = contactDisplayName(matchingContact);
+          next.client = {
+            ...next.client,
+            name: clientName || next.client.name,
+            phone: matchingContact.phone || matchingContact.whatsappPhone || next.client.phone,
+            email: matchingContact.email || next.client.email,
+            commercialRegister: matchingContact.commercialRegister || next.client.commercialRegister,
+            taxNumber: matchingContact.taxNumber || next.client.taxNumber,
+            address: matchingContact.billingAddress || next.client.address,
+            representative: clientName || next.client.representative,
+          };
+        }
+      }
+      if (paramAmount && Number(paramAmount) > 0) {
+        const excl = Number(paramAmount);
+        const rate = 0.15;
+        const incl = (excl * (1 + rate)).toFixed(2);
+        next.fields = next.fields.map((f) => {
+          if (f.key === "amountExclVat") return { ...f, value: String(excl) };
+          if (f.key === "amountInclVat") return { ...f, value: incl };
+          return f;
+        });
+      }
+      return next;
+    });
+    setParamsApplied(true);
+  }, [paramDealId, paramContactId, paramAmount, contacts, paramsApplied]);
 
   const { data: savedRes, isLoading: loadingSaved } = useContractsQuery();
   const saved = savedRes?.data ?? [];
@@ -390,6 +430,8 @@ export function ContractBuilderForm() {
     const tmpl = CONTRACT_TEMPLATES[tmplKey];
     setForm({
       ...c.form,
+      dealId: c.dealId ?? c.form.dealId,
+      contactId: c.contactId ?? c.form.contactId,
       contractType: tmplKey,
       services:
         c.form.services && c.form.services.length > 0
@@ -495,7 +537,7 @@ export function ContractBuilderForm() {
       const createdIds: string[] = [];
       const actor = {
         userId: user?.id || "system",
-        userName: user?.displayName || user?.name || "مدير النظام",
+        userName: user?.name || "مدير النظام",
       };
 
       for (const service of selectedServices) {
@@ -674,6 +716,7 @@ export function ContractBuilderForm() {
       status: "draft" as const,
       form,
       contactId: form.contactId,
+      dealId: form.dealId,
       convertedToTasks: form.convertedToTasks || false,
       createdTaskIds: form.createdTaskIds || [],
       ...pendingApprovalFields(),
@@ -743,7 +786,7 @@ export function ContractBuilderForm() {
           <Button
             variant="light"
             startContent={<FilePlus className="h-4 w-4" />}
-            onPress={resetNew}
+            onPress={() => resetNew()}
           >
             {t("contract.new")}
           </Button>
@@ -783,7 +826,7 @@ export function ContractBuilderForm() {
                 aria-label={t("contract.delete")}
                 onPress={() => {
                   if (!window.confirm(t("contract.deleteConfirm"))) return;
-                  void deleteMutation.mutateAsync(savedId).then(resetNew);
+                  void deleteMutation.mutateAsync(savedId).then(() => resetNew());
                 }}
               >
                 <Trash2 className="h-4 w-4" />

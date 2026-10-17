@@ -1,4 +1,10 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, useLocation } from "react-router-dom";
+
+function DArrowRedirect() {
+  const location = useLocation();
+  const target = location.pathname.replace(/^\/darrow/, "") || "/";
+  return <Navigate to={`${target}${location.search}${location.hash}`} replace />;
+}
 import { LoginPage } from "@/features/auth/pages/login-page";
 import { RegisterPage } from "@/features/auth/pages/register-page";
 import { ProfilePage } from "@/features/auth/pages/profile-page";
@@ -116,6 +122,10 @@ export const router = createBrowserRouter([
       {
         path: "public/report/:companyId/:reportId",
         element: <PublicClientReportPage />,
+      },
+      {
+        path: "darrow/*",
+        element: <DArrowRedirect />,
       },
       {
         index: true,

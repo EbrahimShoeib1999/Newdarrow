@@ -30,18 +30,37 @@
     "active": "نشط",
     "on_hold": "معلّق",
     "completed": "مكتمل",
-    "cancelled": "ملغى"
+    "cancelled": "ملغى",
+    "archived": "مؤرشف"
   },
   "status": {
     "active": "نشط",
     "completed": "مكتمل",
     "on_hold": "معلّق",
-    "cancelled": "ملغى"
+    "cancelled": "ملغى",
+    "archived": "مؤرشف"
+  },
+  "priority": {
+    "low": "أولوية منخفضة",
+    "medium": "أولوية متوسطة",
+    "high": "أولوية مرتفعة",
+    "urgent": "عاجل جداً"
   },
   "form": {
     "createTitle": "إنشاء مشروع",
     "editTitle": "تعديل مشروع",
     "name": "اسم المشروع",
+    "slug": "المعرّف المختصر للمشروع (Slug)",
+    "slugPlaceholder": "مثال: core-crm-redesign",
+    "priority": "الأولوية",
+    "category": "تصنيف المشروع",
+    "categoryPlaceholder": "مثال: تطوير المنتجات، التسويق، البنية التحتية",
+    "tags": "الوسوم (مفصولة بفاصلة)",
+    "tagsPlaceholder": "مثال: q4, redesign, critical",
+    "customFields": "الحقول المخصصة وبيانات المشروع",
+    "addCustomField": "إضافة حقل مخصص",
+    "customFieldKey": "اسم الحقل",
+    "customFieldValue": "قيمة الحقل",
     "description": "الوصف",
     "status": "الحالة",
     "members": "أعضاء الفريق",
@@ -54,6 +73,8 @@
   "actions": {
     "edit": "تعديل",
     "delete": "حذف",
+    "archive": "أرشفة",
+    "unarchive": "استعادة من الأرشيف",
     "view": "عرض"
   },
   "toast": {

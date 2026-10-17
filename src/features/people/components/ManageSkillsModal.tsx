@@ -85,7 +85,7 @@ export function ManageSkillsModal({ isOpen, onOpenChange, employee }: ManageSkil
                           minValue={0}
                           value={skill.level}
                           className="max-w-md"
-                          onChange={(val) => handleSkillChange(index, "level", val as number)}
+                          onChange={(val: any) => handleSkillChange(index, "level", val as number)}
                         />
                       </div>
                       <Button isIconOnly color="danger" variant="light" onPress={() => handleRemoveSkill(index)} className="shrink-0">

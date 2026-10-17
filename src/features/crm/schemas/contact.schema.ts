@@ -14,10 +14,12 @@ export const contactFormSchema = z.object({
   jobTitle: z.string().optional(),
   department: z.string().optional(),
   accountName: z.string().optional(),
-  classification: z.enum(["actual_client", "potential_lead", "callback"]).optional(),
+  classification: z.string().optional(),
   satisfaction: z.enum(["satisfied", "neutral", "unsatisfied"]).optional(),
   satisfactionNotes: z.string().optional(),
   interests: z.array(z.string()).optional(),
+  source: z.string().optional(),
+  status: z.string().optional(),
   commercialRegister: z
     .string()
     .max(30, "Commercial register is too long")
@@ -48,6 +50,8 @@ export function toCreateContactDTO(values: ContactFormValues): CreateContactDTO 
     satisfaction: values.satisfaction || "satisfied",
     satisfactionNotes: values.satisfactionNotes?.trim() || undefined,
     interests: values.interests ?? [],
+    source: values.source?.trim() || undefined,
+    status: values.status?.trim() || "active",
     commercialRegister: values.commercialRegister?.trim() || undefined,
     taxNumber: values.taxNumber?.trim() || undefined,
     billingAddress: values.billingAddress?.trim() || undefined,

@@ -40,9 +40,10 @@ import {
   Meh,
   UserCheck,
   Building2,
-  Sparkles,
   BookUser,
   List,
+  Tag,
+  Globe,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -54,8 +55,11 @@ import {
   type ContactSortField,
 } from "../utils/contacts-list.utils";
 import { ContactFormModal } from "../components/ContactFormModal";
-import { formatDate } from "@/lib/utils";
-import type { ContactClassification, CustomerSatisfaction, Contact } from "../types/contacts.types";
+import { ManageClassificationsModal } from "../components/ManageClassificationsModal";
+import { useContactClassifications } from "../hooks/use-contact-classifications";
+import { formatDate, formatNumber } from "@/lib/utils";
+import type { ContactClassificationItem } from "../types/classification.types";
+import type { ContactSource, ContactStatus, CustomerSatisfaction } from "../types/contacts.types";
 
 const DEFAULT_PARAMS: ContactsListParams = {
   page: 1,
@@ -63,16 +67,21 @@ const DEFAULT_PARAMS: ContactsListParams = {
   sortField: "createdAt",
   sortOrder: "desc",
   classification: "all",
+  source: "all",
+  status: "all",
   satisfaction: "all",
 };
 
 export function ContactsListPage() {
-  const { t } = useTranslation("crm");
+  const { t, i18n } = useTranslation("crm");
+  const isAr = i18n.language === "ar";
   const { canManageContacts } = useCrmPermissions();
   const { data, isLoading } = useContactsQuery();
   const { data: users } = useAllUsers();
+  const { activeClassifications, classificationsMap } = useContactClassifications();
   const [params, setParams] = useState<ContactsListParams>(DEFAULT_PARAMS);
   const [formOpen, setFormOpen] = useState(false);
+  const [manageClassificationsOpen, setManageClassificationsOpen] = useState(false);
   const [viewTab, setViewTab] = useState<string>("table");
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
 
@@ -119,7 +128,25 @@ export function ContactsListPage() {
     );
   };
 
-  const renderClassificationChip = (classification?: ContactClassification) => {
+  const renderClassificationChip = (classification?: string) => {
+    if (!classification) {
+      return (
+        <Chip size="sm" color="default" variant="flat" className="font-medium text-xs">
+          —
+        </Chip>
+      );
+    }
+    const def = classificationsMap[classification];
+    if (def) {
+      const label = isAr ? def.nameAr : def.nameEn;
+      const emoji = def.emoji || "🏷️";
+      const color = (def.color as any) || "primary";
+      return (
+        <Chip size="sm" color={color} variant="flat" className="font-bold border border-default-200">
+          {emoji} {label}
+        </Chip>
+      );
+    }
     switch (classification) {
       case "actual_client":
         return (
@@ -141,11 +168,31 @@ export function ContactsListPage() {
         );
       default:
         return (
-          <Chip size="sm" color="default" variant="flat" className="font-medium">
-            🟢 {t("contacts.classification.actual_client")}
+          <Chip size="sm" color="secondary" variant="flat" className="font-bold">
+            🏷️ {classification}
           </Chip>
         );
     }
+  };
+
+  const renderSourceChip = (source?: ContactSource) => {
+    if (!source) return null;
+    return (
+      <Chip size="sm" variant="bordered" className="text-[11px] font-medium border-default-200">
+        <Globe className="h-2.5 w-2.5 inline me-1 text-default-400" />
+        {t(`contacts.source.${source}`, { defaultValue: source })}
+      </Chip>
+    );
+  };
+
+  const renderStatusChip = (status?: ContactStatus) => {
+    const s = status || "active";
+    const color = s === "active" ? "success" : s === "archived" ? "default" : "warning";
+    return (
+      <Chip size="sm" color={color} variant="dot" className="text-[11px] font-bold">
+        {t(`contacts.status.${s}`, { defaultValue: s })}
+      </Chip>
+    );
   };
 
   const renderSatisfactionChip = (satisfaction?: CustomerSatisfaction) => {
@@ -198,16 +245,28 @@ export function ContactsListPage() {
         title={t("contacts.title")}
         description={t("contacts.description")}
         actions={
-          canManageContacts ? (
-            <Button
-              color="primary"
-              startContent={<Plus className="h-4 w-4" />}
-              className="rounded-full font-bold shadow-md shadow-primary/20"
-              onPress={() => setFormOpen(true)}
-            >
-              {t("contacts.addContact")}
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {canManageContacts && (
+              <>
+                <Button
+                  variant="bordered"
+                  startContent={<Tag className="h-4 w-4 text-primary" />}
+                  className="rounded-full font-bold border-default-300"
+                  onPress={() => setManageClassificationsOpen(true)}
+                >
+                  {t("contacts.classification.manage")}
+                </Button>
+                <Button
+                  color="primary"
+                  startContent={<Plus className="h-4 w-4" />}
+                  className="rounded-full font-bold shadow-md shadow-primary/20"
+                  onPress={() => setFormOpen(true)}
+                >
+                  {t("contacts.addContact")}
+                </Button>
+              </>
+            )}
+          </div>
         }
       />
 
@@ -215,7 +274,7 @@ export function ContactsListPage() {
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <Tabs
           selectedKey={viewTab}
-          onSelectionChange={(k) => setViewTab(k as string)}
+          onSelectionChange={(k: any) => setViewTab(k as string)}
           color="primary"
           variant="bordered"
           classNames={{
@@ -239,8 +298,8 @@ export function ContactsListPage() {
               <div className="flex items-center gap-2">
                 <BookUser className="h-4 w-4" />
                 <span>{t("contacts.directory.tab")}</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                  {pipeline.total}
+                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold">
+                  {formatNumber(pipeline.total)}
                 </span>
               </div>
             }
@@ -248,7 +307,7 @@ export function ContactsListPage() {
         </Tabs>
       </div>
 
-      {/* Filters Bar */}
+      {/* Filters Bar: Full Filtering Suite (Classification, Source, Status, Satisfaction, Assignee, Search) */}
       <div className="flex flex-wrap items-center gap-3 bg-default-50 p-4 rounded-3xl border border-default-100">
         <Input
           isClearable
@@ -258,7 +317,7 @@ export function ContactsListPage() {
           value={params.search ?? ""}
           onValueChange={(v) => setParams((p) => ({ ...p, search: v, page: 1 }))}
           startContent={<Search className="h-4 w-4 text-default-400" />}
-          className="w-full sm:w-64"
+          className="w-full sm:w-60"
         />
 
         {/* Assigned Follow-Up Employee Filter */}
@@ -267,7 +326,7 @@ export function ContactsListPage() {
           size="sm"
           variant="bordered"
           label={t("contacts.filters.assignedTo")}
-          className="w-full sm:w-48"
+          className="w-full sm:w-44"
           selectedKeys={params.assignedTo ? [params.assignedTo] : []}
           onSelectionChange={(keys) => {
             const v = Array.from(keys)[0] as string | undefined;
@@ -281,7 +340,7 @@ export function ContactsListPage() {
           {(item) => <SelectItem key={item.id} textValue={item.name}>{item.name}</SelectItem>}
         </Select>
 
-        {/* Classification Filter */}
+        {/* Dynamic Classification Filter */}
         <Select
           {...selectFieldProps({ compact: true })}
           size="sm"
@@ -290,19 +349,61 @@ export function ContactsListPage() {
           className="w-full sm:w-44"
           selectedKeys={params.classification && params.classification !== "all" ? [params.classification] : []}
           onSelectionChange={(keys) => {
-            const v = Array.from(keys)[0] as ContactClassification | undefined;
+            const v = Array.from(keys)[0] as string | undefined;
             setParams((p) => ({ ...p, classification: v || "all", page: 1 }));
           }}
         >
-          <SelectItem key="actual_client" textValue={t("contacts.classification.actual_client")}>
-            🟢 {t("contacts.classification.actual_client")}
-          </SelectItem>
-          <SelectItem key="potential_lead" textValue={t("contacts.classification.potential_lead")}>
-            🟡 {t("contacts.classification.potential_lead")}
-          </SelectItem>
-          <SelectItem key="callback" textValue={t("contacts.classification.callback")}>
-            🔵 {t("contacts.classification.callback")}
-          </SelectItem>
+          {activeClassifications.map((c: ContactClassificationItem) => {
+            const label = isAr ? c.nameAr : c.nameEn;
+            return (
+              <SelectItem key={c.key} textValue={label}>
+                <div className="flex items-center gap-1.5">
+                  <span>{c.emoji || "🏷️"}</span>
+                  <span>{label}</span>
+                </div>
+              </SelectItem>
+            );
+          })}
+        </Select>
+
+        {/* Sender / Source Filter */}
+        <Select
+          {...selectFieldProps({ compact: true })}
+          size="sm"
+          variant="bordered"
+          label={t("contacts.filters.source")}
+          className="w-full sm:w-36"
+          selectedKeys={params.source && params.source !== "all" ? [params.source] : []}
+          onSelectionChange={(keys) => {
+            const v = Array.from(keys)[0] as ContactSource | undefined;
+            setParams((p) => ({ ...p, source: v || "all", page: 1 }));
+          }}
+        >
+          <SelectItem key="website" textValue={t("contacts.source.website")}>{t("contacts.source.website")}</SelectItem>
+          <SelectItem key="referral" textValue={t("contacts.source.referral")}>{t("contacts.source.referral")}</SelectItem>
+          <SelectItem key="social_media" textValue={t("contacts.source.social_media")}>{t("contacts.source.social_media")}</SelectItem>
+          <SelectItem key="cold_call" textValue={t("contacts.source.cold_call")}>{t("contacts.source.cold_call")}</SelectItem>
+          <SelectItem key="event" textValue={t("contacts.source.event")}>{t("contacts.source.event")}</SelectItem>
+          <SelectItem key="whatsapp" textValue={t("contacts.source.whatsapp")}>{t("contacts.source.whatsapp")}</SelectItem>
+          <SelectItem key="other" textValue={t("contacts.source.other")}>{t("contacts.source.other")}</SelectItem>
+        </Select>
+
+        {/* Status Filter */}
+        <Select
+          {...selectFieldProps({ compact: true })}
+          size="sm"
+          variant="bordered"
+          label={t("contacts.filters.status")}
+          className="w-full sm:w-32"
+          selectedKeys={params.status && params.status !== "all" ? [params.status] : []}
+          onSelectionChange={(keys) => {
+            const v = Array.from(keys)[0] as ContactStatus | undefined;
+            setParams((p) => ({ ...p, status: v || "all", page: 1 }));
+          }}
+        >
+          <SelectItem key="active" textValue={t("contacts.status.active")}>{t("contacts.status.active")}</SelectItem>
+          <SelectItem key="inactive" textValue={t("contacts.status.inactive")}>{t("contacts.status.inactive")}</SelectItem>
+          <SelectItem key="archived" textValue={t("contacts.status.archived")}>{t("contacts.status.archived")}</SelectItem>
         </Select>
 
         {/* Satisfaction Filter */}
@@ -311,7 +412,7 @@ export function ContactsListPage() {
           size="sm"
           variant="bordered"
           label={t("contacts.filters.satisfaction")}
-          className="w-full sm:w-40"
+          className="w-full sm:w-36"
           selectedKeys={params.satisfaction && params.satisfaction !== "all" ? [params.satisfaction] : []}
           onSelectionChange={(keys) => {
             const v = Array.from(keys)[0] as CustomerSatisfaction | undefined;
@@ -332,10 +433,13 @@ export function ContactsListPage() {
         {(params.search ||
           params.assignedTo ||
           (params.classification && params.classification !== "all") ||
+          (params.source && params.source !== "all") ||
+          (params.status && params.status !== "all") ||
           (params.satisfaction && params.satisfaction !== "all")) && (
           <Button
             size="sm"
             variant="light"
+            color="danger"
             onPress={() => setParams(DEFAULT_PARAMS)}
           >
             {t("contacts.filters.clear")}
@@ -397,7 +501,15 @@ export function ContactsListPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      {renderClassificationChip(contact.classification)}
+                      <div className="space-y-1">
+                        {renderClassificationChip(contact.classification)}
+                        {(contact.source || contact.status) && (
+                          <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                            {contact.source && renderSourceChip(contact.source)}
+                            {contact.status && renderStatusChip(contact.status)}
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {renderSatisfactionChip(contact.satisfaction)}
@@ -479,8 +591,8 @@ export function ContactsListPage() {
                           <UserAvatar
                             name={assignee.name}
                             avatarProps={{
-                              src: assignee.avatarUrl,
-                              size: "xs",
+                              src: assignee.avatar,
+                              size: "sm",
                             }}
                             className="text-xs font-semibold"
                           />
@@ -529,7 +641,7 @@ export function ContactsListPage() {
               </div>
             </div>
             <div className="text-sm font-bold bg-white dark:bg-default-100 px-4 py-2 rounded-2xl border border-default-200">
-              {pipeline.total} جهة اتصال
+              {isAr ? `${formatNumber(pipeline.total)} جهة اتصال` : `${formatNumber(pipeline.total)} contacts`}
             </div>
           </div>
 
@@ -716,6 +828,10 @@ export function ContactsListPage() {
       </div>
 
       <ContactFormModal isOpen={formOpen} onOpenChange={setFormOpen} />
+      <ManageClassificationsModal
+        isOpen={manageClassificationsOpen}
+        onOpenChange={setManageClassificationsOpen}
+      />
     </div>
   );
 }

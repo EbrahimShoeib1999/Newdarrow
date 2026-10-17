@@ -232,7 +232,26 @@
       "all": "جميع التصنيفات",
       "actual_client": "عميل فعلي",
       "potential_lead": "عميل محتمل",
-      "callback": "معاودة الاتصال"
+      "callback": "معاودة الاتصال",
+      "manage": "إدارة التصنيفات"
+    },
+    "source": {
+      "label": "المصدر",
+      "all": "جميع المصادر",
+      "website": "الموقع الإلكتروني",
+      "referral": "إحالة / توصية",
+      "social_media": "وسائل التواصل الاجتماعي",
+      "cold_call": "اتصال مباشر",
+      "event": "فعالية أو معرض",
+      "whatsapp": "واتساب",
+      "other": "أخرى"
+    },
+    "status": {
+      "label": "الحالة",
+      "all": "جميع الحالات",
+      "active": "نشط",
+      "inactive": "غير نشط",
+      "archived": "مؤرشف"
     },
     "satisfaction": {
       "label": "مستوى الرضا",
@@ -270,6 +289,8 @@
       "assignedTo": "مسند إلى",
       "unassigned": "غير مسند",
       "classification": "التصنيف",
+      "source": "المصدر",
+      "status": "الحالة",
       "satisfaction": "الرضا",
       "clear": "مسح التصفية"
     },
@@ -286,6 +307,8 @@
       "department": "القسم",
       "accountName": "الحساب / الشركة",
       "classification": "تصنيف جهة الاتصال",
+      "source": "المصدر",
+      "status": "حالة جهة الاتصال",
       "satisfaction": "مستوى رضا العميل",
       "satisfactionNotes": "ملاحظات حول تجربة أو رضا العميل",
       "interests": "اهتمامات العميل (الموقع، عروض، متجر...)",

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useLayoutStore } from "@/stores/layout.store";
-import { LayoutGrid, Folder, ChevronDown, Search, X } from "lucide-react";
+import { LayoutGrid, Folder, ChevronDown, Search, X, Globe2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, Link } from "react-router-dom";
 import { Logo } from "../shared/logo";
 import { LanguageSwitcherRow } from "./language-switcher";
 import { getPortalFromPath, type PortalId } from "@/lib/portal-permissions";
@@ -26,7 +26,7 @@ const GROUP_TITLES_AR: Record<string, string> = {
   contracts_reports: "عروض الأسعار والتقارير",
   attendance_leave: "الحضور والإجازات",
   performance: "تقييم الأداء",
-  work_sprints: "إدارة العمل والدورات",
+  work_sprints: "إدارة العمل ودورات التطوير والأهداف",
   messages: "المحادثات والرسائل",
   projects_general: "إدارة المشاريع",
 };
@@ -42,7 +42,7 @@ const GROUP_TITLES_EN: Record<string, string> = {
   attendance_leave: "Attendance & leave",
   performance: "Performance",
   team_settings: "Team & settings",
-  work_sprints: "Work & sprints",
+  work_sprints: "Work & Development Cycles",
   messages: "Messages",
   projects_general: "Projects",
 };
@@ -243,8 +243,16 @@ export function MobileSidebar() {
       </nav>
 
       {/* Footer apps & language switcher */}
-      {portals.length > 1 && (
-        <div className="border-t border-default-100 p-3 shrink-0">
+      <div className="border-t border-default-100 p-3 shrink-0 space-y-1">
+        <Link
+          to="/"
+          onClick={() => setMobileSidebarOpen(false)}
+          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-xs font-bold text-default-600 hover:bg-default-100 hover:text-foreground transition-all"
+        >
+          <Globe2 className="h-4 w-4 text-primary" />
+          <span>{i18n.dir() === "rtl" ? "الصفحة التعريفية" : "Landing Page"}</span>
+        </Link>
+        {portals.length > 1 && (
           <button
             type="button"
             onClick={() => {
@@ -253,11 +261,11 @@ export function MobileSidebar() {
             }}
             className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-xs font-semibold text-default-500 hover:bg-default-100 transition-all"
           >
-            <LayoutGrid className="h-4 w-4" />
+            <LayoutGrid className="h-4 w-4 text-primary" />
             <span>{t("portals.allApps")}</span>
           </button>
-        </div>
-      )}
+        )}
+      </div>
       <div className="border-t border-default-100 p-3 shrink-0">
         <LanguageSwitcherRow onToggle={() => setMobileSidebarOpen(false)} />
       </div>

@@ -30,12 +30,15 @@ export interface TaskHistoryEntry {
   timestamp: string;
 }
 
+export type SprintScope = "department" | "company";
+
 export interface Sprint {
   id: string;
   name: string;
   startDate: string;
   endDate: string;
   status: "active" | "planned" | "completed";
+  scope?: SprintScope;
   goal?: string;
   createdAt: string;
   updatedAt: string;
@@ -61,6 +64,8 @@ export interface Task {
   claimedAt?: string | null;
   claimedBy?: string | null;
   contractId?: string;
+  contactId?: string;
+  projectId?: string | null;
   serviceItemId?: string;
   tags: string[];
   dueDate: string | null;
@@ -90,6 +95,8 @@ export interface CreateTaskDTO {
   claimedAt?: string | null;
   claimedBy?: string | null;
   contractId?: string;
+  contactId?: string;
+  projectId?: string | null;
   serviceItemId?: string;
   tags?: string[];
   dueDate?: string | null;
@@ -114,6 +121,8 @@ export interface UpdateTaskDTO {
   claimedAt?: string | null;
   claimedBy?: string | null;
   contractId?: string;
+  contactId?: string;
+  projectId?: string | null;
   serviceItemId?: string;
   tags?: string[];
   dueDate?: string | null;

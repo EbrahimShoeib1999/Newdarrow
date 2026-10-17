@@ -215,7 +215,7 @@ export const TaskService = {
 
   async createTask(
     companyId: string,
-    data: CreateTaskDTO & { projectId?: string },
+    data: CreateTaskDTO & { projectId?: string | null },
     actor?: TaskActor
   ): Promise<ApiResponse<Task>> {
     return withLogging(SERVICE_NAME, "createTask", (async () => {

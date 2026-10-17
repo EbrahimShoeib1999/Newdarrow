@@ -32,6 +32,7 @@ import {
   Plus,
   FileSignature,
   Workflow,
+  Globe,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
@@ -40,6 +41,7 @@ import { useContactQuery } from "../hooks/use-contacts";
 import { useContractsQuery } from "../hooks/use-contracts";
 import { useDealsQuery } from "../hooks/use-deals";
 import { useCrmPermissions } from "../hooks/use-crm-permissions";
+import { useContactClassifications } from "../hooks/use-contact-classifications";
 import { useClientReportsQuery } from "../hooks/use-client-reports";
 import { ClientReportEditorModal } from "../components/ClientReportEditorModal";
 import { ClientReportDetailModal } from "../components/ClientReportDetailModal";
@@ -71,8 +73,10 @@ import { normalizeCrmTaskStatus } from "../constants/crm-task.constants";
 export function ContactDetailPage() {
   const { contactId = "" } = useParams();
   const navigate = useNavigate();
-  const { t } = useTranslation("crm");
+  const { t, i18n } = useTranslation("crm");
+  const isAr = i18n.language === "ar";
   const { canManageContacts } = useCrmPermissions();
+  const { classificationsMap } = useContactClassifications();
   const { data: contactRes, isLoading } = useContactQuery(contactId);
   const { data: dealsRes } = useDealsQuery();
   const { data: users } = useAllUsers();
@@ -154,20 +158,44 @@ export function ContactDetailPage() {
       <Card className="border border-default-100 shadow-sm rounded-3xl bg-default-50/50">
         <CardBody className="p-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Classification */}
-            {contact.classification === "actual_client" && (
-              <Chip color="success" variant="flat" size="sm" className="font-bold border border-success-200">
-                🟢 {t("contacts.classification.actual_client")}
+            {/* Dynamic Classification */}
+            {contact.classification && (() => {
+              const def = classificationsMap[contact.classification];
+              if (def) {
+                const label = isAr ? def.nameAr : def.nameEn;
+                const emoji = def.emoji || "🏷️";
+                const color = (def.color as any) || "primary";
+                return (
+                  <Chip color={color} variant="flat" size="sm" className="font-bold border border-default-200">
+                    {emoji} {label}
+                  </Chip>
+                );
+              }
+              const label = t(`contacts.classification.${contact.classification}`, { defaultValue: contact.classification });
+              return (
+                <Chip color="primary" variant="flat" size="sm" className="font-bold border border-primary-200">
+                  🏷️ {label}
+                </Chip>
+              );
+            })()}
+
+            {/* Source */}
+            {contact.source && (
+              <Chip variant="bordered" size="sm" className="font-medium">
+                <Globe className="h-3 w-3 inline me-1 text-default-400" />
+                {t(`contacts.source.${contact.source}`, { defaultValue: contact.source })}
               </Chip>
             )}
-            {contact.classification === "potential_lead" && (
-              <Chip color="warning" variant="flat" size="sm" className="font-bold border border-warning-200">
-                🟡 {t("contacts.classification.potential_lead")}
-              </Chip>
-            )}
-            {contact.classification === "callback" && (
-              <Chip color="primary" variant="flat" size="sm" className="font-bold border border-primary-200">
-                🔵 {t("contacts.classification.callback")}
+
+            {/* Status */}
+            {contact.status && (
+              <Chip
+                color={contact.status === "active" ? "success" : contact.status === "archived" ? "default" : "warning"}
+                variant="dot"
+                size="sm"
+                className="font-bold"
+              >
+                {t(`contacts.status.${contact.status}`, { defaultValue: contact.status })}
               </Chip>
             )}
 
@@ -217,7 +245,7 @@ export function ContactDetailPage() {
 
           {/* Follow-up Employee Box */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-primary-50/70 dark:bg-primary-950/30 rounded-2xl border border-primary-200/50">
-            <span className="text-xs text-default-500 font-medium">الموظف المتابع:</span>
+            <span className="text-xs text-default-500 font-medium">{t("contacts.columns.assigned")}:</span>
             {assignee ? (
               <span className="text-xs font-bold text-primary">{assignee.name}</span>
             ) : (
@@ -229,7 +257,7 @@ export function ContactDetailPage() {
 
       <Tabs
         selectedKey={tab}
-        onSelectionChange={(k) => setTab(k as string)}
+        onSelectionChange={(k: any) => setTab(k as string)}
         variant="underlined"
         classNames={{ tabList: "gap-4" }}
       >
@@ -248,7 +276,7 @@ export function ContactDetailPage() {
               <div className="flex flex-wrap items-center gap-4">
                 {contact.phone && (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-default-500 font-bold">الهاتف:</span>
+                    <span className="text-xs text-default-500 font-bold">{t("contacts.columns.phone")}:</span>
                     <span className="font-mono text-sm font-bold text-default-800">{contact.phone}</span>
                     <Button
                       size="sm"
@@ -258,13 +286,13 @@ export function ContactDetailPage() {
                       as="a"
                       href={`tel:${contact.phone}`}
                     >
-                      اتصال
+                      {t("contacts.directory.callNow")}
                     </Button>
                   </div>
                 )}
                 {contact.secondaryPhone && (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-default-500 font-bold">هاتف إضافي:</span>
+                    <span className="text-xs text-default-500 font-bold">{t("contacts.directory.secondaryPhone")}:</span>
                     <span className="font-mono text-sm font-semibold text-default-700">{contact.secondaryPhone}</span>
                     <Button
                       size="sm"
@@ -273,7 +301,7 @@ export function ContactDetailPage() {
                       as="a"
                       href={`tel:${contact.secondaryPhone}`}
                     >
-                      اتصال
+                      {t("contacts.directory.callNow")}
                     </Button>
                   </div>
                 )}
@@ -288,7 +316,7 @@ export function ContactDetailPage() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    واتساب
+                    {t("contacts.directory.whatsapp")}
                   </Button>
                 )}
               </div>
@@ -297,7 +325,7 @@ export function ContactDetailPage() {
             {/* Client Interests */}
             {contact.interests && contact.interests.length > 0 && (
               <div className="p-4 bg-default-50/60 rounded-3xl border border-default-100 space-y-2">
-                <span className="text-xs font-bold text-default-600 block">اهتمامات العميل:</span>
+                <span className="text-xs font-bold text-default-600 block">{t("contacts.form.interests")}:</span>
                 <div className="flex flex-wrap gap-1.5">
                   {contact.interests.map((interest) => (
                     <Chip key={interest} size="sm" color="primary" variant="flat" className="font-medium">
@@ -312,7 +340,7 @@ export function ContactDetailPage() {
             {contact.satisfactionNotes && (
               <div className="p-4 bg-amber-50/50 dark:bg-amber-950/20 rounded-3xl border border-amber-200/50 space-y-1">
                 <span className="text-xs font-bold text-amber-800 dark:text-amber-200">
-                  ملاحظات تجربة ورضا العميل:
+                  {t("contacts.satisfaction.notes")}:
                 </span>
                 <p className="text-sm text-default-700">{contact.satisfactionNotes}</p>
               </div>

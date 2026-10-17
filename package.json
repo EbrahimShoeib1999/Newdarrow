@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/generate-lucide-types.cjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test:rules": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project rules-check \"node scripts/test-firestore-rules.mjs\"",

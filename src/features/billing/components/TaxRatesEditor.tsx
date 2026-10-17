@@ -178,7 +178,7 @@ export function TaxRatesEditor({
                         <Switch
                           size="sm"
                           isSelected={isActive}
-                          onValueChange={(value) =>
+                          onValueChange={(value: boolean) =>
                             setValue(`taxes.${index}.isActive`, value, {
                               shouldDirty: true,
                             })

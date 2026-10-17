@@ -12,10 +12,12 @@ import {
   Paperclip,
   User,
   UserCheck,
+  Briefcase,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { FieldBox } from "@/components/shared/field-box";
 import { useLeadQuery, useUpdateLeadMutation } from "../hooks/use-leads";
+import { useDealsQuery } from "../hooks/use-deals";
 import { useCrmPermissions } from "../hooks/use-crm-permissions";
 import {
   useLeadActivities,
@@ -33,6 +35,7 @@ import { CrmChatter } from "../components/shared/CrmChatter";
 import { LeadToTaskModal } from "../components/LeadToTaskModal";
 import { useAllUsers } from "@/features/users/hooks/use-users";
 import { LeadFormModal } from "../components/LeadFormModal";
+import { DealFormModal } from "../components/DealFormModal";
 import { LeadStatusChip } from "../components/LeadStatusChip";
 import { LEAD_STATUSES, leadSourceLabel, normalizeLeadStatus } from "../constants/lead-workflow";
 import { getCategoryNoteSuggestions, getCategoryLabel } from "../constants/lead-service-categories";
@@ -54,8 +57,10 @@ export function LeadDetailPage() {
   const { data: users } = useAllUsers();
   const updateLead = useUpdateLeadMutation();
   const convertLead = useConvertLeadMutation();
+  const { data: dealsRes } = useDealsQuery();
   const [editOpen, setEditOpen] = useState(false);
   const [wonTaskOpen, setWonTaskOpen] = useState(false);
+  const [dealModalOpen, setDealModalOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
 
   const { data: notes = [] } = useLeadNotes(leadId);
@@ -75,6 +80,9 @@ export function LeadDetailPage() {
     status: normalizeLeadStatus(leadRes.data.status) as LeadStatus,
   };
   const assignee = users?.find((u) => u.id === lead.assignedTo);
+  const leadDeals = (dealsRes?.data ?? []).filter(
+    (d) => d.leadId === leadId || (lead.contactId && d.contactId === lead.contactId)
+  );
 
   return (
     <>
@@ -122,6 +130,15 @@ export function LeadDetailPage() {
                     </Button>
                   )}
                   <Button
+                    color="secondary"
+                    variant="flat"
+                    startContent={<Briefcase className="h-4 w-4" />}
+                    className="rounded-full font-bold"
+                    onPress={() => setDealModalOpen(true)}
+                  >
+                    {t("deals.addDeal")}
+                  </Button>
+                  <Button
                     color="primary"
                     variant="flat"
                     startContent={<Pencil className="h-4 w-4" />}
@@ -153,6 +170,7 @@ export function LeadDetailPage() {
                   { key: "tasks", label: t("leadDetail.tabs.tasks"), count: tasks.length, icon: ListTodo },
                   { key: "notes", label: t("leadDetail.tabs.notes"), count: notes.length, icon: StickyNote },
                   { key: "files", label: t("leadDetail.tabs.attachments"), count: attachments.length, icon: Paperclip },
+                  { key: "deals", label: t("nav.deals"), count: leadDeals.length, icon: Briefcase },
                 ]}
               />
             }
@@ -160,6 +178,51 @@ export function LeadDetailPage() {
         }
         main={
           <>
+            {/* Linked Deals Card */}
+            {leadDeals.length > 0 && (
+              <Card className="border border-default-200">
+                <CardBody className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-sm flex items-center gap-2">
+                      <Briefcase className="h-4 w-4 text-primary" />
+                      {t("nav.deals")} ({leadDeals.length})
+                    </h3>
+                    <Button
+                      size="sm"
+                      variant="light"
+                      color="primary"
+                      onPress={() => setDealModalOpen(true)}
+                    >
+                      {t("deals.addDeal")}
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {leadDeals.map((d) => (
+                      <div
+                        key={d.id}
+                        className="p-3 bg-default-50 rounded-2xl border border-default-100 flex items-center justify-between"
+                      >
+                        <div>
+                          <Link
+                            to={`/crm/deals/${d.id}`}
+                            className="font-bold text-sm text-primary hover:underline"
+                          >
+                            {d.title}
+                          </Link>
+                          <p className="text-xs text-default-400">
+                            {d.amount} {d.currency}
+                          </p>
+                        </div>
+                        <Chip size="sm" variant="flat">
+                          {t(`deals.stage.${d.stage}`)}
+                        </Chip>
+                      </div>
+                    ))}
+                  </div>
+                </CardBody>
+              </Card>
+            )}
+
             <Card className="border border-default-200">
               <CardBody className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
                 <FieldBox label={t("leads.form.name")} icon={<User className="h-3.5 w-3.5" />}>
@@ -265,6 +328,12 @@ export function LeadDetailPage() {
         leadName={lead.name}
         leadCompany={lead.company}
         onCreated={() => navigate("/tasks/work")}
+      />
+      <DealFormModal
+        isOpen={dealModalOpen}
+        onOpenChange={setDealModalOpen}
+        initialLeadId={lead.id}
+        initialContactId={lead.contactId}
       />
     </>
   );

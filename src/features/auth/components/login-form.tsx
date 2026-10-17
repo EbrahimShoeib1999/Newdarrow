@@ -18,12 +18,12 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 const authInputClassNames = {
-  label: "font-semibold text-default-700 pb-1",
-  input: "text-sm",
+  label: "font-semibold text-slate-200 pb-1 text-xs sm:text-sm",
+  input: "text-sm text-slate-100 placeholder:text-slate-500",
   inputWrapper: cn(
-    "bg-default-50/50 shadow-none border-default-200",
-    "group-data-[focus=true]:border-primary group-data-[focus=true]:ring-2 group-data-[focus=true]:ring-primary/15",
-    "group-data-[invalid=true]:border-danger group-data-[invalid=true]:ring-2 group-data-[invalid=true]:ring-danger/15",
+    "bg-slate-950/70 shadow-none border-white/10 hover:border-white/25",
+    "group-data-[focus=true]:border-primary group-data-[focus=true]:ring-2 group-data-[focus=true]:ring-primary/20",
+    "group-data-[invalid=true]:border-danger group-data-[invalid=true]:ring-2 group-data-[invalid=true]:ring-danger/20",
     "transition-all duration-200"
   ),
   errorMessage: "text-danger text-xs",
@@ -62,7 +62,7 @@ export function LoginForm() {
       if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
         setError(t("login.error"));
       } else if (code === "auth/too-many-requests") {
-        setError("تم حظر الدخول مؤقتاً لكثرة المحاولات الخاطئة. حاول لاحقاً.");
+        setError(t("login.tooManyRequests"));
       } else if (err?.message) {
         setError(err.message);
       } else {
@@ -116,13 +116,13 @@ export function LoginForm() {
             <div className="flex items-center justify-between gap-3">
               <label
                 htmlFor="login-password"
-                className="text-sm font-semibold text-default-700"
+                className="text-xs sm:text-sm font-semibold text-slate-200"
               >
                 {t("login.password")}
               </label>
               <Link
                 to="/forgot-password"
-                className="shrink-0 text-xs font-medium text-default-500 transition-colors hover:text-primary hover:underline"
+                className="shrink-0 text-xs font-medium text-slate-400 transition-colors hover:text-primary-300 hover:underline"
               >
                 {t("login.forgotPassword")}
               </Link>
@@ -140,12 +140,12 @@ export function LoginForm() {
               isInvalid={isSubmitted && !!errors.password}
               errorMessage={isSubmitted ? errors.password?.message : undefined}
               startContent={
-                <Lock className="pointer-events-none h-4 w-4 text-default-400" />
+                <Lock className="pointer-events-none h-4 w-4 text-slate-500" />
               }
               classNames={authInputClassNames}
               endContent={
                 <button
-                  className="rounded-lg p-1.5 text-default-400 transition-colors hover:bg-default-100 hover:text-default-600 focus:outline-none"
+                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200 focus:outline-none"
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
@@ -165,7 +165,7 @@ export function LoginForm() {
       <Button
         type="submit"
         color="primary"
-        className="mt-1 h-12 w-full bg-primary-gradient font-bold text-sm shadow-lg shadow-primary/25 transition-transform hover:scale-[1.01] active:scale-[0.99]"
+        className="mt-2 h-12 w-full bg-primary-gradient font-bold text-sm text-white shadow-lg shadow-primary/25 transition-transform hover:scale-[1.01] active:scale-[0.99]"
         isLoading={isSubmitting}
         endContent={!isSubmitting && <ArrowRight className="h-4 w-4 rtl:rotate-180" />}
       >
@@ -173,18 +173,18 @@ export function LoginForm() {
       </Button>
 
       <div className="relative flex items-center gap-3 py-1">
-        <div className="h-px flex-1 bg-default-200" />
-        <span className="text-xs font-medium text-default-400">{t("login.or")}</span>
-        <div className="h-px flex-1 bg-default-200" />
+        <div className="h-px flex-1 bg-white/10" />
+        <span className="text-xs font-medium text-slate-400">{t("login.or")}</span>
+        <div className="h-px flex-1 bg-white/10" />
       </div>
 
       <GoogleSignInButton />
 
-      <p className="text-center text-sm text-default-500">
+      <p className="text-center text-sm text-slate-400">
         {t("login.dontHaveAccount")}{" "}
         <Link
           to="/register"
-          className="font-bold text-secondary transition-colors hover:text-secondary-600 hover:underline"
+          className="font-bold text-primary-400 transition-colors hover:text-primary-300 hover:underline"
         >
           {t("login.createAccountLink")}
         </Link>

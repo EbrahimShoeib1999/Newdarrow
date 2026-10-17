@@ -22,12 +22,17 @@ import {
   Search,
   Trash2,
   Users,
+  Archive,
+  ArchiveRestore,
+  Tag,
+  Sliders,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
 import { useAppPermissions } from "@/features/companies/hooks/use-app-permissions";
 import {
   useDeleteProjectMutation,
+  useUpdateProjectMutation,
   useProjects,
 } from "../hooks/use-projects";
 import { ProjectFormModal } from "../components/ProjectFormModal";
@@ -40,6 +45,14 @@ const STATUS_STYLES: Record<ProjectStatus, string> = {
   completed: "bg-primary/10 text-primary",
   on_hold: "bg-warning/10 text-warning",
   cancelled: "bg-danger/10 text-danger",
+  archived: "bg-default-200 text-default-600",
+};
+
+const PRIORITY_STYLES: Record<string, string> = {
+  low: "bg-default-100 text-default-600",
+  medium: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  high: "bg-warning/15 text-warning-700 dark:text-warning-400",
+  urgent: "bg-danger/15 text-danger font-black",
 };
 
 export function ProjectsListPage({
@@ -54,6 +67,7 @@ export function ProjectsListPage({
   const canDelete = can("projects.delete");
   const { data: projects = [], isLoading } = useProjects();
   const deleteProject = useDeleteProjectMutation();
+  const updateProject = useUpdateProjectMutation();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
@@ -71,8 +85,16 @@ export function ProjectsListPage({
       if (scope !== "completed" && statusFilter !== "all" && p.status !== statusFilter)
         return false;
       if (!q) return true;
+      const tagsStr = (p.tags ?? []).join(" ").toLowerCase();
+      const catStr = (p.category ?? "").toLowerCase();
+      const slugStr = (p.slug ?? "").toLowerCase();
+      const customStr = Object.values(p.customFields ?? {}).join(" ").toLowerCase();
       return (
         p.name.toLowerCase().includes(q) ||
+        slugStr.includes(q) ||
+        catStr.includes(q) ||
+        tagsStr.includes(q) ||
+        customStr.includes(q) ||
         (p.description ?? "").toLowerCase().includes(q)
       );
     });
@@ -86,6 +108,14 @@ export function ProjectsListPage({
   const handleEdit = (project: Project) => {
     setEditingProject(project);
     setIsModalOpen(true);
+  };
+
+  const handleToggleArchive = async (project: Project) => {
+    const nextStatus: ProjectStatus = project.status === "archived" ? "active" : "archived";
+    await updateProject.mutateAsync({
+      id: project.id,
+      data: { status: nextStatus },
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -103,6 +133,7 @@ export function ProjectsListPage({
     { key: "on_hold", label: t("filters.on_hold") },
     { key: "completed", label: t("filters.completed") },
     { key: "cancelled", label: t("filters.cancelled") },
+    { key: "archived", label: t("filters.archived") },
   ];
 
   const heading =
@@ -207,88 +238,190 @@ export function ProjectsListPage({
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((project) => (
-            <Card
-              key={project.id}
-              className="border border-default-100 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg"
-            >
-              <CardBody className="gap-3 p-5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <FolderKanban className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="truncate font-bold text-default-900">
-                        {project.name}
-                      </h3>
-                      <Chip
-                        size="sm"
-                        variant="flat"
-                        className={cn(
-                          "mt-1 border-none font-bold text-[11px]",
-                          STATUS_STYLES[project.status]
-                        )}
-                      >
-                        {t(`status.${project.status}`)}
-                      </Chip>
-                    </div>
-                  </div>
-                  {(canManage || canDelete) && (
-                    <div className="flex shrink-0 gap-0.5">
-                      {canManage && (
-                        <Tooltip content={t("actions.edit")}>
-                          <Button
-                            isIconOnly
-                            size="sm"
-                            variant="light"
-                            aria-label={t("actions.edit")}
-                            onPress={() => handleEdit(project)}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                        </Tooltip>
-                      )}
-                      {canDelete && (
-                        <Tooltip content={t("actions.delete")}>
-                          <Button
-                            isIconOnly
-                            size="sm"
-                            variant="light"
-                            color="danger"
-                            aria-label={t("actions.delete")}
-                            isLoading={deletingId === project.id}
-                            onPress={() => handleDelete(project.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </Tooltip>
-                      )}
-                    </div>
-                  )}
-                </div>
+          {filtered.map((project) => {
+            const hasCustomFields =
+              project.customFields && Object.keys(project.customFields).length > 0;
 
-                {project.description && (
-                  <p className="line-clamp-2 text-sm text-default-500">
-                    {project.description}
-                  </p>
+            return (
+              <Card
+                key={project.id}
+                className={cn(
+                  "border border-default-100 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg",
+                  project.status === "archived" && "opacity-75 bg-default-50/50"
                 )}
+              >
+                <CardBody className="gap-3 p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <FolderKanban className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="truncate font-bold text-default-900">
+                            {project.name}
+                          </h3>
+                        </div>
+                        {project.slug && (
+                          <p className="text-[11px] font-mono text-default-400 truncate">
+                            /{project.slug}
+                          </p>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <Chip
+                            size="sm"
+                            variant="flat"
+                            className={cn(
+                              "border-none font-bold text-[10px]",
+                              STATUS_STYLES[project.status]
+                            )}
+                          >
+                            {t(`status.${project.status}`)}
+                          </Chip>
+                          {project.priority && (
+                            <Chip
+                              size="sm"
+                              variant="flat"
+                              className={cn(
+                                "border-none font-bold text-[10px]",
+                                PRIORITY_STYLES[project.priority]
+                              )}
+                            >
+                              {t(`priority.${project.priority}`)}
+                            </Chip>
+                          )}
+                          {project.category && (
+                            <Chip
+                              size="sm"
+                              variant="bordered"
+                              className="border-default-200 text-default-600 font-semibold text-[10px] h-5"
+                            >
+                              {project.category}
+                            </Chip>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {(canManage || canDelete) && (
+                      <div className="flex shrink-0 gap-0.5">
+                        {canManage && (
+                          <>
+                            <Tooltip content={t("actions.edit")}>
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                aria-label={t("actions.edit")}
+                                onPress={() => handleEdit(project)}
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                            </Tooltip>
+                            <Tooltip
+                              content={
+                                project.status === "archived"
+                                  ? t("actions.unarchive")
+                                  : t("actions.archive")
+                              }
+                            >
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                color={project.status === "archived" ? "primary" : "default"}
+                                aria-label={
+                                  project.status === "archived"
+                                    ? t("actions.unarchive")
+                                    : t("actions.archive")
+                                }
+                                onPress={() => handleToggleArchive(project)}
+                              >
+                                {project.status === "archived" ? (
+                                  <ArchiveRestore className="h-4 w-4 text-primary" />
+                                ) : (
+                                  <Archive className="h-4 w-4 text-default-400 hover:text-warning" />
+                                )}
+                              </Button>
+                            </Tooltip>
+                          </>
+                        )}
+                        {canDelete && (
+                          <Tooltip content={t("actions.delete")}>
+                            <Button
+                              isIconOnly
+                              size="sm"
+                              variant="light"
+                              color="danger"
+                              aria-label={t("actions.delete")}
+                              isLoading={deletingId === project.id}
+                              onPress={() => handleDelete(project.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </Tooltip>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                <div className="mt-auto flex flex-wrap items-center gap-3 text-xs text-default-500">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Users className="h-3.5 w-3.5" />
-                    {t("memberCount", { count: project.members?.length ?? 0 })}
-                  </span>
-                  {(project.startDate || project.endDate) && (
-                    <span className="inline-flex items-center gap-1.5">
-                      <CalendarDays className="h-3.5 w-3.5" />
-                      {project.startDate || "—"} → {project.endDate || "—"}
-                    </span>
+                  {project.description && (
+                    <p className="line-clamp-2 text-sm text-default-500">
+                      {project.description}
+                    </p>
                   )}
-                </div>
-              </CardBody>
-            </Card>
-          ))}
+
+                  {/* Project Tags */}
+                  {project.tags && project.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {project.tags.map((tag) => (
+                        <Chip
+                          key={tag}
+                          size="sm"
+                          variant="flat"
+                          className="bg-default-100 text-default-600 text-[10px] h-5"
+                          startContent={<Tag className="h-2.5 w-2.5 ms-1" />}
+                        >
+                          {tag}
+                        </Chip>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Custom Fields Summary */}
+                  {hasCustomFields && (
+                    <div className="rounded-xl border border-default-200/60 bg-default-50/70 p-2.5 space-y-1">
+                      <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase text-default-400">
+                        <Sliders className="h-3 w-3 text-primary" />
+                        <span>{t("form.customFields")}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                        {Object.entries(project.customFields!).slice(0, 4).map(([k, v]) => (
+                          <div key={k} className="truncate">
+                            <span className="font-semibold text-default-500">{k}: </span>
+                            <span className="font-bold text-default-800">{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-auto flex flex-wrap items-center gap-3 pt-1 text-xs text-default-500">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5" />
+                      {t("memberCount", { count: project.members?.length ?? 0 })}
+                    </span>
+                    {(project.startDate || project.endDate) && (
+                      <span className="inline-flex items-center gap-1.5 font-medium">
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        {project.startDate ? formatDate(project.startDate) : "—"} →{" "}
+                        {project.endDate ? formatDate(project.endDate) : "—"}
+                      </span>
+                    )}
+                  </div>
+                </CardBody>
+              </Card>
+            );
+          })}
         </div>
       )}
 
