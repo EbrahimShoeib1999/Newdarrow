@@ -315,6 +315,7 @@ export function ContractBuilderForm() {
   const [providerSynced, setProviderSynced] = useState(false);
 
   const [searchParams] = useSearchParams();
+  const paramContractId = searchParams.get("contractId") || searchParams.get("id");
   const paramDealId = searchParams.get("dealId");
   const paramContactId = searchParams.get("contactId");
   const paramAmount = searchParams.get("amount");
@@ -442,6 +443,14 @@ export function ContractBuilderForm() {
     });
   };
 
+  useEffect(() => {
+    if (!paramContractId || savedId || loadingSaved || saved.length === 0) return;
+    const existing = saved.find((c) => c.id === paramContractId);
+    if (existing) {
+      loadContract(existing);
+    }
+  }, [paramContractId, saved, savedId, loadingSaved]);
+
   const resetNew = (templateKey = form.contractType || "marketing") => {
     setSavedId(null);
     setForm(
@@ -520,11 +529,42 @@ export function ContractBuilderForm() {
     }));
   };
 
+  const persistContract = async (customForm?: ContractFormDraft): Promise<string> => {
+    const targetForm = customForm || form;
+    if (!targetForm.client.name.trim()) {
+      throw new Error(t("contract.clientRequired") || "يرجى تحديد اسم العميل أولاً");
+    }
+    const payload = {
+      title: `${targetForm.title} — ${targetForm.client.name}`,
+      status: "draft" as const,
+      form: targetForm,
+      ...(targetForm.contactId ? { contactId: targetForm.contactId } : {}),
+      ...(targetForm.dealId ? { dealId: targetForm.dealId } : {}),
+      convertedToTasks: targetForm.convertedToTasks || false,
+      createdTaskIds: targetForm.createdTaskIds || [],
+      ...pendingApprovalFields(),
+    };
+    if (savedId) {
+      await updateMutation.mutateAsync({ id: savedId, data: payload });
+      return savedId;
+    } else {
+      const res = await createMutation.mutateAsync(payload);
+      const newId = res.data.id;
+      setSavedId(newId);
+      return newId;
+    }
+  };
+
   const handleConvertServicesToTasks = async () => {
     if (!companyId) {
       toast.error("لم يتم العثور على معرّف الشركة");
       return;
     }
+    if (!form.client.name?.trim()) {
+      toast.error(t("contract.clientRequired") || "يرجى تحديد اسم العميل أولاً قبل ترحيل المهام");
+      return;
+    }
+
     const currentServices = form.services || [];
     const selectedServices = currentServices.filter((s) => s.selected);
     if (selectedServices.length === 0) {
@@ -532,19 +572,51 @@ export function ContractBuilderForm() {
       return;
     }
 
-    setConvertingTasks(true);
-    try {
-      const createdIds: string[] = [];
-      const actor = {
-        userId: user?.id || "system",
-        userName: user?.name || "مدير النظام",
-      };
+    const pendingServices = selectedServices.filter(
+      (s) => !s.isConverted || !s.convertedTaskId
+    );
+    if (pendingServices.length === 0) {
+      toast.info("جميع الخدمات المحددة تم ترحيلها إلى مهام بالفعل مسبقاً");
+      return;
+    }
 
-      for (const service of selectedServices) {
+    setConvertingTasks(true);
+
+    let targetContractId = savedId;
+    if (!targetContractId) {
+      try {
+        targetContractId = await persistContract();
+      } catch (err: any) {
+        console.error("Failed to auto-save contract before task conversion:", err);
+        toast.error(err?.message || "فشل حفظ العقد. يجب حفظ العقد أولاً قبل ترحيل المهام.");
+        setConvertingTasks(false);
+        return;
+      }
+    }
+
+    if (!targetContractId) {
+      toast.error("تعذر تحديد معرّف العقد لربط المهام به");
+      setConvertingTasks(false);
+      return;
+    }
+
+    const actor = {
+      userId: user?.id || "system",
+      userName: user?.name || "مدير النظام",
+    };
+
+    const createdIds: string[] = [...(form.createdTaskIds || [])];
+    let updatedServices = [...currentServices];
+    let convertedCount = 0;
+    let hasError = false;
+
+    try {
+      for (const service of pendingServices) {
         // 1. Create main department task
         const mainTitle = `${service.name} — ${form.client.name || form.title}`;
         const mainDesc = [
           `📌 مهمة رئيسية مرحلة من العقد رقم: ${form.contractNumber}`,
+          `معرف العقد: ${targetContractId}`,
           `العميل: ${form.client.name || "غير محدد"}`,
           `القسم المختص: ${service.department}`,
           service.description ? `التفاصيل: ${service.description}` : "",
@@ -562,10 +634,10 @@ export function ContractBuilderForm() {
             priority: "high",
             type: "task",
             department: service.department,
-            estimatedHours: service.estimatedHours,
-            contractId: savedId || undefined,
+            estimatedHours: service.estimatedHours || 0,
+            contractId: targetContractId,
             serviceItemId: service.id,
-            contactId: form.contactId,
+            contactId: form.contactId || undefined,
           },
           actor
         );
@@ -585,48 +657,77 @@ export function ContractBuilderForm() {
             companyId,
             {
               title: sub.title,
-              description: `مهمة فرعية مرحلة من بند: ${service.name}\nالتسلسل التنفيذي: #${seqNum}\nالقسم: ${service.department}`,
+              description: `مهمة فرعية مرحلة من بند: ${service.name}\nالتسلسل التنفيذي: #${seqNum}\nالقسم: ${service.department}\nالعقد: ${targetContractId}`,
               status: "todo",
               priority: "medium",
               type: "subtask",
               parentId: mainTaskId,
               department: service.department,
               sequenceOrder: seqNum,
-              estimatedHours: sub.estimatedHours,
-              contractId: savedId || undefined,
+              estimatedHours: sub.estimatedHours || 0,
+              contractId: targetContractId,
+              serviceItemId: service.id,
+              contactId: form.contactId || undefined,
             },
             actor
           );
           createdIds.push(subRes.data.id);
         }
-      }
 
+        updatedServices = updatedServices.map((s) =>
+          s.id === service.id
+            ? { ...s, isConverted: true, convertedTaskId: mainTaskId }
+            : s
+        );
+        convertedCount++;
+      }
+    } catch (err) {
+      hasError = true;
+      console.error("Failed to convert services to tasks:", err);
+    } finally {
+      const allSelectedNowConverted = updatedServices
+        .filter((s) => s.selected)
+        .every((s) => s.isConverted && s.convertedTaskId);
+
+      const uniqueTaskIds = Array.from(new Set(createdIds));
       const updatedDraft: ContractFormDraft = {
         ...form,
-        convertedToTasks: true,
-        createdTaskIds: createdIds,
+        services: updatedServices,
+        convertedToTasks: allSelectedNowConverted,
+        createdTaskIds: uniqueTaskIds,
       };
       setForm(updatedDraft);
 
-      if (savedId) {
-        await updateMutation.mutateAsync({
-          id: savedId,
-          data: {
-            form: updatedDraft,
-            convertedToTasks: true,
-            createdTaskIds: createdIds,
-          },
-        });
+      if (targetContractId) {
+        try {
+          await updateMutation.mutateAsync({
+            id: targetContractId,
+            data: {
+              form: updatedDraft,
+              convertedToTasks: allSelectedNowConverted,
+              createdTaskIds: uniqueTaskIds,
+            },
+          });
+        } catch (saveErr) {
+          console.error("Failed to update contract document with created tasks:", saveErr);
+        }
       }
 
-      toast.success(
-        `تم ترحيل ${selectedServices.length} خدمات بنجاح وإنشاء ${createdIds.length} مهمة رئيسية وفرعية متسلسلة للأقسام!`
-      );
-    } catch (err) {
-      console.error("Failed to convert services to tasks:", err);
-      toast.error("حدث خطأ أثناء ترحيل المهام للأقسام");
-    } finally {
       setConvertingTasks(false);
+
+      if (hasError) {
+        if (convertedCount > 0) {
+          toast.error(
+            `حدث خطأ أثناء ترحيل المهام للأقسام. تم ترحيل ${convertedCount} خدمة بنجاح قبل حدوث الخطأ. يمكنك إعادة المحاولة لاستكمال باقي الخدمات دون تكرار.`
+          );
+        } else {
+          toast.error("حدث خطأ أثناء ترحيل المهام للأقسام. يرجى مراجعة الاتصال وإعادة المحاولة.");
+        }
+      } else {
+        toast.success(
+          `تم ترحيل ${convertedCount} خدمات بنجاح وإنشاء ${createdIds.length} مهمة رئيسية وفرعية متسلسلة وربطها بالعقد!`
+        );
+      }
     }
   };
 
@@ -717,21 +818,11 @@ export function ContractBuilderForm() {
       toast.error(t("contract.clientRequired"));
       return;
     }
-    const payload = {
-      title: `${form.title} — ${form.client.name}`,
-      status: "draft" as const,
-      form,
-      contactId: form.contactId,
-      dealId: form.dealId,
-      convertedToTasks: form.convertedToTasks || false,
-      createdTaskIds: form.createdTaskIds || [],
-      ...pendingApprovalFields(),
-    };
-    if (savedId) {
-      await updateMutation.mutateAsync({ id: savedId, data: payload });
-    } else {
-      const res = await createMutation.mutateAsync(payload);
-      setSavedId(res.data.id);
+    try {
+      await persistContract();
+    } catch (err: any) {
+      console.error("Failed to save contract:", err);
+      toast.error(err?.message || "فشل حفظ العقد");
     }
   };
 
@@ -1126,16 +1217,33 @@ export function ContractBuilderForm() {
                       </p>
                     </div>
                   </div>
-                  <Button
-                    color="success"
-                    variant="solid"
-                    size="sm"
-                    className="font-bold text-white shadow-sm shadow-success/30"
-                    endContent={<ExternalLink className="h-3.5 w-3.5" />}
-                    onPress={() => navigate("/tasks")}
-                  >
-                    {t("contract.viewTasks")}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {(form.services || []).some(
+                      (s) => s.selected && (!s.isConverted || !s.convertedTaskId)
+                    ) && (
+                      <Button
+                        color="primary"
+                        variant="flat"
+                        size="sm"
+                        className="font-bold"
+                        startContent={<Workflow className="h-4 w-4" />}
+                        isLoading={convertingTasks}
+                        onPress={() => void handleConvertServicesToTasks()}
+                      >
+                        ترحيل الخدمات المتبقية
+                      </Button>
+                    )}
+                    <Button
+                      color="success"
+                      variant="solid"
+                      size="sm"
+                      className="font-bold text-white shadow-sm shadow-success/30"
+                      endContent={<ExternalLink className="h-3.5 w-3.5" />}
+                      onPress={() => navigate("/tasks")}
+                    >
+                      {t("contract.viewTasks")}
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1201,6 +1309,16 @@ export function ContractBuilderForm() {
                             >
                               {service.department}
                             </Chip>
+                            {service.isConverted && (
+                              <Chip
+                                size="sm"
+                                color="success"
+                                variant="flat"
+                                className="text-[10px] font-semibold"
+                              >
+                                تم الترحيل لمهام
+                              </Chip>
+                            )}
                             {service.estimatedHours && (
                               <Chip
                                 size="sm"

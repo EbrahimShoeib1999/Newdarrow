@@ -225,8 +225,13 @@ export const TaskService = {
         ? [buildCreatedHistoryEntry(actor)]
         : [];
 
+      // Filter out any undefined fields so Firestore addDoc NEVER fails
+      const cleanRest = Object.fromEntries(
+        Object.entries(rest).filter(([_, v]) => v !== undefined)
+      );
+
       const docRef = await addDoc(tasksRef, {
-        ...rest,
+        ...cleanRest,
         type: data.type || "task",
         parentId: data.parentId ?? null,
         sprintId: data.sprintId ?? null,

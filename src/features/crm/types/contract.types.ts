@@ -48,6 +48,8 @@ export interface ContractServiceItem {
   durationDays?: number;
   selected: boolean;
   subtasks?: ContractServiceSubtask[];
+  convertedTaskId?: string;
+  isConverted?: boolean;
 }
 
 export interface ContractFormDraft {

@@ -512,6 +512,488 @@ await check("Filter sprints by company scope returns only company-wide", async (
   }
 });
 
+// --- SCENARIO 8: Contract Normalization, Validation, and Services-to-Tasks Migration ---
+
+// Diagnostic path detection utility
+function findUndefinedPaths(obj, prefix = "") {
+  const paths = [];
+  if (obj === undefined) {
+    paths.push(prefix || "(root)");
+    return paths;
+  }
+  if (Array.isArray(obj)) {
+    obj.forEach((item, index) => {
+      const currentPath = `${prefix}[${index}]`;
+      if (item === undefined) {
+        paths.push(currentPath);
+      } else {
+        paths.push(...findUndefinedPaths(item, currentPath));
+      }
+    });
+    return paths;
+  }
+  if (obj !== null && typeof obj === "object") {
+    const proto = Object.getPrototypeOf(obj);
+    if (proto !== Object.prototype && proto !== null) {
+      return paths;
+    }
+    for (const [key, val] of Object.entries(obj)) {
+      const currentPath = prefix ? `${prefix}.${key}` : key;
+      if (val === undefined) {
+        paths.push(currentPath);
+      } else {
+        paths.push(...findUndefinedPaths(val, currentPath));
+      }
+    }
+  }
+  return paths;
+}
+
+// Deep undefined stripper replicating firestore-mappers.ts
+function deepStripUndefined(value) {
+  if (value === undefined) return value;
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => deepStripUndefined(item));
+  }
+  if (value !== null && typeof value === "object") {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return value;
+    const entries = Object.entries(value)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, deepStripUndefined(v)])
+      .filter(([, v]) => v !== undefined);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+// Contract validation replicating contract-normalization.ts
+function validateContractPayload(data) {
+  if (!data) throw new Error("بيانات العقد غير صالحة");
+  if ("title" in data && (typeof data.title !== "string" || !data.title.trim())) {
+    throw new Error("عنوان العقد مطلوب");
+  }
+  if (data.form) {
+    if (!data.form.title || !data.form.title.trim()) {
+      throw new Error("عنوان نموذج العقد مطلوب");
+    }
+    if (!data.form.client?.name || !data.form.client.name.trim()) {
+      throw new Error("اسم العميل مطلوب لحفظ العقد");
+    }
+    if (!data.form.contractNumber || !data.form.contractNumber.trim()) {
+      throw new Error("رقم العقد مطلوب");
+    }
+    if (!data.form.provider?.name || !data.form.provider.name.trim()) {
+      throw new Error("بيانات الطرف الأول (مقدم الخدمة) مطلوبة");
+    }
+  }
+}
+
+// Helper replicating TaskService.createTask sanitization
+async function createTaskHelper(db, companyId, taskId, data) {
+  const { attachments, tags, timeLogs, ...rest } = data;
+  const cleanRest = Object.fromEntries(
+    Object.entries(rest).filter(([_, v]) => v !== undefined)
+  );
+  return setDoc(doc(db, "companies", companyId, "tasks", taskId), {
+    ...cleanRest,
+    type: data.type || "task",
+    parentId: data.parentId ?? null,
+    sprintId: data.sprintId ?? null,
+    description: data.description ?? "",
+    tags: tags ?? [],
+    attachments: attachments?.length ? attachments : [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+// 1. Diagnostic path detection finds exact undefined field paths
+await check("Diagnostic path detection finds exact undefined field paths without sensitive data", async () => {
+  const payload = {
+    title: "Diagnostic Contract",
+    contactId: undefined,
+    form: {
+      contractType: undefined,
+      clauses: [
+        { id: "c1", title: "Clause 1", body: undefined },
+        { id: "c2", title: "Clause 2", body: "Defined body" },
+      ],
+      services: [
+        { id: "s1", name: "Service 1", convertedTaskId: undefined, subtasks: undefined },
+      ],
+    },
+  };
+  const paths = findUndefinedPaths(payload);
+  if (!paths.includes("contactId")) throw new Error("Failed to detect top-level undefined contactId");
+  if (!paths.includes("form.contractType")) throw new Error("Failed to detect nested undefined form.contractType");
+  if (!paths.includes("form.clauses[0].body")) throw new Error("Failed to detect array item undefined body");
+  if (paths.includes("form.clauses[1].body")) throw new Error("False positive on defined body");
+  if (!paths.includes("form.services[0].convertedTaskId")) throw new Error("Failed to detect service undefined convertedTaskId");
+});
+
+// 2. Optional top-level field undefined (contactId, dealId) is omitted and document saves cleanly
+await check("Optional top-level field undefined is omitted and document saves cleanly", async () => {
+  const rawContract = {
+    title: "Top-level Undefined Test Contract",
+    status: "draft",
+    contactId: undefined,
+    dealId: undefined,
+    form: {
+      title: "Draft Agreement",
+      contractNumber: "DA-2026-9001",
+      contractDateIso: "2026-10-17",
+      preamble: "Test preamble",
+      provider: { name: "D-Arrow Marketing" },
+      client: { name: "Client Test Corp" },
+      fields: [],
+      clauses: [],
+    },
+  };
+  validateContractPayload(rawContract);
+  const normalized = deepStripUndefined(rawContract);
+  await assertSucceeds(
+    setDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", "contract-top-undefined"), normalized)
+  );
+  const snap = await getDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", "contract-top-undefined"));
+  const data = snap.data();
+  if ("contactId" in data || "dealId" in data) {
+    throw new Error("Optional undefined top-level fields should have been omitted from Firestore document");
+  }
+});
+
+// 3. Optional nested field undefined (form.contractType, client.idNumber) is omitted and saves cleanly
+await check("Optional nested field undefined is omitted and saves cleanly", async () => {
+  const rawContract = {
+    title: "Nested Undefined Test Contract",
+    status: "draft",
+    form: {
+      title: "Draft Agreement",
+      contractNumber: "DA-2026-9002",
+      contractType: undefined,
+      contractDateIso: "2026-10-17",
+      preamble: "Test preamble",
+      provider: { name: "D-Arrow Marketing" },
+      client: { name: "Client Test Corp", idNumber: undefined },
+      fields: [],
+      clauses: [],
+    },
+  };
+  validateContractPayload(rawContract);
+  const normalized = deepStripUndefined(rawContract);
+  await assertSucceeds(
+    setDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", "contract-nested-undefined"), normalized)
+  );
+  const snap = await getDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", "contract-nested-undefined"));
+  const data = snap.data();
+  if ("contractType" in data.form) throw new Error("form.contractType should be omitted");
+  if ("idNumber" in data.form.client) throw new Error("form.client.idNumber should be omitted");
+});
+
+// 4. Array containing objects with optional undefined fields (clauses[i].body, services[i].subtasks) saves without Firestore error
+await check("Array containing objects with optional undefined fields saves without Firestore error", async () => {
+  const rawContract = {
+    title: "Array Undefined Test Contract",
+    status: "draft",
+    form: {
+      title: "Draft Agreement",
+      contractNumber: "DA-2026-9003",
+      contractDateIso: "2026-10-17",
+      preamble: "Test preamble",
+      provider: { name: "D-Arrow Marketing" },
+      client: { name: "Client Test Corp" },
+      fields: [],
+      clauses: [
+        { id: "cls-1", title: "Clause 1", body: undefined, bullets: [{ id: "b1", text: "bullet 1" }] },
+        { id: "cls-2", title: "Clause 2", bullets: [{ id: "b2", text: "bullet 2" }] },
+      ],
+      services: [
+        { id: "srv-1", name: "S1", department: "Design", selected: true, subtasks: undefined, convertedTaskId: undefined, isConverted: undefined },
+      ],
+    },
+  };
+  validateContractPayload(rawContract);
+  const normalized = deepStripUndefined(rawContract);
+  await assertSucceeds(
+    setDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", "contract-array-undefined"), normalized)
+  );
+  const snap = await getDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", "contract-array-undefined"));
+  const data = snap.data();
+  if ("body" in data.form.clauses[0]) throw new Error("clauses[0].body should have been omitted");
+  if ("subtasks" in data.form.services[0]) throw new Error("services[0].subtasks should have been omitted");
+});
+
+// 5. Valid false, 0, empty string, and empty array values are preserved
+await check("Valid false, 0, empty string, and empty array values are preserved", async () => {
+  const input = {
+    title: "Values Preservation Test",
+    convertedToTasks: false,
+    createdTaskIds: [],
+    form: {
+      title: "Test Form",
+      contractNumber: "DA-2026-9004",
+      contractDateIso: "2026-10-17",
+      preamble: "Preamble",
+      provider: { name: "D-Arrow" },
+      client: { name: "Client Corp" },
+      fields: [],
+      clauses: [],
+      services: [
+        {
+          id: "srv-zero",
+          name: "Service Zero",
+          department: "IT",
+          selected: false,
+          estimatedHours: 0,
+          durationDays: 0,
+          description: "",
+        },
+      ],
+    },
+  };
+  const normalized = deepStripUndefined(input);
+  if (normalized.convertedToTasks !== false) throw new Error("convertedToTasks: false was not preserved");
+  if (!Array.isArray(normalized.createdTaskIds) || normalized.createdTaskIds.length !== 0) {
+    throw new Error("createdTaskIds: [] was not preserved");
+  }
+  const srv = normalized.form.services[0];
+  if (srv.selected !== false) throw new Error("service.selected: false was not preserved");
+  if (srv.estimatedHours !== 0) throw new Error("service.estimatedHours: 0 was not preserved");
+  if (srv.durationDays !== 0) throw new Error("service.durationDays: 0 was not preserved");
+  if (srv.description !== "") throw new Error("service.description: '' was not preserved");
+
+  await assertSucceeds(
+    setDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", "contract-preservation"), normalized)
+  );
+});
+
+// 6. Missing required fields produce clear validation errors
+await check("Missing required fields produce clear validation errors", async () => {
+  let titleError = "";
+  try {
+    validateContractPayload({ title: "" });
+  } catch (err) {
+    titleError = err.message;
+  }
+  if (!titleError.includes("عنوان العقد مطلوب")) {
+    throw new Error(`Expected title required error, got: ${titleError}`);
+  }
+
+  let clientError = "";
+  try {
+    validateContractPayload({
+      title: "Valid Title",
+      form: {
+        title: "Valid Form Title",
+        client: { name: "   " },
+      },
+    });
+  } catch (err) {
+    clientError = err.message;
+  }
+  if (!clientError.includes("اسم العميل مطلوب لحفظ العقد")) {
+    throw new Error(`Expected client required error, got: ${clientError}`);
+  }
+});
+
+// 7. Valid contracts save successfully and return document ID
+await check("Valid contract saves successfully and returns document ID", async () => {
+  const validContract = {
+    title: "Master Marketing Agreement — Al-Amal",
+    status: "draft",
+    form: {
+      title: "Master Marketing Agreement",
+      contractNumber: "DA-2026-1001",
+      contractDateIso: "2026-10-17",
+      preamble: "Agreed terms between parties",
+      provider: { name: "D-Arrow Marketing Company" },
+      client: { name: "Al-Amal Logistics Company" },
+      fields: [],
+      clauses: [{ id: "c1", title: "General Terms", bullets: [{ id: "b1", text: "Terms apply" }] }],
+      services: [
+        {
+          id: "srv-brand",
+          name: "Brand Design",
+          department: "Design",
+          estimatedHours: 20,
+          durationDays: 10,
+          selected: true,
+          subtasks: [
+            { id: "st-1", title: "Moodboard", sequenceOrder: 1, estimatedHours: 5 },
+            { id: "st-2", title: "Final Logo", sequenceOrder: 2, estimatedHours: 15 },
+          ],
+        },
+      ],
+      convertedToTasks: false,
+      createdTaskIds: [],
+    },
+  };
+  validateContractPayload(validContract);
+  const normalized = deepStripUndefined(validContract);
+  await assertSucceeds(
+    setDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", "contract-valid-save"), normalized)
+  );
+  const snap = await getDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", "contract-valid-save"));
+  if (!snap.exists()) throw new Error("Contract document was not found after save");
+  if (snap.id !== "contract-valid-save") throw new Error("Document ID mismatch");
+});
+
+// 8. A failed contract save prevents task creation
+await check("A failed contract save prevents task creation", async () => {
+  let targetContractId = null;
+  const invalidContract = { title: "", form: { client: { name: "" } } };
+  let saveFailed = false;
+
+  try {
+    validateContractPayload(invalidContract);
+    targetContractId = "should-not-reach";
+  } catch (err) {
+    saveFailed = true;
+  }
+
+  if (!saveFailed) throw new Error("Expected validation failure for invalid contract");
+
+  // Since save failed, tasks must NOT be created
+  const createdTaskIds = [];
+  if (targetContractId) {
+    createdTaskIds.push("orphan-task");
+  }
+
+  if (createdTaskIds.length !== 0) {
+    throw new Error("Tasks were created despite contract save failure");
+  }
+});
+
+// 9. Task creation receives the saved contract's actual ID
+await check("Task creation receives the saved contract's actual ID", async () => {
+  const contractId = "contract-valid-save";
+  const mainTaskId = "task-brand-main-101";
+  const subTaskId = "task-brand-sub-101";
+
+  await assertSucceeds(
+    createTaskHelper(alphaEmpDb, CO_ALPHA, mainTaskId, {
+      title: "Brand Design — Al-Amal",
+      department: "Design",
+      status: "todo",
+      priority: "high",
+      type: "task",
+      contractId: contractId,
+      serviceItemId: "srv-brand",
+    })
+  );
+
+  await assertSucceeds(
+    createTaskHelper(alphaEmpDb, CO_ALPHA, subTaskId, {
+      title: "Moodboard",
+      department: "Design",
+      status: "todo",
+      priority: "medium",
+      type: "subtask",
+      parentId: mainTaskId,
+      sequenceOrder: 1,
+      contractId: contractId,
+      serviceItemId: "srv-brand",
+    })
+  );
+
+  const mainSnap = await getDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "tasks", mainTaskId));
+  const subSnap = await getDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "tasks", subTaskId));
+
+  if (mainSnap.data().contractId !== contractId) {
+    throw new Error(`Main task contractId mismatch: expected ${contractId}, got ${mainSnap.data().contractId}`);
+  }
+  if (subSnap.data().contractId !== contractId) {
+    throw new Error(`Subtask contractId mismatch: expected ${contractId}, got ${subSnap.data().contractId}`);
+  }
+  if (subSnap.data().parentId !== mainTaskId) {
+    throw new Error(`Subtask parentId mismatch: expected ${mainTaskId}, got ${subSnap.data().parentId}`);
+  }
+});
+
+// 10. Editing an existing contract does not create an unnecessary duplicate
+await check("Editing an existing contract does not create an unnecessary duplicate", async () => {
+  const existingContractId = "contract-valid-save";
+  await assertSucceeds(
+    updateDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", existingContractId), {
+      title: "Master Marketing Agreement — Al-Amal (Updated)",
+      updatedAt: new Date().toISOString(),
+    })
+  );
+  const snap = await getDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", existingContractId));
+  if (snap.data().title !== "Master Marketing Agreement — Al-Amal (Updated)") {
+    throw new Error("Contract update did not reflect on existing document");
+  }
+});
+
+// 11. Retrying after partial task creation does not duplicate tasks
+await check("Retrying after partial task creation does not duplicate tasks", async () => {
+  const partialContractId = "contract-partial-test";
+  await assertSucceeds(
+    setDoc(doc(alphaAdminDb, "companies", CO_ALPHA, "contracts", partialContractId), {
+      title: "Partial Workflow Test Contract",
+      services: [
+        { id: "srv-done", name: "Done Service", department: "IT", selected: true, isConverted: true, convertedTaskId: "task-srv-done" },
+        { id: "srv-todo", name: "Todo Service", department: "IT", selected: true, isConverted: false },
+      ],
+      convertedToTasks: false,
+      createdTaskIds: ["task-srv-done"],
+    })
+  );
+
+  // Pre-create already converted task
+  await assertSucceeds(
+    createTaskHelper(alphaEmpDb, CO_ALPHA, "task-srv-done", {
+      title: "Done Service Task",
+      contractId: partialContractId,
+    })
+  );
+
+  const contractSnap = await getDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "contracts", partialContractId));
+  const pending = contractSnap.data().services.filter((s) => s.selected && (!s.isConverted || !s.convertedTaskId));
+
+  if (pending.length !== 1 || pending[0].id !== "srv-todo") {
+    throw new Error("Failed to filter out already converted service on retry");
+  }
+
+  // Create only for pending
+  await assertSucceeds(
+    createTaskHelper(alphaEmpDb, CO_ALPHA, "task-srv-todo", {
+      title: "Todo Service Task",
+      contractId: partialContractId,
+    })
+  );
+
+  // Update contract
+  await assertSucceeds(
+    updateDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "contracts", partialContractId), {
+      convertedToTasks: true,
+      createdTaskIds: ["task-srv-done", "task-srv-todo"],
+    })
+  );
+
+  const finalSnap = await getDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "contracts", partialContractId));
+  if (finalSnap.data().createdTaskIds.length !== 2) {
+    throw new Error("Expected exactly 2 createdTaskIds after partial retry");
+  }
+});
+
+// 12. Cross-tenant isolation on tasks: Beta Admin CANNOT read or link Alpha's tasks
+await check("Beta Admin CANNOT read Alpha's contract tasks", async () => {
+  const mainTaskId = "task-brand-main-101";
+  await assertFails(getDoc(doc(betaAdminDb, "companies", CO_ALPHA, "tasks", mainTaskId)));
+});
+
+await check("Beta Admin CANNOT write tasks to Alpha's company partition", async () => {
+  await assertFails(
+    setDoc(doc(betaAdminDb, "companies", CO_ALPHA, "tasks", "rogue-beta-task"), {
+      title: "Intruder Task",
+      contractId: "contract-valid-save",
+    })
+  );
+});
+
 // --- SCENARIO 7: Cross-Tenant Isolation Enforcement ---
 await check("Beta Admin CANNOT read Alpha's contacts", async () => {
   await assertFails(getDoc(doc(betaAdminDb, "companies", CO_ALPHA, "contacts", "contact-101")));

@@ -23,12 +23,15 @@ function bullet(text: string) {
 }
 
 function clause(title: string, bullets: string[], body?: string): ContractClause {
-  return {
+  const c: ContractClause = {
     id: uid("cls"),
     title,
-    body,
     bullets: bullets.map(bullet),
   };
+  if (body !== undefined) {
+    c.body = body;
+  }
+  return c;
 }
 
 export function formatContractNumber(n = Date.now() % 1000000): string {

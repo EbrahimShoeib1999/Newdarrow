@@ -5,6 +5,10 @@ import type {
   CreateContractDTO,
   UpdateContractDTO,
 } from "../types/contract.types";
+import {
+  validateContractPayload,
+  normalizeContractPayload,
+} from "../utils/contract-normalization";
 
 const base = createCrmCollectionService<
   SavedContract,
@@ -18,7 +22,15 @@ const base = createCrmCollectionService<
 export const ContractsService = {
   getAll: base.getAll,
   getById: base.getById,
-  create: base.create,
-  update: base.update,
+  async create(companyId: string, data: CreateContractDTO) {
+    validateContractPayload(data);
+    const normalized = normalizeContractPayload(data);
+    return base.create(companyId, normalized);
+  },
+  async update(companyId: string, id: string, data: UpdateContractDTO) {
+    validateContractPayload(data);
+    const normalized = normalizeContractPayload(data);
+    return base.update(companyId, id, normalized);
+  },
   delete: base.delete,
 };

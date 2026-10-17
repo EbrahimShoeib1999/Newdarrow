@@ -31,18 +31,21 @@ export function deepStripUndefined<T>(value: T): T {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((item) => deepStripUndefined(item)) as T;
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => deepStripUndefined(item)) as unknown as T;
   }
   if (value !== null && typeof value === "object") {
     const proto = Object.getPrototypeOf(value);
     if (proto !== Object.prototype && proto !== null) {
       return value;
     }
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, deepStripUndefined(v)])
-    ) as T;
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, deepStripUndefined(v)])
+      .filter(([, v]) => v !== undefined);
+
+    return Object.fromEntries(entries) as T;
   }
   return value;
 }

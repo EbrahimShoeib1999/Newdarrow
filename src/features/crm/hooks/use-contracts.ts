@@ -44,7 +44,7 @@ export function useCreateContractMutation() {
     mutationFn: (data: Omit<CreateContractDTO, "createdBy">) =>
       ContractsService.create(companyId!, {
         ...data,
-        createdBy: user?.id,
+        ...(user?.id ? { createdBy: user.id } : {}),
         approvalStatus: "pending",
         approvedAt: null,
         approvedBy: null,

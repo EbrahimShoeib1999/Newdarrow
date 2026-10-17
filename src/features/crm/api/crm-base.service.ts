@@ -14,7 +14,7 @@ import {
 import { db } from "@/lib/firebase";
 import type { ApiResponse } from "@/types/api.types";
 import { withLogging } from "@/lib/service-utils";
-import { mapDocWithTimestamps, stripUndefined } from "../utils/firestore-mappers";
+import { mapDocWithTimestamps, deepStripUndefined } from "../utils/firestore-mappers";
 import type { CrmCollectionName } from "../constants/crm-collections";
 
 export interface CrmListOptions {
@@ -64,7 +64,7 @@ export function createCrmCollectionService<T extends { id: string }, CreateDTO, 
 
     async create(companyId: string, data: CreateDTO): Promise<ApiResponse<T>> {
       return withLogging(serviceName, "create", (async () => {
-        const payload = stripUndefined({
+        const payload = deepStripUndefined({
           ...defaults,
           ...data,
           createdAt: serverTimestamp(),
@@ -82,7 +82,7 @@ export function createCrmCollectionService<T extends { id: string }, CreateDTO, 
     async update(companyId: string, id: string, data: UpdateDTO): Promise<ApiResponse<T>> {
       return withLogging(serviceName, "update", (async () => {
         const docRef = doc(db, "companies", companyId, collectionName, id);
-        const clean = stripUndefined({ ...data, updatedAt: serverTimestamp() } as Record<string, unknown>);
+        const clean = deepStripUndefined({ ...data, updatedAt: serverTimestamp() } as Record<string, unknown>);
         await updateDoc(docRef, clean);
         const updated = await getDoc(docRef);
         return {
