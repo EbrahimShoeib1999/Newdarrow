@@ -478,6 +478,13 @@
       "satisfactionNotes": "ملاحظات حول تجربة أو رضا العميل",
       "interests": "اهتمامات العميل",
       "assignedTo": "الموظف المتابع المسؤول",
+      "financialInstitutionType": "نوع المؤسسة المالية",
+      "establishmentType": "نوع المنشأة",
+      "socialAccounts": "حسابات التواصل الاجتماعي",
+      "addresses": "العناوين",
+      "financialInfo": "المعلومات المالية",
+      "crmSalesInfo": "بيانات المبيعات وخدمة العملاء",
+      "close": "إغلاق",
       "notes": "ملاحظات عامة",
       "cancel": "إلغاء",
       "create": "حفظ الجهة",
@@ -498,9 +505,14 @@
       "overview": "نظرة عامة",
       "deals": "الصفقات",
       "tasks": "المهام",
+      "billing": "الفواتير والمالية",
+      "reports": "التقارير",
       "notes": "ملاحظات",
       "attachments": "مرفقات",
       "timeline": "الجدول الزمني"
+    },
+    "billing": {
+      "empty": "لا توجد فواتير مرتبطة بهذا العميل."
     },
     "deals": {
       "empty": "لا صفقات مرتبطة."
@@ -516,8 +528,6 @@
     "searchPlaceholder": "بحث الصفقات…",
     "empty": "لا صفقات.",
     "addDeal": "إضافة صفقة",
-    "description": "تتبع مسار المبيعات ومراحل الصفقات.",
-    "addDeal": "إضافة صفقة",
     "stage": {
       "lead": "عميل محتمل",
       "contacted": "تم التواصل",
@@ -527,11 +537,16 @@
       "won": "فوز",
       "lost": "خسارة"
     },
+    "board": {
+      "emptyTitle": "لا توجد صفقات في هذه المرحلة",
+      "emptySubtitle": "اسحب الصفقات هنا أو أضف صفقة جديدة"
+    },
     "form": {
       "createTitle": "إنشاء صفقة",
       "editTitle": "تعديل الصفقة",
       "title": "العنوان",
       "contact": "جهة الاتصال",
+      "lead": "العميل المحتمل",
       "amount": "المبلغ",
       "currency": "العملة",
       "stage": "المرحلة",
@@ -707,6 +722,7 @@
     "pricesIncludeVat": "الأسعار شاملة ضريبة القيمة المضافة",
     "total": "الإجمالي",
     "includingVat": "شامل الضريبة",
+    "selectedItems": "{{count}} خدمات محددة",
     "selectedItems_one": "{{count}} خدمة محددة",
     "selectedItems_other": "{{count}} خدمات محددة",
     "preview": "معاينة",

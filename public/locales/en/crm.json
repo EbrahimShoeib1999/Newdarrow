@@ -484,6 +484,13 @@
       "satisfactionNotes": "Satisfaction Notes / Feedback",
       "interests": "Client Interests & Tags",
       "assignedTo": "Follow-up Agent",
+      "financialInstitutionType": "Financial Institution Type",
+      "establishmentType": "Establishment Type",
+      "socialAccounts": "Social Accounts",
+      "addresses": "Addresses",
+      "financialInfo": "Financial Info",
+      "crmSalesInfo": "Sales & CRM Info",
+      "close": "Close",
       "notes": "General Notes",
       "cancel": "Cancel",
       "create": "Save Contact",
@@ -504,9 +511,14 @@
       "overview": "Overview",
       "deals": "Deals",
       "tasks": "Tasks",
+      "billing": "Billing & Finance",
+      "reports": "Reports",
       "notes": "Notes",
       "attachments": "Attachments",
       "timeline": "Timeline"
+    },
+    "billing": {
+      "empty": "No invoices linked to this contact."
     },
     "deals": {
       "empty": "No deals linked to this contact."
@@ -531,11 +543,16 @@
       "won": "Won",
       "lost": "Lost"
     },
+    "board": {
+      "emptyTitle": "No deals in this stage",
+      "emptySubtitle": "Drag deals here or add a new deal"
+    },
     "form": {
       "createTitle": "Create deal",
       "editTitle": "Edit deal",
       "title": "Title",
       "contact": "Contact",
+      "lead": "Lead",
       "amount": "Amount",
       "currency": "Currency",
       "stage": "Stage",
@@ -711,6 +728,7 @@
     "pricesIncludeVat": "Prices include VAT",
     "total": "Total",
     "includingVat": "VAT inclusive",
+    "selectedItems": "{{count}} services selected",
     "selectedItems_one": "{{count}} service selected",
     "selectedItems_other": "{{count}} services selected",
     "preview": "Preview",

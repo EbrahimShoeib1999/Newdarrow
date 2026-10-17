@@ -3,11 +3,11 @@ import { cn } from "@/lib/utils";
 import type { PortalId } from "@/lib/portal-permissions";
 import { PortalSubNav } from "@/features/portals/components/PortalSubNav";
 
-const FULL_BLEED_PATHS = ["/crm/deals", "/chat"];
-
 function isFullBleedPath(pathname: string) {
-  if (FULL_BLEED_PATHS.some((p) => pathname.startsWith(p))) return true;
-  return pathname === "/tasks/work";
+  if (pathname.startsWith("/chat")) return true;
+  if (pathname.startsWith("/tasks/work")) return true;
+  if (pathname === "/crm/deals" || pathname === "/crm/deals/") return true;
+  return false;
 }
 
 interface PortalPageShellProps {
@@ -52,7 +52,12 @@ export function PortalPageShell({
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col md:min-h-0 md:overflow-hidden">
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col",
+          fullBleed && "md:min-h-0 md:overflow-hidden"
+        )}
+      >
         {children}
       </div>
     </div>
