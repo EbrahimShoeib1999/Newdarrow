@@ -64,6 +64,7 @@ export interface Task {
   claimedAt?: string | null;
   claimedBy?: string | null;
   contractId?: string;
+  dealId?: string;
   contactId?: string;
   projectId?: string | null;
   serviceItemId?: string;
@@ -95,6 +96,7 @@ export interface CreateTaskDTO {
   claimedAt?: string | null;
   claimedBy?: string | null;
   contractId?: string;
+  dealId?: string;
   contactId?: string;
   projectId?: string | null;
   serviceItemId?: string;
@@ -121,6 +123,7 @@ export interface UpdateTaskDTO {
   claimedAt?: string | null;
   claimedBy?: string | null;
   contractId?: string;
+  dealId?: string;
   contactId?: string;
   projectId?: string | null;
   serviceItemId?: string;
@@ -138,6 +141,10 @@ export interface TaskFilters {
   parentId?: string | null;
   sprintId?: string | null;
   assigneeId?: string;
+  department?: string;
+  contractId?: string;
+  dealId?: string;
+  contactId?: string;
   search?: string;
   page?: number;
   pageSize?: number;

@@ -138,6 +138,18 @@ export const TaskService = {
       if (filters?.assigneeId) {
         tasks = tasks.filter(t => t.assigneeId === filters.assigneeId);
       }
+      if (filters?.department) {
+        tasks = tasks.filter(t => t.department === filters.department);
+      }
+      if (filters?.contractId) {
+        tasks = tasks.filter(t => t.contractId === filters.contractId);
+      }
+      if (filters?.dealId) {
+        tasks = tasks.filter(t => t.dealId === filters.dealId);
+      }
+      if (filters?.contactId) {
+        tasks = tasks.filter(t => t.contactId === filters.contactId);
+      }
       if (filters?.search) {
         const search = filters.search.toLowerCase();
         tasks = tasks.filter(
