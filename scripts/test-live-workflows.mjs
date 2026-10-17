@@ -146,6 +146,190 @@ await check("Alpha Employee filters contacts by source & status", async () => {
   if (snap.size !== 1) throw new Error(`Expected 1 contact, got ${snap.size}`);
 });
 
+// --- SCENARIO 2B: Dynamic Entity Types, Multi-Select Relationships & Associated Contacts ---
+await check("Alpha Employee creates Company entity with associated contacts & multi-select relationships", async () => {
+  await assertSucceeds(
+    setDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "contacts", "contact-comp-1"), {
+      entityType: "company",
+      accountName: "Al-Amal Logistics LLC",
+      legalName: "Al-Amal Global Logistics Co.",
+      establishmentType: "llc",
+      commercialRegister: "1010778899",
+      unifiedNumber: "7001234567",
+      taxNumber: "310123456700003",
+      mainActivity: "Freight and supply chain management",
+      branchesCount: 5,
+      city: "الرياض",
+      region: "منطقة الرياض",
+      relationships: ["active_client", "vendor", "partner"],
+      relationshipStatuses: {
+        active_client: "active",
+        vendor: "approved",
+        partner: "negotiating",
+      },
+      associatedContacts: [
+        {
+          id: "assoc-1",
+          name: "Sami Al-Otaibi",
+          jobTitle: "Chief Executive Officer",
+          department: "Executive Management",
+          phone: "+966501112233",
+          email: "sami@alamal.sa",
+          contactRole: "owner",
+          isDecisionMaker: true,
+          isPrimary: true,
+          notes: "Main point of contact for executive contracts",
+        },
+        {
+          id: "assoc-2",
+          name: "Reem Al-Ghamdi",
+          jobTitle: "Marketing Director",
+          department: "Marketing & PR",
+          phone: "+966504445566",
+          email: "reem@alamal.sa",
+          contactRole: "marketing_manager",
+          isDecisionMaker: true,
+          isPrimary: false,
+          notes: "Decision maker for digital campaigns and creative budgets",
+        },
+      ],
+      addresses: [
+        {
+          id: "addr-1",
+          addressType: "national",
+          buildingNumber: "1234",
+          streetName: "King Fahd Road",
+          district: "Al-Olaya",
+          city: "Riyadh",
+          postalCode: "12211",
+          shortAddress: "RD1234",
+          country: "المملكة العربية السعودية",
+        },
+      ],
+      socialAccounts: [
+        {
+          id: "soc-1",
+          platform: "X",
+          username: "@alamal_logistics",
+          url: "https://x.com/alamal_logistics",
+        },
+        {
+          id: "soc-2",
+          platform: "LinkedIn",
+          username: "alamal-logistics",
+          url: "https://linkedin.com/company/alamal-logistics",
+        },
+      ],
+      financialInfo: {
+        taxNumber: "310123456700003",
+        vatRegistered: "registered",
+        preferredPaymentMethod: "bank_transfer",
+        paymentTerms: "30_days",
+        creditLimit: 250000,
+        financialNotes: "Approved credit terms",
+      },
+      crmSalesInfo: {
+        sector: "الخدمات اللوجستية وسلاسل الإمداد",
+        expectedBudget: "300,000 SAR",
+        expectedStartDate: "2026-11-01",
+        hasMarketingTeam: true,
+        servicesInterested: ["إدارة حسابات", "سيو ومحركات بحث", "إعلانات ممولة"],
+      },
+      classification: "actual_client",
+      source: "website",
+      status: "active",
+      assignedTo: "user-alpha-emp",
+      createdAt: new Date().toISOString(),
+    })
+  );
+});
+
+await check("Alpha Employee filters contacts by entityType == 'company'", async () => {
+  const snap = await assertSucceeds(
+    getDocs(
+      query(
+        collection(alphaEmpDb, "companies", CO_ALPHA, "contacts"),
+        where("entityType", "==", "company")
+      )
+    )
+  );
+  if (snap.size !== 1) throw new Error(`Expected 1 company contact, got ${snap.size}`);
+  if (snap.docs[0].data().accountName !== "Al-Amal Logistics LLC") {
+    throw new Error("Company accountName mismatch");
+  }
+});
+
+await check("Alpha Employee queries contacts by multi-select relationship (array-contains 'vendor')", async () => {
+  const snap = await assertSucceeds(
+    getDocs(
+      query(
+        collection(alphaEmpDb, "companies", CO_ALPHA, "contacts"),
+        where("relationships", "array-contains", "vendor")
+      )
+    )
+  );
+  if (snap.size !== 1) throw new Error(`Expected 1 contact with 'vendor' relationship, got ${snap.size}`);
+  const data = snap.docs[0].data();
+  if (!data.relationships.includes("active_client") || !data.relationships.includes("partner")) {
+    throw new Error("Multi-select relationships not preserved");
+  }
+});
+
+await check("Alpha Employee verifies primary associated contact person and decision maker integrity", async () => {
+  const snap = await assertSucceeds(
+    getDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "contacts", "contact-comp-1"))
+  );
+  const data = snap.data();
+  if (!Array.isArray(data.associatedContacts) || data.associatedContacts.length !== 2) {
+    throw new Error("Expected 2 associated contacts");
+  }
+  const primary = data.associatedContacts.find((c) => c.isPrimary);
+  if (!primary || primary.name !== "Sami Al-Otaibi") {
+    throw new Error("Primary contact person resolution failed");
+  }
+  const decisionMakers = data.associatedContacts.filter((c) => c.isDecisionMaker);
+  if (decisionMakers.length !== 2) {
+    throw new Error("Decision makers count mismatch");
+  }
+});
+
+await check("Alpha Employee switches primary associated contact person to Reem Al-Ghamdi", async () => {
+  const snap = await getDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "contacts", "contact-comp-1"));
+  const prevData = snap.data();
+  const updatedContacts = prevData.associatedContacts.map((c) => ({
+    ...c,
+    isPrimary: c.id === "assoc-2",
+  }));
+
+  await assertSucceeds(
+    updateDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "contacts", "contact-comp-1"), {
+      associatedContacts: updatedContacts,
+    })
+  );
+
+  const reloaded = await getDoc(doc(alphaEmpDb, "companies", CO_ALPHA, "contacts", "contact-comp-1"));
+  const newPrimary = reloaded.data().associatedContacts.find((c) => c.isPrimary);
+  if (!newPrimary || newPrimary.name !== "Reem Al-Ghamdi") {
+    throw new Error("Failed to switch primary associated contact");
+  }
+  const primaryCount = reloaded.data().associatedContacts.filter((c) => c.isPrimary).length;
+  if (primaryCount !== 1) {
+    throw new Error(`Enforce single primary: expected 1 primary contact, found ${primaryCount}`);
+  }
+});
+
+await check("Beta Admin cannot read Alpha Company contact with associated persons (multi-tenant boundary)", async () => {
+  await assertFails(
+    getDoc(doc(betaAdminDb, "companies", CO_ALPHA, "contacts", "contact-comp-1"))
+  );
+});
+
+await check("Unauthenticated user cannot read Alpha Company contact (unauthorized boundary)", async () => {
+  await assertFails(
+    getDoc(doc(unauthDb, "companies", CO_ALPHA, "contacts", "contact-comp-1"))
+  );
+});
+
 // --- SCENARIO 3: Lead -> Deal -> Contract Integration ---
 await check("Alpha Employee creates a lead referencing the contact", async () => {
   await assertSucceeds(

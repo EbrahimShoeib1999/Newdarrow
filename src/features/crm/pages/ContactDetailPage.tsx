@@ -26,6 +26,7 @@ import {
   ListTodo,
   Paperclip,
   User,
+  Users,
   Clock,
   CreditCard,
   FileText,
@@ -33,6 +34,10 @@ import {
   FileSignature,
   Workflow,
   Globe,
+  Share2,
+  MapPin,
+  ExternalLink,
+  MessageSquare,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
@@ -158,6 +163,32 @@ export function ContactDetailPage() {
       <Card className="border border-default-100 shadow-sm rounded-3xl bg-default-50/50">
         <CardBody className="p-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
+            {/* Entity Type */}
+            {contact.entityType && (
+              <Chip color="primary" variant="solid" size="sm" className="font-bold">
+                {contact.entityType === "company" && "🏢 "}
+                {contact.entityType === "establishment" && "🏬 "}
+                {contact.entityType === "government" && "🏛️ "}
+                {contact.entityType === "non_profit" && "🤝 "}
+                {contact.entityType === "bank" && "🏦 "}
+                {contact.entityType === "media" && "📻 "}
+                {contact.entityType === "influencer" && "✨ "}
+                {contact.entityType === "individual" && "👤 "}
+                {t(`contacts.entityTypes.${contact.entityType}`, { defaultValue: contact.entityType })}
+              </Chip>
+            )}
+
+            {/* Relationships */}
+            {contact.relationships && contact.relationships.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1">
+                {contact.relationships.map((rel) => (
+                  <Chip key={rel} color="secondary" variant="flat" size="sm" className="font-bold">
+                    {t(`contacts.relationships.${rel}`, { defaultValue: rel })}
+                  </Chip>
+                ))}
+              </div>
+            )}
+
             {/* Dynamic Classification */}
             {contact.classification && (() => {
               const def = classificationsMap[contact.classification];
@@ -346,46 +377,386 @@ export function ContactDetailPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FieldBox label={t("contacts.form.firstName")}>{contact.firstName}</FieldBox>
-              <FieldBox label={t("contacts.form.lastName")}>{contact.lastName || "—"}</FieldBox>
-              <FieldBox label={t("contacts.form.email")} icon={<Mail className="h-3.5 w-3.5" />}>
-                {contact.email ? (
-                  <a href={`mailto:${contact.email}`} className="text-primary hover:underline">
-                    {contact.email}
-                  </a>
+            {/* Entity-specific Information Grid */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold text-default-700 flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-primary" />
+                {isAr ? "البيانات الأساسية وتفاصيل الجهة" : "Entity Details & Identity"}
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {contact.entityType === "individual" ? (
+                  <>
+                    <FieldBox label={t("contacts.form.firstName")}>{contact.firstName || "—"}</FieldBox>
+                    <FieldBox label={t("contacts.form.fatherName")}>{contact.fatherName || "—"}</FieldBox>
+                    <FieldBox label={t("contacts.form.lastName")}>{contact.lastName || "—"}</FieldBox>
+                    <FieldBox label={t("contacts.form.nationalId")}>{contact.nationalId || "—"}</FieldBox>
+                    <FieldBox label={t("contacts.form.nationality")}>{contact.nationality || "—"}</FieldBox>
+                  </>
                 ) : (
-                  "—"
+                  <>
+                    <FieldBox label={t("contacts.form.accountName")} icon={<Building2 className="h-3.5 w-3.5" />}>
+                      {contact.accountName || "—"}
+                    </FieldBox>
+                    {contact.legalName && (
+                      <FieldBox label={t("contacts.form.legalName")}>{contact.legalName}</FieldBox>
+                    )}
+                    {contact.establishmentType && (
+                      <FieldBox label={t("contacts.form.establishmentType")}>
+                        {t(`contacts.establishmentTypes.${contact.establishmentType}`, { defaultValue: contact.establishmentType })}
+                      </FieldBox>
+                    )}
+                    <FieldBox label={t("contacts.form.commercialRegister")}>
+                      {contact.commercialRegister || "—"}
+                    </FieldBox>
+                    {(contact.crExpiryDate || contact.commercialRegisterExpiry) && (
+                      <FieldBox label={t("contacts.form.crExpiryDate")}>{contact.crExpiryDate || contact.commercialRegisterExpiry}</FieldBox>
+                    )}
+                    {contact.unifiedNumber && (
+                      <FieldBox label={t("contacts.form.unifiedNumber")}>{contact.unifiedNumber}</FieldBox>
+                    )}
+                    <FieldBox label={t("contacts.form.taxNumber") || "Tax Number"}>
+                      {contact.taxNumber || "—"}
+                    </FieldBox>
+                    {contact.mainActivity && (
+                      <FieldBox label={t("contacts.form.mainActivity")}>{contact.mainActivity}</FieldBox>
+                    )}
+                    {contact.branchesCount !== undefined && contact.branchesCount > 0 && (
+                      <FieldBox label={t("contacts.form.branchesCount")}>{contact.branchesCount}</FieldBox>
+                    )}
+                  </>
                 )}
-              </FieldBox>
-              <FieldBox label={t("contacts.form.phone")} icon={<Phone className="h-3.5 w-3.5" />}>
-                {contact.phone || "—"}
-              </FieldBox>
-              <FieldBox label={t("contacts.form.jobTitle")}>{contact.jobTitle || "—"}</FieldBox>
-              <FieldBox label={t("contacts.form.department")}>{contact.department || "—"}</FieldBox>
-              <FieldBox label={t("contacts.form.accountName")} icon={<Building2 className="h-3.5 w-3.5" />}>
-                {contact.accountName || "—"}
-              </FieldBox>
-              <FieldBox label="الموظف المتابع المسؤول">
-                {assignee?.name ? (
-                  <span className="font-bold text-primary">{assignee.name}</span>
-                ) : (
-                  t("contacts.filters.unassigned")
-                )}
-              </FieldBox>
-              <FieldBox label={t("contacts.form.commercialRegister")}>
-                {contact.commercialRegister || "—"}
-              </FieldBox>
-              <FieldBox label={t("contacts.form.taxNumber") || "Tax Number"}>
-                {contact.taxNumber || "—"}
-              </FieldBox>
-              <FieldBox label={t("contacts.form.billingAddress") || "Billing Address"}>
-                {contact.billingAddress || "—"}
-              </FieldBox>
-              <FieldBox label={t("contacts.columns.created")}>{formatDate(contact.createdAt)}</FieldBox>
+                <FieldBox label={t("contacts.form.city")}>{contact.city || "—"}</FieldBox>
+                {contact.region && <FieldBox label={t("contacts.form.region")}>{contact.region}</FieldBox>}
+                <FieldBox label="الموظف المسؤول">
+                  {assignee?.name ? (
+                    <span className="font-bold text-primary">{assignee.name}</span>
+                  ) : (
+                    t("contacts.filters.unassigned")
+                  )}
+                </FieldBox>
+                <FieldBox label={t("contacts.columns.created")}>{formatDate(contact.createdAt)}</FieldBox>
+              </div>
             </div>
+
+            {/* Social Accounts Section */}
+            {contact.socialAccounts && contact.socialAccounts.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <h4 className="text-sm font-bold text-default-700 flex items-center gap-2">
+                  <Share2 className="h-4 w-4 text-primary" />
+                  {t("contacts.form.socialAccounts")}
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {contact.socialAccounts.map((account, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 px-3 py-2 bg-default-100/70 border border-default-200 rounded-2xl text-xs font-semibold"
+                    >
+                      <span className="text-primary font-bold">{account.platform}:</span>
+                      {account.url ? (
+                        <a
+                          href={account.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-default-700 hover:text-primary flex items-center gap-1 font-mono"
+                        >
+                          {account.username || account.url}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : (
+                        <span className="font-mono text-default-700">{account.username || "—"}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Addresses Section */}
+            {((contact.addresses && contact.addresses.length > 0) || contact.billingAddress) && (
+              <div className="space-y-3 pt-2">
+                <h4 className="text-sm font-bold text-default-700 flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-primary" />
+                  {t("contacts.form.addresses")}
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {contact.addresses?.map((addr, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 bg-default-50 border border-default-200/80 rounded-2xl text-xs space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <Chip size="sm" variant="flat" color="primary" className="font-bold text-[10px]">
+                          {t(`contacts.addressTypes.${addr.addressType || addr.type}`, { defaultValue: addr.addressType || addr.type })}
+                        </Chip>
+                        {addr.country && <span className="text-default-500 font-medium">{addr.country}</span>}
+                      </div>
+                      <div className="font-semibold text-default-800 text-sm">
+                        {[addr.buildingNumber, addr.streetName || addr.street, addr.district].filter(Boolean).join("، ") || addr.shortAddress || "—"}
+                      </div>
+                      <div className="text-default-500 flex items-center gap-3">
+                        <span>{addr.city}{addr.region ? ` - ${addr.region}` : ""}</span>
+                        {addr.postalCode && <span>الرمز: {addr.postalCode}</span>}
+                        {addr.additionalNumber && <span>الإضافي: {addr.additionalNumber}</span>}
+                      </div>
+                      {addr.notes && <p className="text-default-400 italic text-[11px] pt-1">{addr.notes}</p>}
+                    </div>
+                  ))}
+                  {contact.billingAddress && (!contact.addresses || contact.addresses.length === 0) && (
+                    <div className="p-3 bg-default-50 border border-default-200 rounded-2xl text-xs">
+                      <span className="text-default-400 block font-medium mb-1">العنوان المسجل:</span>
+                      <p className="font-semibold text-default-800">{contact.billingAddress}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Financial & CRM Sales Details */}
+            {(contact.financialInfo || contact.crmSalesInfo) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                {contact.financialInfo && (
+                  <div className="p-4 bg-default-50/70 border border-default-200/80 rounded-3xl space-y-3">
+                    <h4 className="text-sm font-bold text-default-800 flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-emerald-600" />
+                      {t("contacts.form.financialInfo")}
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-default-400 block">التسجيل الضريبي:</span>
+                        <span className="font-semibold">{contact.financialInfo.vatRegistered ? "مسجل بالضريبة" : "غير مسجل"}</span>
+                      </div>
+                      {contact.financialInfo.preferredPaymentMethod && (
+                        <div>
+                          <span className="text-default-400 block">طريقة الدفع:</span>
+                          <span className="font-semibold">{contact.financialInfo.preferredPaymentMethod}</span>
+                        </div>
+                      )}
+                      {contact.financialInfo.paymentTerms && (
+                        <div>
+                          <span className="text-default-400 block">شروط الدفع:</span>
+                          <span className="font-semibold">{contact.financialInfo.paymentTerms}</span>
+                        </div>
+                      )}
+                      {contact.financialInfo.paymentPeriod && (
+                        <div>
+                          <span className="text-default-400 block">مدة السداد:</span>
+                          <span className="font-semibold">{contact.financialInfo.paymentPeriod}</span>
+                        </div>
+                      )}
+                      {contact.financialInfo.creditLimit && (
+                        <div>
+                          <span className="text-default-400 block">الحد الائتماني:</span>
+                          <span className="font-semibold font-mono">{contact.financialInfo.creditLimit} ر.س</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {contact.crmSalesInfo && (
+                  <div className="p-4 bg-default-50/70 border border-default-200/80 rounded-3xl space-y-3">
+                    <h4 className="text-sm font-bold text-default-800 flex items-center gap-2">
+                      <Briefcase className="h-4 w-4 text-primary" />
+                      {t("contacts.form.crmSalesInfo")}
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {contact.crmSalesInfo.sector && (
+                        <div>
+                          <span className="text-default-400 block">القطاع التجاري:</span>
+                          <span className="font-semibold">{contact.crmSalesInfo.sector}</span>
+                        </div>
+                      )}
+                      {contact.crmSalesInfo.expectedBudget && (
+                        <div>
+                          <span className="text-default-400 block">الميزانية المتوقعة:</span>
+                          <span className="font-semibold font-mono">{contact.crmSalesInfo.expectedBudget}</span>
+                        </div>
+                      )}
+                      {contact.crmSalesInfo.expectedStartDate && (
+                        <div>
+                          <span className="text-default-400 block">موعد البدء المتوقع:</span>
+                          <span className="font-semibold">{contact.crmSalesInfo.expectedStartDate}</span>
+                        </div>
+                      )}
+                      {contact.crmSalesInfo.hasMarketingTeam !== undefined && (
+                        <div>
+                          <span className="text-default-400 block">فريق تسويق داخلي:</span>
+                          <span className="font-semibold">{contact.crmSalesInfo.hasMarketingTeam ? "نعم" : "لا"}</span>
+                        </div>
+                      )}
+                    </div>
+                    {(() => {
+                      const services = contact.crmSalesInfo.servicesInterested || contact.crmSalesInfo.interestedServices;
+                      if (!services || services.length === 0) return null;
+                      return (
+                        <div className="pt-2 border-t border-default-200">
+                          <span className="text-[11px] text-default-400 block mb-1">الخدمات المهتم بها:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {services.map((svc: string) => (
+                              <Chip key={svc} size="sm" variant="flat" color="primary" className="text-[10px]">
+                                {svc}
+                              </Chip>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </Tab>
+
+        {/* Tab 2: Associated Contacts (جهات الاتصال التابعة) */}
+        {(contact.entityType !== "individual" || (contact.associatedContacts && contact.associatedContacts.length > 0)) && (
+          <Tab
+            key="associated_contacts"
+            title={
+              <span className="flex items-center gap-1.5 font-bold">
+                <Users className="h-4 w-4" />
+                {isAr ? "جهات الاتصال التابعة" : "Associated Contacts"} ({contact.associatedContacts?.length || 0})
+              </span>
+            }
+          >
+            <div className="pt-4 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-default-50 p-4 rounded-3xl border border-default-100">
+                <div>
+                  <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                    <Users className="h-4 w-4 text-primary" />
+                    {isAr ? "فريق عمل وجهات التواصل بالمنشأة" : "Organization Contact Persons"}
+                  </h4>
+                  <p className="text-xs text-default-500 mt-0.5">
+                    {isAr
+                      ? "الأشخاص والمسؤولون المخولون بالتواصل واتخاذ القرار في هذه المنشأة"
+                      : "Authorized contact persons and decision makers for this organization"}
+                  </p>
+                </div>
+                {canManageContacts && (
+                  <Button
+                    color="primary"
+                    size="sm"
+                    className="font-bold rounded-xl"
+                    startContent={<Pencil className="w-3.5 h-3.5" />}
+                    onPress={() => setEditOpen(true)}
+                  >
+                    {isAr ? "إدارة جهات الاتصال" : "Manage Contacts"}
+                  </Button>
+                )}
+              </div>
+
+              {!contact.associatedContacts || contact.associatedContacts.length === 0 ? (
+                <div className="text-center py-10 bg-default-50/50 border border-default-100 rounded-3xl">
+                  <Users className="w-10 h-10 text-default-400 mx-auto mb-2" />
+                  <p className="text-default-500 text-sm font-medium">
+                    {isAr ? "لا توجد جهات اتصال تابعة مضافة لهذه المنشأة حالياً." : "No associated contacts added for this entity yet."}
+                  </p>
+                  {canManageContacts && (
+                    <Button
+                      color="primary"
+                      variant="flat"
+                      size="sm"
+                      className="mt-3 font-bold rounded-xl"
+                      startContent={<Plus className="h-4 w-4" />}
+                      onPress={() => setEditOpen(true)}
+                    >
+                      {isAr ? "إضافة جهة اتصال للمنشأة" : "Add Contact Person"}
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {contact.associatedContacts.map((person) => (
+                    <Card
+                      key={person.id}
+                      className={`glass-card border rounded-3xl transition-all hover:shadow-md ${
+                        person.isPrimary
+                          ? "border-warning-300 dark:border-warning-700 bg-warning-50/20 shadow-sm"
+                          : "border-default-200"
+                      }`}
+                    >
+                      <CardBody className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="font-bold text-sm text-default-900">{person.name}</h4>
+                            </div>
+                            <p className="text-xs text-default-500 font-medium">
+                              {[person.jobTitle, person.department].filter(Boolean).join(" - ") || (isAr ? "جهة تواصل" : "Contact")}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            {person.isPrimary && (
+                              <Chip size="sm" color="warning" variant="flat" className="font-bold text-[10px] h-5">
+                                ⭐ {isAr ? "رئيسي" : "Primary"}
+                              </Chip>
+                            )}
+                            {person.isDecisionMaker && (
+                              <Chip size="sm" color="secondary" variant="flat" className="font-bold text-[10px] h-5">
+                                🎯 {isAr ? "صاحب قرار" : "Decision Maker"}
+                              </Chip>
+                            )}
+                          </div>
+                        </div>
+
+                        {(person.contactRole || person.type) && (
+                          <Chip size="sm" variant="bordered" className="text-[10px] h-5 border-default-300">
+                            {t(`contacts.contactPersonRoles.${person.contactRole || person.type}`, { defaultValue: person.contactRole || person.type })}
+                          </Chip>
+                        )}
+
+                        <div className="space-y-1.5 pt-2 border-t border-default-100 text-xs">
+                          {person.phone && (
+                            <div className="flex items-center justify-between bg-default-100/40 p-1.5 rounded-xl">
+                              <span className="font-mono font-bold text-default-700">{person.phone}</span>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  isIconOnly
+                                  size="sm"
+                                  variant="light"
+                                  className="h-6 w-6 min-w-6 text-primary"
+                                  as="a"
+                                  href={`tel:${person.phone}`}
+                                >
+                                  <Phone className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  isIconOnly
+                                  size="sm"
+                                  variant="light"
+                                  className="h-6 w-6 min-w-6 text-emerald-600"
+                                  as="a"
+                                  href={`https://wa.me/${person.phone.replace(/\D/g, "")}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          {person.email && (
+                            <div className="flex items-center gap-1.5 text-default-600 truncate">
+                              <Mail className="h-3 w-3 text-default-400 shrink-0" />
+                              <a href={`mailto:${person.email}`} className="hover:text-primary truncate">
+                                {person.email}
+                              </a>
+                            </div>
+                          )}
+
+                          {person.notes && (
+                            <p className="text-default-400 text-[11px] italic pt-1">{person.notes}</p>
+                          )}
+                        </div>
+                      </CardBody>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Tab>
+        )}
 
         <Tab
           key="deals"

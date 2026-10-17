@@ -49,12 +49,23 @@ export function CrmGlobalSearch() {
     }
     for (const c of contacts?.data ?? []) {
       const name = contactDisplayName(c);
-      if ([name, c.email, c.accountName].some((v) => v?.toLowerCase().includes(q))) {
+      const associatedNames = (c.associatedContacts ?? []).map((ac) => `${ac.name} ${ac.phone || ""}`).join(" ");
+      const searchFields = [
+        name,
+        c.email,
+        c.phone,
+        c.accountName,
+        c.commercialRegister,
+        c.unifiedNumber,
+        c.taxNumber,
+        associatedNames,
+      ];
+      if (searchFields.some((v) => v?.toLowerCase().includes(q))) {
         items.push({
           id: c.id,
           type: "contact",
           label: name,
-          sub: c.accountName || t("nav.contacts"),
+          sub: c.accountName || c.phone || t("nav.contacts"),
           href: `/crm/contacts/${c.id}`,
           icon: Users,
         });

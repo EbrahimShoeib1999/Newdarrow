@@ -633,17 +633,23 @@ export function ContractBuilderForm() {
   const onSelectContact = (contactId: string) => {
     const contact = contacts.find((c) => c.id === contactId);
     if (!contact) return;
+    const primaryContact = contact.associatedContacts?.find((ac) => ac.isPrimary) || contact.associatedContacts?.[0];
+    const primaryAddr = contact.addresses?.find((a) => (a.addressType || a.type) === "national") || contact.addresses?.[0];
+    const formattedAddr = primaryAddr
+      ? [primaryAddr.buildingNumber, primaryAddr.streetName || primaryAddr.street, primaryAddr.district, primaryAddr.city].filter(Boolean).join("، ")
+      : contact.billingAddress || "";
+
     patch({
       contactId,
       client: {
         name: contact.accountName || contactDisplayName(contact) || "",
         commercialRegister: contact.commercialRegister || "",
         taxNumber: contact.taxNumber || "",
-        address: contact.billingAddress || "",
-        representative: contactDisplayName(contact),
-        phone: contact.phone || "",
-        email: contact.email || "",
-        idNumber: "",
+        address: formattedAddr,
+        representative: primaryContact?.name || (contact.entityType === "individual" ? contactDisplayName(contact) : contact.accountName || contactDisplayName(contact)),
+        phone: primaryContact?.phone || contact.phone || "",
+        email: primaryContact?.email || contact.email || "",
+        idNumber: contact.nationalId || "",
       },
     });
     toast.success(t("contract.clientLoaded"));

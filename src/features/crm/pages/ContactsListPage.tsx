@@ -59,13 +59,21 @@ import { ManageClassificationsModal } from "../components/ManageClassificationsM
 import { useContactClassifications } from "../hooks/use-contact-classifications";
 import { formatDate, formatNumber } from "@/lib/utils";
 import type { ContactClassificationItem } from "../types/classification.types";
-import type { ContactSource, ContactStatus, CustomerSatisfaction } from "../types/contacts.types";
+import type {
+  ContactSource,
+  ContactStatus,
+  CustomerSatisfaction,
+  EntityType,
+  ContactRelationship,
+} from "../types/contacts.types";
 
 const DEFAULT_PARAMS: ContactsListParams = {
   page: 1,
   pageSize: 10,
   sortField: "createdAt",
   sortOrder: "desc",
+  entityType: "all",
+  relationship: "all",
   classification: "all",
   source: "all",
   status: "all",
@@ -237,6 +245,44 @@ export function ContactsListPage() {
     }
   };
 
+  const renderEntityTypeBadge = (entityType?: EntityType) => {
+    switch (entityType) {
+      case "company":
+        return <Chip size="sm" variant="flat" color="primary" className="text-[10px] h-5 font-bold">🏢 {isAr ? "شركة" : "Company"}</Chip>;
+      case "establishment":
+        return <Chip size="sm" variant="flat" color="primary" className="text-[10px] h-5 font-bold">🏬 {isAr ? "مؤسسة" : "Establishment"}</Chip>;
+      case "government":
+        return <Chip size="sm" variant="flat" color="warning" className="text-[10px] h-5 font-bold">🏛️ {isAr ? "حكومية" : "Gov"}</Chip>;
+      case "non_profit":
+        return <Chip size="sm" variant="flat" color="success" className="text-[10px] h-5 font-bold">🤝 {isAr ? "غير ربحية" : "NGO"}</Chip>;
+      case "bank":
+        return <Chip size="sm" variant="flat" color="secondary" className="text-[10px] h-5 font-bold">🏦 {isAr ? "بنك" : "Bank"}</Chip>;
+      case "media":
+        return <Chip size="sm" variant="flat" color="warning" className="text-[10px] h-5 font-bold">📻 {isAr ? "إعلامية" : "Media"}</Chip>;
+      case "influencer":
+        return <Chip size="sm" variant="flat" color="secondary" className="text-[10px] h-5 font-bold">✨ {isAr ? "مؤثر" : "Creator"}</Chip>;
+      case "individual":
+      default:
+        return <Chip size="sm" variant="flat" color="default" className="text-[10px] h-5">👤 {isAr ? "فرد" : "Individual"}</Chip>;
+    }
+  };
+
+  const renderRelationshipsChips = (relationships?: ContactRelationship[]) => {
+    if (!relationships || relationships.length === 0) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-1 pt-0.5">
+        {relationships.map((rel) => {
+          const label = t(`contacts.relationships.${rel}`, { defaultValue: rel });
+          return (
+            <Chip key={rel} size="sm" variant="bordered" className="text-[10px] h-4.5 px-1.5 font-medium border-default-300">
+              {label}
+            </Chip>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (isLoading) return <LoadingSpinner />;
 
   return (
@@ -340,6 +386,57 @@ export function ContactsListPage() {
           {(item) => <SelectItem key={item.id} textValue={item.name}>{item.name}</SelectItem>}
         </Select>
 
+        {/* Entity Type Filter */}
+        <Select
+          {...selectFieldProps({ compact: true })}
+          size="sm"
+          variant="bordered"
+          label={t("contacts.filters.entityType")}
+          className="w-full sm:w-36"
+          selectedKeys={params.entityType && params.entityType !== "all" ? [params.entityType] : []}
+          onSelectionChange={(keys) => {
+            const v = Array.from(keys)[0] as EntityType | undefined;
+            setParams((p) => ({ ...p, entityType: v || "all", page: 1 }));
+          }}
+        >
+          <SelectItem key="all" textValue={t("contacts.entityType.all")}>{t("contacts.entityType.all")}</SelectItem>
+          <SelectItem key="individual" textValue={t("contacts.entityType.individual")}>👤 {t("contacts.entityType.individual")}</SelectItem>
+          <SelectItem key="company" textValue={t("contacts.entityType.company")}>🏢 {t("contacts.entityType.company")}</SelectItem>
+          <SelectItem key="establishment" textValue={t("contacts.entityType.establishment")}>🏬 {t("contacts.entityType.establishment")}</SelectItem>
+          <SelectItem key="government" textValue={t("contacts.entityType.government")}>🏛️ {t("contacts.entityType.government")}</SelectItem>
+          <SelectItem key="non_profit" textValue={t("contacts.entityType.non_profit")}>🤝 {t("contacts.entityType.non_profit")}</SelectItem>
+          <SelectItem key="bank" textValue={t("contacts.entityType.bank")}>🏦 {t("contacts.entityType.bank")}</SelectItem>
+          <SelectItem key="media" textValue={t("contacts.entityType.media")}>📻 {t("contacts.entityType.media")}</SelectItem>
+          <SelectItem key="influencer" textValue={t("contacts.entityType.influencer")}>✨ {t("contacts.entityType.influencer")}</SelectItem>
+          <SelectItem key="other" textValue={t("contacts.entityType.other")}>❓ {t("contacts.entityType.other")}</SelectItem>
+        </Select>
+
+        {/* Relationship Filter */}
+        <Select
+          {...selectFieldProps({ compact: true })}
+          size="sm"
+          variant="bordered"
+          label={t("contacts.filters.relationships")}
+          className="w-full sm:w-40"
+          selectedKeys={params.relationship && params.relationship !== "all" ? [params.relationship] : []}
+          onSelectionChange={(keys) => {
+            const v = Array.from(keys)[0] as ContactRelationship | undefined;
+            setParams((p) => ({ ...p, relationship: v || "all", page: 1 }));
+          }}
+        >
+          <SelectItem key="all" textValue={t("contacts.relationships.all")}>{t("contacts.relationships.all")}</SelectItem>
+          <SelectItem key="lead" textValue={t("contacts.relationships.lead")}>🎯 {t("contacts.relationships.lead")}</SelectItem>
+          <SelectItem key="new_client" textValue={t("contacts.relationships.new_client")}>✨ {t("contacts.relationships.new_client")}</SelectItem>
+          <SelectItem key="active_client" textValue={t("contacts.relationships.active_client")}>🟢 {t("contacts.relationships.active_client")}</SelectItem>
+          <SelectItem key="vip_client" textValue={t("contacts.relationships.vip_client")}>💎 {t("contacts.relationships.vip_client")}</SelectItem>
+          <SelectItem key="vendor" textValue={t("contacts.relationships.vendor")}>📦 {t("contacts.relationships.vendor")}</SelectItem>
+          <SelectItem key="partner" textValue={t("contacts.relationships.partner")}>🤝 {t("contacts.relationships.partner")}</SelectItem>
+          <SelectItem key="contractor" textValue={t("contacts.relationships.contractor")}>📝 {t("contacts.relationships.contractor")}</SelectItem>
+          <SelectItem key="referral" textValue={t("contacts.relationships.referral")}>📣 {t("contacts.relationships.referral")}</SelectItem>
+          <SelectItem key="media" textValue={t("contacts.relationships.media")}>📻 {t("contacts.relationships.media")}</SelectItem>
+          <SelectItem key="influencer" textValue={t("contacts.relationships.influencer")}>🌟 {t("contacts.relationships.influencer")}</SelectItem>
+        </Select>
+
         {/* Dynamic Classification Filter */}
         <Select
           {...selectFieldProps({ compact: true })}
@@ -432,6 +529,8 @@ export function ContactsListPage() {
 
         {(params.search ||
           params.assignedTo ||
+          (params.entityType && params.entityType !== "all") ||
+          (params.relationship && params.relationship !== "all") ||
           (params.classification && params.classification !== "all") ||
           (params.source && params.source !== "all") ||
           (params.status && params.status !== "all") ||
@@ -499,6 +598,21 @@ export function ContactsListPage() {
                         }}
                         className="font-bold"
                       />
+                      <div className="flex flex-wrap items-center gap-1 mt-1">
+                        {renderEntityTypeBadge(contact.entityType)}
+                        {renderRelationshipsChips(contact.relationships)}
+                      </div>
+                      {contact.associatedContacts && contact.associatedContacts.length > 0 && (
+                        <div className="text-[11px] text-default-500 mt-1 flex items-center gap-1 font-medium">
+                          <span className="text-warning-500 font-bold">👤</span>
+                          <span>
+                            {contact.associatedContacts.find((c) => c.isPrimary)?.name || contact.associatedContacts[0]?.name}
+                          </span>
+                          <span className="text-default-400">
+                            ({contact.associatedContacts.find((c) => c.isPrimary)?.jobTitle || contact.associatedContacts[0]?.jobTitle || (isAr ? "جهة تواصل" : "Contact")})
+                          </span>
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
@@ -676,13 +790,28 @@ export function ContactsListPage() {
                           >
                             {contactDisplayName(contact)}
                           </Link>
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {renderEntityTypeBadge(contact.entityType)}
+                            {renderRelationshipsChips(contact.relationships)}
+                          </div>
                           {contact.accountName ? (
-                            <span className="text-xs text-default-500 flex items-center gap-1 font-medium">
+                            <span className="text-xs text-default-500 flex items-center gap-1 font-medium mt-1">
                               <Building2 className="h-3 w-3 text-default-400" />
                               {contact.accountName}
                             </span>
                           ) : (
-                            <span className="text-xs text-default-400">{contact.jobTitle || "—"}</span>
+                            <span className="text-xs text-default-400 block mt-1">{contact.jobTitle || "—"}</span>
+                          )}
+                          {contact.associatedContacts && contact.associatedContacts.length > 0 && (
+                            <div className="text-[11px] text-default-600 mt-1 flex items-center gap-1 bg-default-100/50 px-2 py-0.5 rounded-md">
+                              <span className="text-warning-500 font-bold">⭐</span>
+                              <span className="font-semibold">
+                                {contact.associatedContacts.find((c) => c.isPrimary)?.name || contact.associatedContacts[0]?.name}
+                              </span>
+                              <span className="text-default-400 text-[10px]">
+                                ({contact.associatedContacts.find((c) => c.isPrimary)?.jobTitle || contact.associatedContacts[0]?.jobTitle || (isAr ? "المسؤول" : "Primary")})
+                              </span>
+                            </div>
                           )}
                         </div>
                       </div>
