@@ -136,7 +136,11 @@ export const TaskService = {
         tasks = tasks.filter(t => filters.type!.includes(t.type));
       }
       if (filters?.assigneeId) {
-        tasks = tasks.filter(t => t.assigneeId === filters.assigneeId);
+        if (filters.assigneeId === "unassigned") {
+          tasks = tasks.filter((t) => !t.assigneeId);
+        } else {
+          tasks = tasks.filter((t) => t.assigneeId === filters.assigneeId);
+        }
       }
       if (filters?.department) {
         tasks = tasks.filter(t => t.department === filters.department);

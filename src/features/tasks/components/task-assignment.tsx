@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAllUsers } from "@/features/users/hooks/use-users";
 import { useAuthStore } from "@/stores/auth.store";
 import { useTasksStore } from "@/stores/tasks.store";
@@ -9,7 +10,7 @@ import {
   Spinner,
 } from "@heroui/react";
 import { useMutation } from "@tanstack/react-query";
-import { User, UserPlus, Users } from "lucide-react";
+import { User, UserPlus, Users, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { TaskService } from "../api/tasks.service";
@@ -17,6 +18,8 @@ import { TaskService } from "../api/tasks.service";
 import { useCompany } from "@/features/companies/context/company-context";
 import { selectFieldProps } from "@/components/shared/select-field";
 import { SearchableSelect } from "@/components/shared/searchable-select";
+import { useTaskQuery } from "../hooks/use-tasks";
+import { SmartTaskAssignmentModal } from "./SmartTaskAssignmentModal";
 
 interface TaskAssignmentProps {
   taskId: string;
@@ -39,6 +42,8 @@ export function TaskAssignment({
   const { assignTask, unassignTask } = useTasksStore();
   const { user: currentUser } = useAuthStore();
   const { data: allUsers, isLoading: isLoadingUsers } = useAllUsers();
+  const [smartModalOpen, setSmartModalOpen] = useState(false);
+  const { data: taskData } = useTaskQuery(taskId);
 
   // Mutation for assigning task
   const assignMutation = useMutation({
@@ -123,18 +128,32 @@ export function TaskAssignment({
             {t("assignment.assignTo")}
           </span>
         </div>
-        {currentAssignee && (
-          <Button
-            variant="light"
-            size="sm"
-            onPress={handleUnassign}
-            isDisabled={assignMutation.isPending}
-            className="flex items-center gap-2"
-          >
-            {assignMutation.isPending && <Spinner size="sm" color="current" />}
-            {t("assignment.unassign")}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {taskData?.data && (
+            <Button
+              variant="flat"
+              size="sm"
+              color="primary"
+              className="h-7 text-xs font-bold rounded-lg px-2.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
+              startContent={<Sparkles className="h-3.5 w-3.5 text-primary" />}
+              onPress={() => setSmartModalOpen(true)}
+            >
+              {t("assignment.smartAssign", "تعيين ذكي")}
+            </Button>
+          )}
+          {currentAssignee && (
+            <Button
+              variant="light"
+              size="sm"
+              onPress={handleUnassign}
+              isDisabled={assignMutation.isPending}
+              className="flex items-center gap-2"
+            >
+              {assignMutation.isPending && <Spinner size="sm" color="current" />}
+              {t("assignment.unassign")}
+            </Button>
+          )}
+        </div>
       </div>
 
       <SearchableSelect
@@ -246,6 +265,17 @@ export function TaskAssignment({
       <div className="text-xs font-medium text-muted-foreground pt-1">
         {t("assignment.availableUsers", { count: allUsers?.length || 0 })}
       </div>
+
+      {taskData?.data && (
+        <SmartTaskAssignmentModal
+          isOpen={smartModalOpen}
+          onClose={() => setSmartModalOpen(false)}
+          task={taskData.data}
+          onAssigned={() => {
+            setSmartModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

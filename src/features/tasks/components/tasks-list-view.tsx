@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { Pagination } from "@/components/shared/pagination";
@@ -21,13 +22,14 @@ import {
   TableHeader,
   TableRow,
 } from "@heroui/react";
-import { Eye, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { Eye, MoreHorizontal, Plus, Trash2, UserPlus, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { useDeleteTask, useUpdateTask } from "../hooks/use-task-mutations";
 import { useTasksQuery } from "../hooks/use-tasks";
 import { useTasksUIStore } from "../store/tasks-ui.store";
 import { useAllUsers } from "@/features/users/hooks/use-users";
+import { SmartTaskAssignmentModal } from "./SmartTaskAssignmentModal";
 import type { Task, TaskPriority, TaskStatus } from "../types/task.types";
 
 export function TasksListView() {
@@ -36,6 +38,7 @@ export function TasksListView() {
   const navigate = useNavigate();
   const { filters, sort, page, pageSize, setPage } = useTasksUIStore();
   const { data: allUsers } = useAllUsers();
+  const [smartAssignTask, setSmartAssignTask] = useState<Task | null>(null);
 
   const { data, isLoading: isTasksLoading } = useTasksQuery({
     status: filters.status.length ? filters.status : undefined,
@@ -209,20 +212,39 @@ export function TasksListView() {
                     </DropdownMenu>
                   </Dropdown>
                 </TableCell>
-                <TableCell className="hidden md:table-cell">
+                <TableCell className="hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
                   {task.assignee ? (
-                    <div className="flex items-center gap-2">
-                      <Avatar
-                        size="sm"
-                        src={avatarSrc(task.assignee.avatar)}
-                        fallback={initials}
-                        showFallback
-                        className="h-6 w-6 text-[10px]"
-                      />
-                      <span className="text-xs font-semibold">{assigneeName}</span>
+                    <div className="group flex items-center justify-between gap-1 max-w-[170px]">
+                      <div className="flex items-center gap-2 truncate">
+                        <Avatar
+                          size="sm"
+                          src={avatarSrc(task.assignee.avatar)}
+                          fallback={initials}
+                          showFallback
+                          className="h-6 w-6 text-[10px] shrink-0"
+                        />
+                        <span className="text-xs font-semibold truncate">{assigneeName}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-primary transition-opacity text-default-400 rounded hover:bg-default-100"
+                        title={i18n.language === "ar" ? "تغيير التعيين / تعيين ذكي" : "Re-assign / Smart assign"}
+                        onClick={() => setSmartAssignTask(task)}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   ) : (
-                    <span className="text-xs text-default-400">{t("form.assignee.unassigned")}</span>
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      color="primary"
+                      className="h-7 text-[11px] font-bold rounded-lg px-2.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
+                      startContent={<UserPlus className="h-3.5 w-3.5" />}
+                      onPress={() => setSmartAssignTask(task)}
+                    >
+                      {i18n.language === "ar" ? "تعيين ذكي" : "Smart Assign"}
+                    </Button>
                   )}
                 </TableCell>
                 <TableCell className="hidden md:table-cell text-xs font-semibold text-default-500">
@@ -236,6 +258,14 @@ export function TasksListView() {
                       </Button>
                     </DropdownTrigger>
                     <DropdownMenu aria-label="Task actions">
+                      <DropdownItem
+                        key="smart-assign"
+                        className="text-primary font-bold"
+                        startContent={<Sparkles className="h-4 w-4 text-primary" />}
+                        onPress={() => setSmartAssignTask(task)}
+                      >
+                        {i18n.language === "ar" ? "تعيين ذكي للمهمة" : "Smart Assign"}
+                      </DropdownItem>
                       <DropdownItem
                         key="edit"
                         onPress={() => navigate(`/tasks/${task.id}`)}
@@ -266,6 +296,17 @@ export function TasksListView() {
         <div className="flex justify-center mt-6">
           <Pagination total={totalPages} page={page} onChange={setPage} />
         </div>
+      )}
+
+      {smartAssignTask && (
+        <SmartTaskAssignmentModal
+          isOpen={!!smartAssignTask}
+          onClose={() => setSmartAssignTask(null)}
+          task={smartAssignTask}
+          onAssigned={() => {
+            setSmartAssignTask(null);
+          }}
+        />
       )}
     </>
   );

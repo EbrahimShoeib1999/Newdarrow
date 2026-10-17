@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Accordion,
   AccordionItem,
@@ -148,10 +148,10 @@ function StepBadge({
   return (
     <span
       className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors",
-        done && "bg-success text-white shadow-sm shadow-success/30",
-        active && !done && "bg-primary text-white shadow-sm shadow-primary/30",
-        !active && !done && "bg-default-100 text-default-500"
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl text-xs font-black transition-all",
+        done && "bg-success text-white shadow-md shadow-success/25 ring-2 ring-success/20",
+        active && !done && "bg-primary text-white shadow-md shadow-primary/25 ring-2 ring-primary/20",
+        !active && !done && "bg-default-100 text-default-400 border border-default-200"
       )}
     >
       {done ? <Check className="h-4 w-4" strokeWidth={3} /> : n}
@@ -179,32 +179,31 @@ function SectionShell({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-2xl border bg-content1 shadow-sm transition-shadow",
-        accent === "primary" && "border-primary/25",
-        accent === "success" && "border-success/30",
-        accent === "default" && "border-default-200",
-        "hover:shadow-md"
+        "overflow-hidden rounded-3xl border bg-content1 shadow-sm transition-all hover:shadow-md",
+        accent === "primary" && "border-default-200/80 hover:border-primary/40",
+        accent === "success" && "border-success/30 hover:border-success/50",
+        accent === "default" && "border-default-200 hover:border-default-300"
       )}
     >
       <div
         className={cn(
-          "flex items-start gap-3 border-b px-4 py-3.5 sm:px-5",
-          accent === "primary" && "border-primary/10 bg-primary/[0.04]",
-          accent === "success" && "border-success/10 bg-success/[0.04]",
-          accent === "default" && "border-default-100 bg-default-50/80"
+          "flex items-start gap-3.5 border-b px-5 py-4",
+          accent === "primary" && "border-default-100 bg-gradient-to-r from-primary/[0.04] to-transparent",
+          accent === "success" && "border-success/10 bg-gradient-to-r from-success/[0.05] to-transparent",
+          accent === "default" && "border-default-100 bg-default-50/60"
         )}
       >
         <StepBadge n={step} done={done} active={active} />
         <div className="min-w-0 pt-0.5">
-          <h2 className="text-[15px] font-bold tracking-tight text-default-900">
+          <h2 className="text-base font-bold tracking-tight text-foreground">
             {title}
           </h2>
-          <p className="mt-0.5 text-xs leading-relaxed text-default-500">
+          <p className="mt-0.5 text-xs text-default-500">
             {hint}
           </p>
         </div>
       </div>
-      <div className="space-y-4 p-4 sm:p-5">{children}</div>
+      <div className="space-y-4 p-5">{children}</div>
     </section>
   );
 }
@@ -861,41 +860,94 @@ export function ContractBuilderForm() {
 
   return (
     <div className="space-y-5">
-      {/* Toolbar */}
-      <div className="sticky top-0 z-20 -mx-1 rounded-2xl border border-default-200/80 bg-content1/90 px-3 py-2.5 shadow-sm backdrop-blur-md sm:px-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            color="primary"
-            className="font-semibold shadow-sm shadow-primary/25"
-            startContent={<Download className="h-4 w-4" />}
-            isLoading={exporting}
-            isDisabled={!actionsUnlocked}
-            onPress={() => void handleDownload()}
-          >
-            {t("contract.downloadPdf")}
-          </Button>
-          <Button
-            variant="flat"
-            startContent={<Save className="h-4 w-4" />}
-            isLoading={saving}
-            onPress={() => void handleSave()}
-          >
-            {t("contract.save")}
-          </Button>
-          <Button
-            variant="light"
-            startContent={<FilePlus className="h-4 w-4" />}
-            onPress={() => resetNew()}
-          >
-            {t("contract.new")}
-          </Button>
+      {/* Modern Header Banner & Toolbar */}
+      <div className="rounded-3xl border border-default-200/80 bg-content1/95 p-4 sm:p-5 shadow-sm backdrop-blur-md space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-xs font-bold text-primary px-2.5 py-1 rounded-xl bg-primary/10 border border-primary/20">
+                #{form.contractNumber || "مسودة"}
+              </span>
+              <Chip
+                size="sm"
+                color={activeSaved?.status === "final" ? "success" : "warning"}
+                variant="flat"
+                className="font-bold text-[10px]"
+              >
+                {activeSaved?.status === "final" ? "معتمد رسمياً" : "مسودة / قيد المراجعة"}
+              </Chip>
+              {form.convertedToTasks && (
+                <Chip size="sm" color="secondary" variant="flat" className="font-bold text-[10px]">
+                  مرحّل لمهام الأقسام
+                </Chip>
+              )}
+              {form.dealId && (
+                <Link
+                  to={`/crm/deals/${form.dealId}`}
+                  className="text-xs text-primary font-bold hover:underline flex items-center gap-1 bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-lg transition-colors"
+                >
+                  الصفقة الأصلية
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
+            </div>
+            <h2 className="text-xl font-black text-foreground">
+              {form.title || t("contract.title")}
+            </h2>
+          </div>
 
-          <div className="ms-auto flex min-w-[200px] flex-1 items-center gap-2 sm:max-w-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              color="primary"
+              className="font-bold shadow-md shadow-primary/25 rounded-2xl"
+              startContent={<Download className="h-4 w-4" />}
+              isLoading={exporting}
+              isDisabled={!actionsUnlocked}
+              onPress={() => void handleDownload()}
+            >
+              {t("contract.downloadPdf")}
+            </Button>
+            <Button
+              variant="flat"
+              className="font-bold rounded-2xl"
+              startContent={<Save className="h-4 w-4" />}
+              isLoading={saving}
+              onPress={() => void handleSave()}
+            >
+              {t("contract.save")}
+            </Button>
+            <Button
+              variant="light"
+              className="font-bold rounded-2xl"
+              startContent={<FilePlus className="h-4 w-4" />}
+              onPress={() => resetNew()}
+            >
+              {t("contract.new")}
+            </Button>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-default-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-default-400 font-medium">الطرف الثاني (العميل):</span>
+            <span className="font-bold text-foreground">{form.client.name || "لم يتم تحديد عميل"}</span>
+            {form.contactId && (
+              <Link
+                to={`/crm/contacts/${form.contactId}`}
+                className="text-primary hover:underline font-bold flex items-center gap-0.5"
+              >
+                (عرض 360)
+              </Link>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 min-w-[240px]">
             <Select
               {...selectFieldProps()}
               size="sm"
               className="flex-1"
-              label={t("contract.loadSaved")}
+              aria-label={t("contract.loadSaved")}
+              placeholder={t("contract.loadSaved")}
               selectedKeys={savedId ? new Set([savedId]) : new Set()}
               onSelectionChange={(keys) => {
                 const id = Array.from(keys)[0] as string | undefined;
@@ -905,7 +957,7 @@ export function ContractBuilderForm() {
               }}
               isLoading={loadingSaved}
               classNames={{
-                trigger: "bg-white dark:bg-content1 border border-default-200",
+                trigger: "bg-white dark:bg-content1 border border-default-200 rounded-xl",
               }}
             >
               {saved.map((c) => (
@@ -921,7 +973,7 @@ export function ContractBuilderForm() {
                 isIconOnly
                 size="sm"
                 color="danger"
-                variant="flat"
+                variant="light"
                 aria-label={t("contract.delete")}
                 onPress={() => {
                   if (!window.confirm(t("contract.deleteConfirm"))) return;

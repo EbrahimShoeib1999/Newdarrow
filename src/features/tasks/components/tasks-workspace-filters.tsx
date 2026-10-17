@@ -294,13 +294,15 @@ export function TasksWorkspaceFilters({ compact }: TasksWorkspaceFiltersProps) {
               )
             }
           >
-            {selectedAssignee
+            {filters.assigneeId === "unassigned"
+              ? (isAr ? "مهام غير معينة" : "Unassigned")
+              : selectedAssignee
               ? localizedName(i18n.language, {
                   name: selectedAssignee.name,
                   nameAr: selectedAssignee.nameAr,
                 })
               : t("form.assignee.label")}
-            {selectedAssignee && (
+            {filters.assigneeId && (
               <span
                 role="button"
                 className="ms-1 hover:text-danger p-0.5"
@@ -323,24 +325,48 @@ export function TasksWorkspaceFilters({ compact }: TasksWorkspaceFiltersProps) {
             setFilter("assigneeId", selected ?? null);
           }}
         >
-          {(allUsers ?? []).map((u) => (
+          {[
             <DropdownItem
-              key={u.id}
-              startContent={
-                <Avatar
-                  src={u.avatar}
-                  name={u.name}
-                  size="sm"
-                  className="h-5 w-5 text-[9px]"
-                  showFallback
-                />
-              }
+              key="unassigned"
+              className="font-bold text-amber-600 dark:text-amber-400"
+              startContent={<UserCircle2 className="h-4 w-4" />}
             >
-              {localizedName(i18n.language, { name: u.name, nameAr: u.nameAr })}
-            </DropdownItem>
-          ))}
+              {isAr ? "مهام غير معينة (بحاجة لتوزيع)" : "Unassigned (needs distribution)"}
+            </DropdownItem>,
+            ...(allUsers ?? []).map((u) => (
+              <DropdownItem
+                key={u.id}
+                startContent={
+                  <Avatar
+                    src={u.avatar}
+                    name={u.name}
+                    size="sm"
+                    className="h-5 w-5 text-[9px]"
+                    showFallback
+                  />
+                }
+              >
+                {localizedName(i18n.language, { name: u.name, nameAr: u.nameAr })}
+              </DropdownItem>
+            )),
+          ]}
         </DropdownMenu>
       </Dropdown>
+
+      {/* Quick Filter Pill: Unassigned Tasks */}
+      <Button
+        size="sm"
+        variant="bordered"
+        onPress={() => setFilter("assigneeId", filters.assigneeId === "unassigned" ? null : "unassigned")}
+        className={cn(
+          "rounded-md border-default-200/80 bg-content1 font-semibold gap-1.5 h-9 min-h-9",
+          compact ? "text-xs" : "text-xs",
+          filters.assigneeId === "unassigned" && "border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        )}
+        startContent={<UserCircle2 className="h-3.5 w-3.5" />}
+      >
+        {isAr ? "غير معينة" : "Unassigned"}
+      </Button>
 
       {/* Quick Filter Pill: Overdue */}
       <Button

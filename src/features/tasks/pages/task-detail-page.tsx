@@ -57,7 +57,9 @@ import {
   PlayCircle,
   AlertTriangle,
   CheckCircle2,
+  Sparkles,
 } from "lucide-react";
+import { SmartTaskAssignmentModal } from "../components/SmartTaskAssignmentModal";
 import { TASK_STATUSES, TASK_PRIORITIES } from "@/lib/constants";
 import { formatDate } from "@/lib/utils";
 import { localizedName } from "@/lib/localized-name";
@@ -412,13 +414,14 @@ export function TaskDetailPage() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const { data: allUsers } = useAllUsers();
-  const { data, isLoading: isTaskLoading } = useTaskQuery(taskId!);
+  const { data, isLoading: isTaskLoading, refetch } = useTaskQuery(taskId!);
   const { data: allSprints } = useSprintsQuery();
   const { data: allTasksResponse } = useAllTasksQuery();
   const { companyId } = useCompany();
   const updateMutation = useUpdateTask();
   const deleteMutation = useDeleteTask();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isSmartAssignOpen, setIsSmartAssignOpen] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<any>({});
   const [isDirty, setIsDirty] = useState(false);
   const [logHours, setLogHours] = useState("");
@@ -1027,77 +1030,93 @@ export function TaskDetailPage() {
                     ]}
                   </SearchableSelect>
 
-                  <SearchableSelect
-                    label={t("detail.sections.assignedTo")}
-                    aria-label={t("form.assignee.label")}
-                    placeholder={t("form.assignee.placeholder")}
-                    searchPlaceholder={t("form.assignee.searchPlaceholder")}
-                    selectedKey={task.assigneeId ?? null}
-                    triggerLabel={assigneeName ?? undefined}
-                    startContent={
-                      task.assigneeId ? (
-                        <Avatar
-                          size="sm"
-                          src={task.assignee?.avatar}
-                          fallback={(assigneeName ?? "U").charAt(0).toUpperCase()}
-                          showFallback
-                          className="shrink-0"
-                        />
-                      ) : (
-                        <UserRound className="w-4 h-4 text-default-400 shrink-0" />
-                      )
-                    }
-                    renderValue={
-                      assigneeName
-                        ? () => (
-                            <span className="truncate" dir="auto">
-                              {assigneeName}
-                            </span>
-                          )
-                        : undefined
-                    }
-                    onSelectionChange={(key) => {
-                      const val = key as string | null;
-                      handleInlineChange(
-                        "assigneeId",
-                        !val || val === "unassigned" ? null : val
-                      );
-                    }}
-                  >
-                    {[
-                      <SelectItem key="unassigned" textValue={t("form.assignee.unassigned")}>
-                        {t("form.assignee.unassigned")}
-                      </SelectItem>,
-                      ...(allUsers || []).map((u) => {
-                        const name = displayUserName(u);
-                        return (
-                          <SelectItem
-                            key={u.id}
-                            textValue={name}
-                            // @ts-expect-error custom prop used by SearchableSelect filter
-                            searchValue={`${name} ${u.email}`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <Avatar
-                                size="sm"
-                                src={u.avatar}
-                                fallback={name.charAt(0).toUpperCase()}
-                                showFallback
-                              />
-                              <div className="flex flex-col text-start min-w-0">
-                                <span className="text-small font-medium" dir="auto">
-                                  {name}
-                                </span>
-                                <span className="text-tiny text-default-400" dir="ltr">
-                                  {u.email}
-                                </span>
-                              </div>
-                            </div>
-                          </SelectItem>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-foreground/80">
+                        {t("detail.sections.assignedTo")}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        color="primary"
+                        className="h-6 text-[11px] font-bold rounded-lg px-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
+                        startContent={<Sparkles className="h-3 w-3 text-primary" />}
+                        onPress={() => setIsSmartAssignOpen(true)}
+                      >
+                        {i18n.language === "ar" ? "تعيين ذكي حسب التخصص" : "Smart Assign"}
+                      </Button>
+                    </div>
+                    <SearchableSelect
+                      aria-label={t("form.assignee.label")}
+                      placeholder={t("form.assignee.placeholder")}
+                      searchPlaceholder={t("form.assignee.searchPlaceholder")}
+                      selectedKey={task.assigneeId ?? null}
+                      triggerLabel={assigneeName ?? undefined}
+                      startContent={
+                        task.assigneeId ? (
+                          <Avatar
+                            size="sm"
+                            src={task.assignee?.avatar}
+                            fallback={(assigneeName ?? "U").charAt(0).toUpperCase()}
+                            showFallback
+                            className="shrink-0"
+                          />
+                        ) : (
+                          <UserRound className="w-4 h-4 text-default-400 shrink-0" />
+                        )
+                      }
+                      renderValue={
+                        assigneeName
+                          ? () => (
+                              <span className="truncate" dir="auto">
+                                {assigneeName}
+                              </span>
+                            )
+                          : undefined
+                      }
+                      onSelectionChange={(key) => {
+                        const val = key as string | null;
+                        handleInlineChange(
+                          "assigneeId",
+                          !val || val === "unassigned" ? null : val
                         );
-                      }),
-                    ]}
-                  </SearchableSelect>
+                      }}
+                    >
+                      {[
+                        <SelectItem key="unassigned" textValue={t("form.assignee.unassigned")}>
+                          {t("form.assignee.unassigned")}
+                        </SelectItem>,
+                        ...(allUsers || []).map((u) => {
+                          const name = displayUserName(u);
+                          return (
+                            <SelectItem
+                              key={u.id}
+                              textValue={name}
+                              // @ts-expect-error custom prop used by SearchableSelect filter
+                              searchValue={`${name} ${u.email}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <Avatar
+                                  size="sm"
+                                  src={u.avatar}
+                                  fallback={name.charAt(0).toUpperCase()}
+                                  showFallback
+                                />
+                                <div className="flex flex-col text-start min-w-0">
+                                  <span className="text-small font-medium" dir="auto">
+                                    {name}
+                                  </span>
+                                  <span className="text-tiny text-default-400" dir="ltr">
+                                    {u.email}
+                                  </span>
+                                </div>
+                              </div>
+                            </SelectItem>
+                          );
+                        }),
+                      ]}
+                    </SearchableSelect>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
@@ -1530,6 +1549,18 @@ export function TaskDetailPage() {
           )}
         </ModalContent>
       </Modal>
+
+      {task && (
+        <SmartTaskAssignmentModal
+          isOpen={isSmartAssignOpen}
+          onClose={() => setIsSmartAssignOpen(false)}
+          task={task}
+          onAssigned={() => {
+            refetch();
+            setIsSmartAssignOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

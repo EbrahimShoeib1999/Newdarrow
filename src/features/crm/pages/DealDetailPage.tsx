@@ -9,6 +9,8 @@ import {
   Input,
   Progress,
   Avatar,
+  Tab,
+  Tabs,
 } from "@heroui/react";
 import {
   Briefcase,
@@ -26,6 +28,8 @@ import {
   Phone,
   Mail,
   Clock,
+  MessageSquare,
+  Plus,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { FieldBox } from "@/components/shared/field-box";
@@ -63,7 +67,8 @@ import type { ActivityType } from "../types/activities.types";
 
 export function DealDetailPage() {
   const { dealId = "" } = useParams();
-  const { t } = useTranslation("crm");
+  const { t, i18n } = useTranslation("crm");
+  const isAr = i18n.language === "ar";
   const navigate = useNavigate();
   const { canManageDeals } = useCrmPermissions();
   const { data: dealRes, isLoading } = useDealQuery(dealId);
@@ -73,6 +78,7 @@ export function DealDetailPage() {
   const updateDeal = useUpdateDealMutation();
   const [editOpen, setEditOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
+  const [activeTab, setActiveTab] = useState<string>("overview");
 
   // Smart Assignment modal state
   const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<Task | null>(null);
@@ -129,7 +135,7 @@ export function DealDetailPage() {
   const assignee = users?.find((u) => u.id === deal.assignedTo);
 
   // Primary contact person if available
-  const primaryContactPerson = contact?.associatedContacts?.find((cp) => cp.isPrimary);
+  const primaryContactPerson = contact?.associatedContacts?.find((cp) => cp.isPrimary) || contact?.associatedContacts?.[0];
 
   const handleOpenSmartAssignment = (task: Task) => {
     setSelectedTaskForAssignment(task);
@@ -149,7 +155,7 @@ export function DealDetailPage() {
             title={deal.title}
             subtitle={<MoneyAmount amount={deal.amount} />}
             badge={
-              <Chip color={DEAL_STAGE_COLORS[deal.stage]} variant="flat" size="md">
+              <Chip color={DEAL_STAGE_COLORS[deal.stage]} variant="flat" size="md" className="font-bold">
                 {t(`deals.stage.${deal.stage}`)}
               </Chip>
             }
@@ -159,7 +165,7 @@ export function DealDetailPage() {
                   color="primary"
                   variant="solid"
                   startContent={<FileSignature className="h-4 w-4" />}
-                  className="rounded-full font-bold shadow-sm shadow-primary/20"
+                  className="rounded-full font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02]"
                   onPress={() =>
                     navigate(
                       `/crm/contracts?dealId=${deal.id}&contactId=${deal.contactId || ""}&amount=${
@@ -168,7 +174,7 @@ export function DealDetailPage() {
                     )
                   }
                 >
-                  {dealContracts.length > 0 ? "إنشاء عقد إضافي" : "صياغة عقد للصفقة"}
+                  {dealContracts.length > 0 ? (isAr ? "إنشاء عقد إضافي" : "Add Contract") : (isAr ? "صياغة عقد للصفقة" : "Draft Contract")}
                 </Button>
                 {canManageDeals && (
                   <Button
@@ -201,21 +207,24 @@ export function DealDetailPage() {
                 items={[
                   {
                     key: "contracts",
-                    label: "العقود المرتبطة",
+                    label: isAr ? "العقود" : "Contracts",
                     count: dealContracts.length,
                     icon: FileSignature,
+                    onPress: () => setActiveTab("contracts"),
                   },
                   {
                     key: "delivery",
-                    label: "مهام التسليم",
+                    label: isAr ? "التسليمات" : "Delivery",
                     count: totalDeliveryTasks,
                     icon: Workflow,
+                    onPress: () => setActiveTab("delivery"),
                   },
                   {
                     key: "tasks",
                     label: t("dealDetail.tabs.tasks"),
                     count: crmTasks.length,
                     icon: ListTodo,
+                    onPress: () => setActiveTab("tasks"),
                   },
                   {
                     key: "notes",
@@ -236,445 +245,634 @@ export function DealDetailPage() {
         }
         main={
           <div className="space-y-6">
-            {/* Commercial Overview Card */}
-            <Card className="border border-default-200 shadow-sm rounded-3xl">
-              <CardBody className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
-                <FieldBox label={t("deals.form.title")} icon={<Briefcase className="h-3.5 w-3.5" />}>
-                  {deal.title}
-                </FieldBox>
-                <FieldBox label={t("deals.form.amount")} icon={<DollarSign className="h-3.5 w-3.5" />}>
-                  <MoneyAmount amount={deal.amount} />
-                </FieldBox>
-                <FieldBox label={t("deals.form.contact")} icon={<User className="h-3.5 w-3.5" />}>
-                  {contact ? (
-                    <div className="flex flex-col gap-1">
-                      <Link
-                        to={`/crm/contacts/${contact.id}`}
-                        className="text-primary font-bold hover:underline flex items-center gap-1.5"
-                      >
-                        {contactDisplayName(contact)}
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                      </Link>
-                      {contact.phone && (
-                        <span className="text-xs text-default-400 font-mono">{contact.phone}</span>
-                      )}
-                    </div>
-                  ) : (
-                    "—"
-                  )}
-                </FieldBox>
-                <FieldBox label={t("deals.form.assignedTo")}>
-                  {assignee?.name ?? t("contacts.filters.unassigned")}
-                </FieldBox>
-                <FieldBox label={t("dealDetail.probability")}>
-                  {normalizeDealProbability(deal.probability)}/10
-                </FieldBox>
-                <FieldBox
-                  label={t("deals.form.expectedCloseDate")}
-                  icon={<Calendar className="h-3.5 w-3.5" />}
-                >
-                  {deal.expectedCloseDate ? formatDate(deal.expectedCloseDate) : "—"}
-                </FieldBox>
-                {deal.leadId && (
-                  <FieldBox
-                    label={t("deals.form.lead") || "العميل المحتمل"}
-                    icon={<Workflow className="h-3.5 w-3.5" />}
-                  >
-                    <Link
-                      to={`/crm/leads/${deal.leadId}`}
-                      className="text-primary font-bold hover:underline flex items-center gap-1"
-                    >
-                      عرض العميل المحتمل المرتبط
-                      <ArrowUpRight className="h-3.5 w-3.5" />
-                    </Link>
-                  </FieldBox>
-                )}
-                {primaryContactPerson && (
-                  <FieldBox label="جهة التواصل الرئيسية" icon={<User className="h-3.5 w-3.5" />}>
-                    <div className="text-xs space-y-1">
-                      <span className="font-semibold text-foreground">
-                        {primaryContactPerson.name} ({primaryContactPerson.jobTitle || "مسؤول"})
-                      </span>
-                      {primaryContactPerson.phone && (
-                        <div className="flex items-center gap-1 text-default-400">
-                          <Phone className="h-3 w-3" />
-                          <span className="font-mono">{primaryContactPerson.phone}</span>
-                        </div>
-                      )}
-                      {primaryContactPerson.email && (
-                        <div className="flex items-center gap-1 text-default-400">
-                          <Mail className="h-3 w-3" />
-                          <span>{primaryContactPerson.email}</span>
-                        </div>
-                      )}
-                    </div>
-                  </FieldBox>
-                )}
-              </CardBody>
-            </Card>
-
-            {/* Contracts & Approval Lifecycle Card */}
-            <Card className="border border-default-200 shadow-sm rounded-3xl">
-              <CardBody className="p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileSignature className="h-5 w-5 text-primary" />
-                    <div>
-                      <h3 className="font-bold text-sm text-foreground">
-                        العقود المبرمة وحالة الاعتماد ({dealContracts.length})
-                      </h3>
-                      <p className="text-xs text-default-400">
-                        سجل العقود القانونية والتجارية المرتبطة بهذه الصفقة
-                      </p>
-                    </div>
+            {/* Top KPI Metrics Deck */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-4 rounded-3xl bg-content1 border border-default-200/80 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-bold text-default-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <DollarSign className="h-3.5 w-3.5 text-primary" />
+                  {isAr ? "القيمة المالية" : "Deal Value"}
+                </span>
+                <div className="mt-2">
+                  <div className="text-xl font-black text-foreground">
+                    <MoneyAmount amount={deal.amount} />
                   </div>
-                  <Button
-                    size="sm"
+                  <span className="text-[11px] text-default-400 font-medium mt-0.5 block">
+                    {deal.currency || "SAR"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-3xl bg-content1 border border-default-200/80 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-bold text-default-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                  {isAr ? "احتمالية النجاح" : "Win Probability"}
+                </span>
+                <div className="mt-2">
+                  <div className="text-xl font-black text-foreground flex items-center gap-2">
+                    {normalizeDealProbability(deal.probability) * 10}%
+                    <Chip size="sm" variant="flat" color="warning" className="h-5 text-[10px] font-bold">
+                      {normalizeDealProbability(deal.probability)}/10
+                    </Chip>
+                  </div>
+                  <span className="text-[11px] text-default-400 font-medium mt-0.5 block">
+                    {t(`deals.stage.${deal.stage}`)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-3xl bg-content1 border border-default-200/80 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-bold text-default-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-blue-500" />
+                  {isAr ? "الإغلاق المتوقع" : "Expected Close"}
+                </span>
+                <div className="mt-2">
+                  <div className="text-sm font-bold text-foreground">
+                    {deal.expectedCloseDate ? formatDate(deal.expectedCloseDate) : "—"}
+                  </div>
+                  <span className="text-[11px] text-default-400 font-medium mt-0.5 block truncate">
+                    {assignee?.name || (isAr ? "غير معين" : "Unassigned")}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-3xl bg-content1 border border-default-200/80 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-bold text-default-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Workflow className="h-3.5 w-3.5 text-emerald-500" />
+                  {isAr ? "جاهزية التسليم" : "Delivery Ready"}
+                </span>
+                <div className="mt-2">
+                  <div className="flex items-center justify-between text-sm font-bold mb-1">
+                    <span className="text-foreground">{completedTasks}/{totalDeliveryTasks}</span>
+                    <span className="text-primary font-mono text-xs">{progressPercentage}%</span>
+                  </div>
+                  <Progress
+                    value={progressPercentage}
                     color="primary"
-                    variant="flat"
-                    className="font-bold rounded-xl"
-                    onPress={() =>
-                      navigate(
-                        `/crm/contracts?dealId=${deal.id}&contactId=${deal.contactId || ""}&amount=${
-                          deal.amount
-                        }&title=${encodeURIComponent(deal.title)}`
-                      )
-                    }
-                  >
-                    + إنشاء عقد جديد
-                  </Button>
+                    size="sm"
+                    className="rounded-full"
+                  />
                 </div>
+              </div>
+            </div>
 
-                {dealContracts.length === 0 ? (
-                  <div className="p-6 text-center bg-default-50/60 border border-dashed border-default-200 rounded-2xl">
-                    <FileSignature className="h-8 w-8 text-default-300 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-default-600">
-                      لا يوجد عقد مسجل لهذه الصفقة حتى الآن
-                    </p>
-                    <p className="text-xs text-default-400 mt-1">
-                      يمكنك صياغة عقد جديد من بيانات الصفقة وتحويل بنود خدماته مباشرة إلى مهام
-                      تنفيذية للأقسام
-                    </p>
-                    <Button
-                      size="sm"
-                      color="primary"
-                      className="mt-3 font-bold rounded-xl"
-                      onPress={() =>
-                        navigate(
-                          `/crm/contracts?dealId=${deal.id}&contactId=${
-                            deal.contactId || ""
-                          }&amount=${deal.amount}&title=${encodeURIComponent(deal.title)}`
-                        )
-                      }
-                    >
-                      صياغة العقد الآن
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {dealContracts.map((c) => (
-                      <div
-                        key={c.id}
-                        className="p-4 bg-default-50 rounded-2xl border border-default-200 hover:border-primary/40 transition-all flex flex-col justify-between"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <span className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
-                              #{c.form?.contractNumber || "مسودة"}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              <Chip
-                                size="sm"
-                                color={c.status === "final" ? "success" : "warning"}
-                                variant="flat"
-                                className="font-bold text-[10px]"
-                              >
-                                {c.status === "final" ? "معتمد" : "مسودة / قيد المراجعة"}
-                              </Chip>
-                              {c.convertedToTasks && (
-                                <Chip
-                                  size="sm"
-                                  color="secondary"
-                                  variant="flat"
-                                  className="font-bold text-[10px]"
+            {/* Main Tabs Workspace */}
+            <Tabs
+              selectedKey={activeTab}
+              onSelectionChange={(k: any) => setActiveTab(String(k))}
+              variant="underlined"
+              classNames={{
+                tabList: "gap-6 border-b border-default-200/70 p-0",
+                cursor: "w-full bg-primary h-[2.5px] rounded-full",
+                tab: "max-w-fit px-1 h-12 text-sm font-bold",
+              }}
+            >
+              {/* Tab 1: Overview & Scope */}
+              <Tab
+                key="overview"
+                title={
+                  <span className="flex items-center gap-2">
+                    <Briefcase className="h-4 w-4" />
+                    {isAr ? "البيانات التجارية ونطاق العمل" : "Commercial & Overview"}
+                  </span>
+                }
+              >
+                <div className="space-y-4 pt-4">
+                  {/* Customer 360 Card */}
+                  {contact ? (
+                    <Card className="border border-default-200/80 shadow-sm rounded-3xl bg-gradient-to-br from-default-50/50 to-background">
+                      <CardBody className="p-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3.5">
+                            <div className="p-3 rounded-2xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+                              <User className="h-6 w-6" />
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Link
+                                  to={`/crm/contacts/${contact.id}`}
+                                  className="text-base font-bold text-foreground hover:text-primary transition-colors flex items-center gap-1"
                                 >
-                                  مرحّل لمهام الأقسام
-                                </Chip>
-                              )}
-                            </div>
-                          </div>
-                          <h4 className="font-bold text-sm text-foreground line-clamp-1">{c.title}</h4>
-                          <p className="text-xs text-default-500 mt-1">
-                            تاريخ العقد: {c.form?.contractDateIso || "—"} • بنود الخدمات:{" "}
-                            {c.form?.services?.length || 0}
-                          </p>
-                        </div>
-
-                        <div className="mt-4 pt-3 border-t border-default-200/70 flex items-center justify-between">
-                          <span className="text-xs font-mono font-bold text-default-700">
-                            {c.form?.fields?.find((f) => f.key === "amountInclVat")?.value
-                              ? `${c.form.fields.find((f) => f.key === "amountInclVat")?.value} ر.س`
-                              : "—"}
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="light"
-                            color="primary"
-                            className="font-bold text-xs h-7"
-                            onPress={() => navigate(`/crm/contracts?id=${c.id}&dealId=${deal.id}`)}
-                          >
-                            فتح في محرر العقود ←
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardBody>
-            </Card>
-
-            {/* Operational Delivery Tasks Workspace Card */}
-            <Card className="border border-default-200 shadow-sm rounded-3xl">
-              <CardBody className="p-5 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Workflow className="h-5 w-5 text-emerald-600" />
-                    <div>
-                      <h3 className="font-bold text-sm text-foreground">
-                        مهام التنفيذ والتسليمات للأقسام ({totalDeliveryTasks})
-                      </h3>
-                      <p className="text-xs text-default-400">
-                        المهام التشغيلية المتولدة من بنود العقد والموزعة على أقسام الشركة
-                      </p>
-                    </div>
-                  </div>
-                  {totalDeliveryTasks > 0 && (
-                    <Button
-                      size="sm"
-                      variant="light"
-                      color="primary"
-                      className="font-bold text-xs"
-                      as={Link}
-                      to="/tasks"
-                    >
-                      فتح لوحة كانبان والمهام العامة ←
-                    </Button>
-                  )}
-                </div>
-
-                {/* Progress & Metrics Dashboard */}
-                {totalDeliveryTasks > 0 && (
-                  <div className="space-y-3 p-4 bg-default-50/70 rounded-2xl border border-default-100">
-                    <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-default-600">نسبة الإنجاز الكلية للتسليم:</span>
-                      <span className="text-primary font-mono">{progressPercentage}%</span>
-                    </div>
-                    <Progress
-                      value={progressPercentage}
-                      color="primary"
-                      size="sm"
-                      className="rounded-full"
-                    />
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
-                      <div className="p-2.5 rounded-xl bg-background border border-default-200">
-                        <span className="text-default-400 block text-[11px]">الإجمالي</span>
-                        <span className="font-bold text-sm text-foreground">{totalDeliveryTasks} مهام</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-background border border-default-200">
-                        <span className="text-default-400 block text-[11px]">قيد التنفيذ</span>
-                        <span className="font-bold text-sm text-warning-600">{inProgressTasks}</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-background border border-default-200">
-                        <span className="text-default-400 block text-[11px]">مكتملة</span>
-                        <span className="font-bold text-sm text-emerald-600">{completedTasks}</span>
-                      </div>
-                      <div
-                        className={`p-2.5 rounded-xl bg-background border ${
-                          unassignedTasks > 0 ? "border-amber-300 dark:border-amber-800" : "border-default-200"
-                        }`}
-                      >
-                        <span className="text-default-400 block text-[11px]">بانتظار التعيين</span>
-                        <span
-                          className={`font-bold text-sm ${
-                            unassignedTasks > 0 ? "text-amber-600 font-bold" : "text-default-700"
-                          }`}
-                        >
-                          {unassignedTasks}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Tasks List */}
-                {isLoadingDeliveryTasks ? (
-                  <LoadingSpinner />
-                ) : deliveryTasks.length === 0 ? (
-                  <div className="p-6 text-center bg-default-50/40 border border-dashed border-default-200 rounded-2xl">
-                    <Workflow className="h-8 w-8 text-default-300 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-default-600">
-                      لم يتم إنشاء مهام تسليم تشغيلية لهذه الصفقة بعد
-                    </p>
-                    <p className="text-xs text-default-400 mt-1">
-                      عند اعتماد العقد، يمكنك الضغط على زر &quot;ترحيل بنود الخدمات إلى مهام
-                      الأقسام&quot; في محرر العقد لتوليد مهام الأقسام تلقائياً.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {deliveryTasks.map((tItem) => {
-                      const assigneeUser = users?.find((u) => u.id === tItem.assigneeId);
-                      const isUnassigned = !tItem.assigneeId;
-
-                      return (
-                        <div
-                          key={tItem.id}
-                          className="p-3.5 rounded-2xl border border-default-200 bg-background hover:bg-default-50/60 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-sm text-foreground">{tItem.title}</span>
-                              {tItem.type === "subtask" && (
-                                <Chip size="sm" variant="flat" className="h-5 text-[10px]">
-                                  فرعية
-                                </Chip>
-                              )}
-                              <Chip
-                                size="sm"
-                                variant="flat"
-                                color={
-                                  tItem.status === "done"
-                                    ? "success"
-                                    : tItem.status === "in_progress"
-                                    ? "warning"
-                                    : "default"
-                                }
-                                className="h-5 text-[10px] font-bold"
-                              >
-                                {tItem.status}
-                              </Chip>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-default-400">
-                              {tItem.department && (
-                                <span className="text-primary font-semibold">
-                                  القسم: {tItem.department}
-                                </span>
-                              )}
-                              {tItem.estimatedHours ? (
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {tItem.estimatedHours} س
-                                </span>
-                              ) : null}
-                              {tItem.dueDate && (
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {formatDate(tItem.dueDate)}
-                                </span>
-                              )}
+                                  {contactDisplayName(contact)}
+                                  <ArrowUpRight className="h-4 w-4 text-primary" />
+                                </Link>
+                                {contact.entityType && (
+                                  <Chip size="sm" variant="flat" color="primary" className="font-bold text-[10px]">
+                                    {contact.entityType}
+                                  </Chip>
+                                )}
+                              </div>
+                              <p className="text-xs text-default-500">
+                                {contact.accountName || contact.jobTitle || contact.email || (isAr ? "جهة اتصال مسجلة" : "Registered Contact")}
+                              </p>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2.5 self-end md:self-auto">
-                            {/* Assignee status or smart assign trigger */}
-                            {isUnassigned ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {contact.phone && (
                               <Button
                                 size="sm"
-                                color="warning"
                                 variant="flat"
-                                startContent={<Sparkles className="h-3.5 w-3.5" />}
-                                className="font-bold text-xs rounded-xl h-8"
-                                onPress={() => handleOpenSmartAssignment(tItem)}
+                                color="primary"
+                                startContent={<Phone className="h-3.5 w-3.5" />}
+                                className="rounded-xl font-bold text-xs"
+                                as="a"
+                                href={`tel:${contact.phone}`}
                               >
-                                تعيين ذكي
+                                {isAr ? "اتصال" : "Call"}
                               </Button>
-                            ) : (
-                              <div
-                                className="flex items-center gap-2 cursor-pointer p-1 rounded-xl hover:bg-default-100"
-                                onClick={() => handleOpenSmartAssignment(tItem)}
-                                title="اضغط لإعادة التعيين"
-                              >
-                                <Avatar
-                                  size="sm"
-                                  src={assigneeUser?.avatar}
-                                  name={assigneeUser?.name}
-                                  className="h-6 w-6 text-xs"
-                                />
-                                <span className="text-xs font-semibold text-foreground">
-                                  {assigneeUser?.name || "موظف"}
-                                </span>
-                              </div>
                             )}
-
+                            {(contact.whatsappPhone || contact.phone) && (
+                              <Button
+                                size="sm"
+                                variant="flat"
+                                color="success"
+                                startContent={<MessageSquare className="h-3.5 w-3.5" />}
+                                className="rounded-xl font-bold text-xs"
+                                as="a"
+                                href={`https://wa.me/${(contact.whatsappPhone || contact.phone).replace(/\D/g, "")}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {isAr ? "واتساب" : "WhatsApp"}
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="light"
                               color="primary"
-                              className="font-bold text-xs h-8"
+                              className="rounded-xl font-bold text-xs"
                               as={Link}
-                              to={`/tasks?selected=${tItem.id}`}
+                              to={`/crm/contacts/${contact.id}`}
                             >
-                              عرض المهمة ←
+                              {isAr ? "عرض ملف العميل 360 ←" : "Customer 360 →"}
                             </Button>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardBody>
-            </Card>
 
-            {/* Quick Follow-up CRM Tasks Card */}
-            <Card className="border border-default-200 shadow-sm rounded-3xl">
-              <CardBody className="p-5 space-y-3">
-                <h3 className="font-bold text-sm flex items-center gap-2">
-                  <ListTodo className="h-4 w-4 text-primary" />
-                  ملاحظات ومتابعات الـ CRM السريعة ({crmTasks.length})
-                </h3>
-                {canManageDeals && (
-                  <div className="flex gap-2">
-                    <Input
-                      size="sm"
-                      className="flex-1"
-                      placeholder={t("dealDetail.tasks.placeholder")}
-                      value={taskTitle}
-                      onValueChange={setTaskTitle}
-                    />
+                        {/* Primary Contact Person if exists */}
+                        {primaryContactPerson && (
+                          <div className="mt-4 pt-3 border-t border-default-100 flex flex-wrap items-center justify-between gap-3 text-xs bg-default-100/40 p-3 rounded-2xl">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-default-500">{isAr ? "جهة التواصل الرئيسية:" : "Primary Contact:"}</span>
+                              <span className="font-bold text-foreground">{primaryContactPerson.name}</span>
+                              {primaryContactPerson.jobTitle && (
+                                <span className="text-default-400">({primaryContactPerson.jobTitle})</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-default-500 font-mono">
+                              {primaryContactPerson.phone && (
+                                <span className="flex items-center gap-1">
+                                  <Phone className="h-3 w-3" />
+                                  {primaryContactPerson.phone}
+                                </span>
+                              )}
+                              {primaryContactPerson.email && (
+                                <span className="flex items-center gap-1">
+                                  <Mail className="h-3 w-3" />
+                                  {primaryContactPerson.email}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </CardBody>
+                    </Card>
+                  ) : null}
+
+                  {/* Commercial Scope Card */}
+                  <Card className="border border-default-200/80 shadow-sm rounded-3xl">
+                    <CardBody className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
+                      <FieldBox label={t("deals.form.title")} icon={<Briefcase className="h-3.5 w-3.5" />}>
+                        {deal.title}
+                      </FieldBox>
+                      <FieldBox label={t("deals.form.amount")} icon={<DollarSign className="h-3.5 w-3.5" />}>
+                        <MoneyAmount amount={deal.amount} />
+                      </FieldBox>
+                      <FieldBox label={t("deals.form.assignedTo")}>
+                        {assignee?.name ?? t("contacts.filters.unassigned")}
+                      </FieldBox>
+                      <FieldBox label={t("dealDetail.probability")}>
+                        {normalizeDealProbability(deal.probability)}/10
+                      </FieldBox>
+                      <FieldBox
+                        label={t("deals.form.expectedCloseDate")}
+                        icon={<Calendar className="h-3.5 w-3.5" />}
+                      >
+                        {deal.expectedCloseDate ? formatDate(deal.expectedCloseDate) : "—"}
+                      </FieldBox>
+                      {deal.leadId && (
+                        <FieldBox
+                          label={t("deals.form.lead") || (isAr ? "العميل المحتمل" : "Lead")}
+                          icon={<Workflow className="h-3.5 w-3.5" />}
+                        >
+                          <Link
+                            to={`/crm/leads/${deal.leadId}`}
+                            className="text-primary font-bold hover:underline flex items-center gap-1"
+                          >
+                            {isAr ? "عرض العميل المحتمل الأصلي" : "View Original Lead"}
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                          </Link>
+                        </FieldBox>
+                      )}
+                    </CardBody>
+                  </Card>
+                </div>
+              </Tab>
+
+              {/* Tab 2: Contracts & Legal */}
+              <Tab
+                key="contracts"
+                title={
+                  <span className="flex items-center gap-2">
+                    <FileSignature className="h-4 w-4" />
+                    {isAr ? "العقود والاتفاقيات" : "Contracts"} ({dealContracts.length})
+                  </span>
+                }
+              >
+                <div className="space-y-4 pt-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-default-50 p-4 rounded-3xl border border-default-200">
+                    <div>
+                      <h3 className="font-bold text-sm text-foreground">
+                        {isAr ? "العقود المبرمة وحالة الاعتماد القانوني" : "Contracts & Legal Approvals"} ({dealContracts.length})
+                      </h3>
+                      <p className="text-xs text-default-500 mt-0.5">
+                        {isAr
+                          ? "سجل العقود المعتمدة والمسودات ونماذج التسعير الخاصة بهذه الصفقة"
+                          : "Legal agreements, approved scopes, and signed quotes for this deal"}
+                      </p>
+                    </div>
                     <Button
                       size="sm"
                       color="primary"
-                      className="rounded-full font-bold"
-                      isDisabled={!taskTitle.trim()}
-                      onPress={async () => {
-                        await createCrmTask.mutateAsync({ title: taskTitle.trim() });
-                        setTaskTitle("");
-                      }}
+                      className="font-bold rounded-2xl shadow-sm shadow-primary/20"
+                      startContent={<Plus className="h-4 w-4" />}
+                      onPress={() =>
+                        navigate(
+                          `/crm/contracts?dealId=${deal.id}&contactId=${deal.contactId || ""}&amount=${
+                            deal.amount
+                          }&title=${encodeURIComponent(deal.title)}`
+                        )
+                      }
                     >
-                      {t("dealDetail.tasks.add")}
+                      {isAr ? "صياغة عقد جديد" : "New Contract"}
                     </Button>
                   </div>
-                )}
-                {crmTasks.length === 0 ? (
-                  <p className="text-xs text-default-400">{t("dealDetail.tasks.empty")}</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {crmTasks.map((t) => (
-                      <li
-                        key={t.id}
-                        className="flex justify-between items-center p-2.5 rounded-xl bg-default-50 text-sm border border-default-100"
+
+                  {dealContracts.length === 0 ? (
+                    <div className="p-8 text-center bg-content1 border border-dashed border-default-200 rounded-3xl space-y-3">
+                      <FileSignature className="h-10 w-10 text-default-300 mx-auto" />
+                      <div>
+                        <p className="text-sm font-bold text-default-700">
+                          {isAr ? "لا يوجد عقد مبرم لهذه الصفقة حتى الآن" : "No contract linked to this deal yet"}
+                        </p>
+                        <p className="text-xs text-default-400 mt-1 max-w-md mx-auto">
+                          {isAr
+                            ? "اضغط على زر صياغة عقد جديد لتحميل بيانات العميل والخدمات المتفق عليها تلقائياً، وصياغة البنود القانونية وتوليد مهام الأقسام."
+                            : "Click New Contract to automatically import deal information, establish commercial terms, and generate department tasks."}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        color="primary"
+                        className="font-bold rounded-2xl"
+                        startContent={<Plus className="h-4 w-4" />}
+                        onPress={() =>
+                          navigate(
+                            `/crm/contracts?dealId=${deal.id}&contactId=${
+                              deal.contactId || ""
+                            }&amount=${deal.amount}&title=${encodeURIComponent(deal.title)}`
+                          )
+                        }
                       >
-                        <span className="font-medium text-xs">{t.title}</span>
-                        <Chip size="sm" variant="flat">
-                          {normalizeCrmTaskStatus(t.status)}
-                        </Chip>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardBody>
-            </Card>
+                        {isAr ? "صياغة العقد الآن" : "Draft Contract Now"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {dealContracts.map((c) => (
+                        <div
+                          key={c.id}
+                          className="p-5 bg-content1 rounded-3xl border border-default-200 hover:border-primary/50 shadow-sm transition-all flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <span className="font-mono text-xs font-bold text-primary px-2.5 py-1 rounded-xl bg-primary/10 border border-primary/20">
+                                #{c.form?.contractNumber || "مسودة"}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <Chip
+                                  size="sm"
+                                  color={c.status === "final" ? "success" : "warning"}
+                                  variant="flat"
+                                  className="font-bold text-[10px]"
+                                >
+                                  {c.status === "final" ? (isAr ? "معتمد" : "Approved") : (isAr ? "مسودة / مراجعة" : "Draft")}
+                                </Chip>
+                                {c.convertedToTasks && (
+                                  <Chip
+                                    size="sm"
+                                    color="secondary"
+                                    variant="flat"
+                                    className="font-bold text-[10px]"
+                                  >
+                                    {isAr ? "مرحّل للمهام" : "Tasks Created"}
+                                  </Chip>
+                                )}
+                              </div>
+                            </div>
+                            <h4 className="font-bold text-base text-foreground line-clamp-1">{c.title}</h4>
+                            <p className="text-xs text-default-400 mt-1">
+                              {isAr ? "تاريخ العقد:" : "Date:"} {c.form?.contractDateIso || "—"} • {isAr ? "بنود الخدمات:" : "Services:"}{" "}
+                              {c.form?.services?.length || 0}
+                            </p>
+                          </div>
+
+                          <div className="mt-5 pt-3.5 border-t border-default-100 flex items-center justify-between">
+                            <span className="text-sm font-mono font-bold text-foreground">
+                              {c.form?.fields?.find((f) => f.key === "amountInclVat")?.value
+                                ? `${c.form.fields.find((f) => f.key === "amountInclVat")?.value} ر.س`
+                                : "—"}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="light"
+                              color="primary"
+                              className="font-bold text-xs rounded-xl"
+                              onPress={() => navigate(`/crm/contracts?id=${c.id}&dealId=${deal.id}`)}
+                            >
+                              {isAr ? "فتح في محرر العقود ←" : "Open in Builder →"}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Tab>
+
+              {/* Tab 3: Delivery Tasks & Department Distribution */}
+              <Tab
+                key="delivery"
+                title={
+                  <span className="flex items-center gap-2">
+                    <Workflow className="h-4 w-4" />
+                    {isAr ? "مهام التسليم التشغيلية" : "Delivery Tasks"} ({totalDeliveryTasks})
+                  </span>
+                }
+              >
+                <div className="space-y-4 pt-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-default-50 p-4 rounded-3xl border border-default-200">
+                    <div>
+                      <h3 className="font-bold text-sm text-foreground">
+                        {isAr ? "مهام التنفيذ والتسليمات للأقسام" : "Operational Delivery Tasks"} ({totalDeliveryTasks})
+                      </h3>
+                      <p className="text-xs text-default-500 mt-0.5">
+                        {isAr
+                          ? "المهام التشغيلية المتولدة من بنود العقد والموزعة على أقسام الشركة للتنفيذ"
+                          : "Execution tasks generated from contract service items and distributed to departments"}
+                      </p>
+                    </div>
+                    {totalDeliveryTasks > 0 && (
+                      <Button
+                        size="sm"
+                        variant="light"
+                        color="primary"
+                        className="font-bold text-xs"
+                        as={Link}
+                        to="/tasks"
+                      >
+                        {isAr ? "لوحة كانبان والمهام العامة ←" : "Global Tasks Board →"}
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Delivery Metrics Deck */}
+                  {totalDeliveryTasks > 0 && (
+                    <div className="space-y-3 p-4 bg-content1 rounded-3xl border border-default-200/80 shadow-sm">
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span className="text-default-600">{isAr ? "نسبة الإنجاز الكلية للتسليم:" : "Total Completion Rate:"}</span>
+                        <span className="text-primary font-mono">{progressPercentage}%</span>
+                      </div>
+                      <Progress
+                        value={progressPercentage}
+                        color="primary"
+                        size="sm"
+                        className="rounded-full"
+                      />
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                        <div className="p-3 rounded-2xl bg-default-50 border border-default-200/60">
+                          <span className="text-default-400 block text-[11px]">{isAr ? "الإجمالي" : "Total"}</span>
+                          <span className="font-bold text-sm text-foreground">{totalDeliveryTasks} {isAr ? "مهام" : "tasks"}</span>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-default-50 border border-default-200/60">
+                          <span className="text-default-400 block text-[11px]">{isAr ? "قيد التنفيذ" : "In Progress"}</span>
+                          <span className="font-bold text-sm text-warning-600">{inProgressTasks}</span>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-default-50 border border-default-200/60">
+                          <span className="text-default-400 block text-[11px]">{isAr ? "مكتملة" : "Completed"}</span>
+                          <span className="font-bold text-sm text-emerald-600">{completedTasks}</span>
+                        </div>
+                        <div
+                          className={`p-3 rounded-2xl bg-default-50 border ${
+                            unassignedTasks > 0 ? "border-amber-300 dark:border-amber-800" : "border-default-200/60"
+                          }`}
+                        >
+                          <span className="text-default-400 block text-[11px]">{isAr ? "بانتظار التعيين" : "Awaiting Assignee"}</span>
+                          <span
+                            className={`font-bold text-sm ${
+                              unassignedTasks > 0 ? "text-amber-600 font-bold" : "text-default-700"
+                            }`}
+                          >
+                            {unassignedTasks}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tasks List */}
+                  {isLoadingDeliveryTasks ? (
+                    <LoadingSpinner />
+                  ) : deliveryTasks.length === 0 ? (
+                    <div className="p-8 text-center bg-content1 border border-dashed border-default-200 rounded-3xl space-y-2">
+                      <Workflow className="h-10 w-10 text-default-300 mx-auto" />
+                      <p className="text-sm font-bold text-default-700">
+                        {isAr ? "لم يتم توليد مهام تسليم تشغيلية لهذه الصفقة بعد" : "No delivery tasks generated yet"}
+                      </p>
+                      <p className="text-xs text-default-400 max-w-md mx-auto">
+                        {isAr
+                          ? "عند اعتماد العقد، اضغط على زر ترحيل بنود الخدمات إلى مهام الأقسام لتوليد المهام التنفيذية للأقسام المختصة تلقائياً."
+                          : "When finalizing a contract, convert its services to generate departmental tasks automatically."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {deliveryTasks.map((tItem) => {
+                        const assigneeUser = users?.find((u) => u.id === tItem.assigneeId);
+                        const isUnassigned = !tItem.assigneeId;
+
+                        return (
+                          <div
+                            key={tItem.id}
+                            className="p-4 rounded-3xl border border-default-200/80 bg-content1 hover:bg-default-50/50 shadow-sm transition-all flex flex-col md:flex-row md:items-center justify-between gap-3.5"
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-sm text-foreground">{tItem.title}</span>
+                                {tItem.type === "subtask" && (
+                                  <Chip size="sm" variant="flat" className="h-5 text-[10px] font-bold">
+                                    {isAr ? "فرعية" : "Subtask"}
+                                  </Chip>
+                                )}
+                                <Chip
+                                  size="sm"
+                                  variant="flat"
+                                  color={
+                                    tItem.status === "done"
+                                      ? "success"
+                                      : tItem.status === "in_progress"
+                                      ? "warning"
+                                      : "default"
+                                  }
+                                  className="h-5 text-[10px] font-bold"
+                                >
+                                  {tItem.status}
+                                </Chip>
+                                {tItem.department && (
+                                  <Chip size="sm" variant="flat" color="primary" className="h-5 text-[10px] font-semibold">
+                                    {tItem.department}
+                                  </Chip>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-default-400">
+                                {tItem.estimatedHours ? (
+                                  <span className="flex items-center gap-1 font-mono">
+                                    <Clock className="h-3 w-3" />
+                                    {tItem.estimatedHours} س مقدرة
+                                  </span>
+                                ) : null}
+                                {tItem.dueDate && (
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {formatDate(tItem.dueDate)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2.5 self-end md:self-auto shrink-0">
+                              {/* Assignee status or smart assign trigger */}
+                              {isUnassigned ? (
+                                <Button
+                                  size="sm"
+                                  color="warning"
+                                  variant="flat"
+                                  startContent={<Sparkles className="h-3.5 w-3.5" />}
+                                  className="font-bold text-xs rounded-2xl h-8 shadow-sm"
+                                  onPress={() => handleOpenSmartAssignment(tItem)}
+                                >
+                                  {isAr ? "تعيين ذكي" : "Smart Assign"}
+                                </Button>
+                              ) : (
+                                <div
+                                  className="flex items-center gap-2 cursor-pointer p-1.5 rounded-2xl hover:bg-default-100 transition-colors border border-default-200/60"
+                                  onClick={() => handleOpenSmartAssignment(tItem)}
+                                  title={isAr ? "اضغط لإعادة التعيين الذكي" : "Click to reassign"}
+                                >
+                                  <Avatar
+                                    size="sm"
+                                    src={assigneeUser?.avatar}
+                                    name={assigneeUser?.name}
+                                    className="h-6 w-6 text-xs"
+                                  />
+                                  <span className="text-xs font-semibold text-foreground">
+                                    {assigneeUser?.name || (isAr ? "موظف" : "Employee")}
+                                  </span>
+                                </div>
+                              )}
+
+                              <Button
+                                size="sm"
+                                variant="light"
+                                color="primary"
+                                className="font-bold text-xs h-8 rounded-2xl"
+                                as={Link}
+                                to={`/tasks?selected=${tItem.id}`}
+                              >
+                                {isAr ? "تفاصيل المهمة ←" : "Details →"}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </Tab>
+
+              {/* Tab 4: CRM Quick Tasks */}
+              <Tab
+                key="tasks"
+                title={
+                  <span className="flex items-center gap-2">
+                    <ListTodo className="h-4 w-4" />
+                    {isAr ? "متابعات CRM السريعة" : "CRM Tasks"} ({crmTasks.length})
+                  </span>
+                }
+              >
+                <div className="space-y-4 pt-4">
+                  <Card className="border border-default-200/80 shadow-sm rounded-3xl">
+                    <CardBody className="p-5 space-y-4">
+                      <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
+                        <ListTodo className="h-4 w-4 text-primary" />
+                        {isAr ? "إضافة ملاحظة ومتابعة سريعة للصفقة" : "Quick CRM Follow-up"}
+                      </h3>
+                      {canManageDeals && (
+                        <div className="flex gap-2">
+                          <Input
+                            size="sm"
+                            className="flex-1"
+                            placeholder={t("dealDetail.tasks.placeholder")}
+                            value={taskTitle}
+                            onValueChange={setTaskTitle}
+                          />
+                          <Button
+                            size="sm"
+                            color="primary"
+                            className="rounded-full font-bold shadow-sm"
+                            isDisabled={!taskTitle.trim()}
+                            onPress={async () => {
+                              await createCrmTask.mutateAsync({ title: taskTitle.trim() });
+                              setTaskTitle("");
+                            }}
+                          >
+                            {t("dealDetail.tasks.add")}
+                          </Button>
+                        </div>
+                      )}
+                      {crmTasks.length === 0 ? (
+                        <p className="text-xs text-default-400 py-3 text-center">{t("dealDetail.tasks.empty")}</p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {crmTasks.map((t) => (
+                            <li
+                              key={t.id}
+                              className="flex justify-between items-center p-3 rounded-2xl bg-default-50 text-sm border border-default-100"
+                            >
+                              <span className="font-medium text-xs text-foreground">{t.title}</span>
+                              <Chip size="sm" variant="flat">
+                                {normalizeCrmTaskStatus(t.status)}
+                              </Chip>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardBody>
+                  </Card>
+                </div>
+              </Tab>
+            </Tabs>
           </div>
         }
         chatter={
