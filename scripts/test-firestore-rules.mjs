@@ -77,9 +77,25 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
     summary: "emp2 report",
   });
   await setDoc(doc(db, "companies", COMPANY, "tasks", "t1"), { title: "unrelated" });
+  await setDoc(doc(db, "companies", COMPANY, "contact_classifications", "class1"), {
+    name: "VIP Partner",
+    color: "gold",
+    isActive: true,
+  });
+  await setDoc(doc(db, "companies", COMPANY, "contacts", "contact1"), {
+    name: "John Doe",
+    classification: "class1",
+    source: "website",
+  });
+  await setDoc(doc(db, "companies", COMPANY, "projects", "proj1"), {
+    name: "Alpha Project",
+    slug: "alpha-project",
+    priority: "high",
+  });
 });
 
 const asUser = (uid) => testEnv.authenticatedContext(uid).firestore();
+const unauth = testEnv.unauthenticatedContext().firestore();
 const reportsOf = (db) => collection(db, "companies", COMPANY, "daily_reports");
 
 // --- The requirement: every employee can read their own reports ---
@@ -170,6 +186,113 @@ await check("nested subcollections stay accessible", () =>
   assertSucceeds(
     setDoc(doc(asUser("emp1"), "companies", COMPANY, "tasks", "t1", "comments", "c1"), {
       body: "hi",
+    })
+  )
+);
+
+// --- Cross-company isolation & unauthenticated protection ---
+await check("unauthenticated user cannot read contact_classifications", () =>
+  assertFails(getDocs(collection(unauth, "companies", COMPANY, "contact_classifications")))
+);
+
+await check("unauthenticated user cannot read contacts", () =>
+  assertFails(getDocs(collection(unauth, "companies", COMPANY, "contacts")))
+);
+
+await check("unauthenticated user cannot write to contact_classifications", () =>
+  assertFails(
+    setDoc(doc(unauth, "companies", COMPANY, "contact_classifications", "hack"), { name: "Hack" })
+  )
+);
+
+await check("unauthenticated user cannot write to contacts", () =>
+  assertFails(
+    setDoc(doc(unauth, "companies", COMPANY, "contacts", "hack"), { name: "Hack" })
+  )
+);
+
+await check("unauthenticated user cannot write to projects", () =>
+  assertFails(
+    setDoc(doc(unauth, "companies", COMPANY, "projects", "hack"), { name: "Hack" })
+  )
+);
+
+await check("outsider cannot read contact_classifications of another company", () =>
+  assertFails(
+    getDocs(collection(asUser("outsider"), "companies", COMPANY, "contact_classifications"))
+  )
+);
+
+await check("outsider cannot write contact_classifications to another company", () =>
+  assertFails(
+    setDoc(
+      doc(asUser("outsider"), "companies", COMPANY, "contact_classifications", "hack"),
+      { name: "Hack" }
+    )
+  )
+);
+
+await check("outsider cannot read contacts of another company", () =>
+  assertFails(getDocs(collection(asUser("outsider"), "companies", COMPANY, "contacts")))
+);
+
+await check("outsider cannot write contacts to another company", () =>
+  assertFails(
+    setDoc(doc(asUser("outsider"), "companies", COMPANY, "contacts", "hack"), {
+      name: "Hack",
+    })
+  )
+);
+
+await check("outsider cannot read projects of another company", () =>
+  assertFails(getDocs(collection(asUser("outsider"), "companies", COMPANY, "projects")))
+);
+
+await check("outsider cannot write projects to another company", () =>
+  assertFails(
+    setDoc(doc(asUser("outsider"), "companies", COMPANY, "projects", "hack"), {
+      name: "Hack",
+    })
+  )
+);
+
+// --- Permitted company-scoped operations for member ---
+await check("company member can read contact_classifications", () =>
+  assertSucceeds(
+    getDocs(collection(asUser("emp1"), "companies", COMPANY, "contact_classifications"))
+  )
+);
+
+await check("company member can create custom contact_classifications", () =>
+  assertSucceeds(
+    setDoc(
+      doc(asUser("emp1"), "companies", COMPANY, "contact_classifications", "class2"),
+      { name: "Strategic Lead", color: "blue", isActive: true }
+    )
+  )
+);
+
+await check("company member can read contacts", () =>
+  assertSucceeds(getDocs(collection(asUser("emp1"), "companies", COMPANY, "contacts")))
+);
+
+await check("company member can create contact with custom classification", () =>
+  assertSucceeds(
+    setDoc(doc(asUser("emp1"), "companies", COMPANY, "contacts", "contact2"), {
+      name: "Jane Smith",
+      classification: "class2",
+      source: "referral",
+    })
+  )
+);
+
+await check("company member can create project with custom fields and priority", () =>
+  assertSucceeds(
+    setDoc(doc(asUser("emp1"), "companies", COMPANY, "projects", "proj2"), {
+      name: "Beta Project",
+      slug: "beta-project",
+      priority: "medium",
+      customFields: [{ key: "Budget", value: "50000" }],
     })
   )
 );
