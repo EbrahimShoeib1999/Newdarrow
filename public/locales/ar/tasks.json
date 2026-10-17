@@ -401,5 +401,40 @@
     "commentAddFailed": "فشل إضافة التعليق",
     "commentUpdateFailed": "فشل تحديث التعليق",
     "commentDeleteFailed": "فشل حذف التعليق"
+  },
+  "assignment": {
+    "assigned": "تم التعيين",
+    "unassigned": "غير مسند",
+    "error": "حدث خطأ أثناء التعيين",
+    "assignTo": "تعيين إلى",
+    "smartAssign": "تعيين ذكي حسب التخصص",
+    "unassign": "إلغاء التعيين",
+    "selectAssignee": "اختر المسؤول",
+    "me": "أنا (المستخدم الحالي)",
+    "availableUsers": "المستخدمون المتاحون",
+    "updated": "تم تحديث تعيين المهمة بنجاح"
+  },
+  "filters": {
+    "searchPlaceholder": "بحث في المهام…",
+    "search": "بحث",
+    "status": "الحالة",
+    "allStatuses": "جميع الحالات",
+    "priority": "الأولوية",
+    "allPriorities": "جميع الأولويات",
+    "advanced": "فلاتر متقدمة",
+    "assignee": "المسؤول",
+    "selectAssignee": "اختر المسؤول",
+    "unassigned": "غير مسند",
+    "showingResults": "عرض النتائج"
+  },
+  "daily_report": {
+    "page_title": "التقارير اليومية للمهام",
+    "page_subtitle": "متابعة إنجازات وتحديثات فريق العمل اليومية",
+    "scope_own": "تقاريري فقط",
+    "refresh": "تحديث",
+    "search_placeholder": "بحث في التقارير اليومية…",
+    "col_employee": "الموظف",
+    "col_date_time": "التاريخ والوقت",
+    "col_summary": "الملخص"
   }
 }

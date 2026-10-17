@@ -44,6 +44,7 @@ import {
   List,
   Tag,
   Globe,
+  X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -353,197 +354,222 @@ export function ContactsListPage() {
         </Tabs>
       </div>
 
-      {/* Filters Bar: Full Filtering Suite (Classification, Source, Status, Satisfaction, Assignee, Search) */}
-      <div className="flex flex-wrap items-center gap-3 bg-default-50 p-4 rounded-3xl border border-default-100">
-        <Input
-          isClearable
-          size="sm"
-          variant="bordered"
-          placeholder={t("contacts.searchPlaceholder")}
-          value={params.search ?? ""}
-          onValueChange={(v) => setParams((p) => ({ ...p, search: v, page: 1 }))}
-          startContent={<Search className="h-4 w-4 text-default-400" />}
-          className="w-full sm:w-60"
-        />
-
-        {/* Assigned Follow-Up Employee Filter */}
-        <Select
-          {...selectFieldProps({ compact: true })}
-          size="sm"
-          variant="bordered"
-          label={t("contacts.filters.assignedTo")}
-          className="w-full sm:w-44"
-          selectedKeys={params.assignedTo ? [params.assignedTo] : []}
-          onSelectionChange={(keys) => {
-            const v = Array.from(keys)[0] as string | undefined;
-            setParams((p) => ({ ...p, assignedTo: v, page: 1 }));
-          }}
-          items={[
-            { id: "__unassigned__", name: t("contacts.filters.unassigned") },
-            ...(users ?? []).map((u) => ({ id: u.id, name: u.name })),
-          ]}
-        >
-          {(item) => <SelectItem key={item.id} textValue={item.name}>{item.name}</SelectItem>}
-        </Select>
-
-        {/* Entity Type Filter */}
-        <Select
-          {...selectFieldProps({ compact: true })}
-          size="sm"
-          variant="bordered"
-          label={t("contacts.filters.entityType")}
-          className="w-full sm:w-36"
-          selectedKeys={params.entityType && params.entityType !== "all" ? [params.entityType] : []}
-          onSelectionChange={(keys) => {
-            const v = Array.from(keys)[0] as EntityType | undefined;
-            setParams((p) => ({ ...p, entityType: v || "all", page: 1 }));
-          }}
-        >
-          <SelectItem key="all" textValue={t("contacts.entityType.all")}>{t("contacts.entityType.all")}</SelectItem>
-          <SelectItem key="individual" textValue={t("contacts.entityType.individual")}>👤 {t("contacts.entityType.individual")}</SelectItem>
-          <SelectItem key="company" textValue={t("contacts.entityType.company")}>🏢 {t("contacts.entityType.company")}</SelectItem>
-          <SelectItem key="establishment" textValue={t("contacts.entityType.establishment")}>🏬 {t("contacts.entityType.establishment")}</SelectItem>
-          <SelectItem key="government" textValue={t("contacts.entityType.government")}>🏛️ {t("contacts.entityType.government")}</SelectItem>
-          <SelectItem key="non_profit" textValue={t("contacts.entityType.non_profit")}>🤝 {t("contacts.entityType.non_profit")}</SelectItem>
-          <SelectItem key="bank" textValue={t("contacts.entityType.bank")}>🏦 {t("contacts.entityType.bank")}</SelectItem>
-          <SelectItem key="media" textValue={t("contacts.entityType.media")}>📻 {t("contacts.entityType.media")}</SelectItem>
-          <SelectItem key="influencer" textValue={t("contacts.entityType.influencer")}>✨ {t("contacts.entityType.influencer")}</SelectItem>
-          <SelectItem key="other" textValue={t("contacts.entityType.other")}>❓ {t("contacts.entityType.other")}</SelectItem>
-        </Select>
-
-        {/* Relationship Filter */}
-        <Select
-          {...selectFieldProps({ compact: true })}
-          size="sm"
-          variant="bordered"
-          label={t("contacts.filters.relationships")}
-          className="w-full sm:w-40"
-          selectedKeys={params.relationship && params.relationship !== "all" ? [params.relationship] : []}
-          onSelectionChange={(keys) => {
-            const v = Array.from(keys)[0] as ContactRelationship | undefined;
-            setParams((p) => ({ ...p, relationship: v || "all", page: 1 }));
-          }}
-        >
-          <SelectItem key="all" textValue={t("contacts.relationships.all")}>{t("contacts.relationships.all")}</SelectItem>
-          <SelectItem key="lead" textValue={t("contacts.relationships.lead")}>🎯 {t("contacts.relationships.lead")}</SelectItem>
-          <SelectItem key="new_client" textValue={t("contacts.relationships.new_client")}>✨ {t("contacts.relationships.new_client")}</SelectItem>
-          <SelectItem key="active_client" textValue={t("contacts.relationships.active_client")}>🟢 {t("contacts.relationships.active_client")}</SelectItem>
-          <SelectItem key="vip_client" textValue={t("contacts.relationships.vip_client")}>💎 {t("contacts.relationships.vip_client")}</SelectItem>
-          <SelectItem key="vendor" textValue={t("contacts.relationships.vendor")}>📦 {t("contacts.relationships.vendor")}</SelectItem>
-          <SelectItem key="partner" textValue={t("contacts.relationships.partner")}>🤝 {t("contacts.relationships.partner")}</SelectItem>
-          <SelectItem key="contractor" textValue={t("contacts.relationships.contractor")}>📝 {t("contacts.relationships.contractor")}</SelectItem>
-          <SelectItem key="referral" textValue={t("contacts.relationships.referral")}>📣 {t("contacts.relationships.referral")}</SelectItem>
-          <SelectItem key="media" textValue={t("contacts.relationships.media")}>📻 {t("contacts.relationships.media")}</SelectItem>
-          <SelectItem key="influencer" textValue={t("contacts.relationships.influencer")}>🌟 {t("contacts.relationships.influencer")}</SelectItem>
-        </Select>
-
-        {/* Dynamic Classification Filter */}
-        <Select
-          {...selectFieldProps({ compact: true })}
-          size="sm"
-          variant="bordered"
-          label={t("contacts.filters.classification")}
-          className="w-full sm:w-44"
-          selectedKeys={params.classification && params.classification !== "all" ? [params.classification] : []}
-          onSelectionChange={(keys) => {
-            const v = Array.from(keys)[0] as string | undefined;
-            setParams((p) => ({ ...p, classification: v || "all", page: 1 }));
-          }}
-        >
-          {activeClassifications.map((c: ContactClassificationItem) => {
-            const label = isAr ? c.nameAr : c.nameEn;
-            return (
-              <SelectItem key={c.key} textValue={label}>
-                <div className="flex items-center gap-1.5">
-                  <span>{c.emoji || "🏷️"}</span>
-                  <span>{label}</span>
-                </div>
-              </SelectItem>
-            );
-          })}
-        </Select>
-
-        {/* Sender / Source Filter */}
-        <Select
-          {...selectFieldProps({ compact: true })}
-          size="sm"
-          variant="bordered"
-          label={t("contacts.filters.source")}
-          className="w-full sm:w-36"
-          selectedKeys={params.source && params.source !== "all" ? [params.source] : []}
-          onSelectionChange={(keys) => {
-            const v = Array.from(keys)[0] as ContactSource | undefined;
-            setParams((p) => ({ ...p, source: v || "all", page: 1 }));
-          }}
-        >
-          <SelectItem key="website" textValue={t("contacts.source.website")}>{t("contacts.source.website")}</SelectItem>
-          <SelectItem key="referral" textValue={t("contacts.source.referral")}>{t("contacts.source.referral")}</SelectItem>
-          <SelectItem key="social_media" textValue={t("contacts.source.social_media")}>{t("contacts.source.social_media")}</SelectItem>
-          <SelectItem key="cold_call" textValue={t("contacts.source.cold_call")}>{t("contacts.source.cold_call")}</SelectItem>
-          <SelectItem key="event" textValue={t("contacts.source.event")}>{t("contacts.source.event")}</SelectItem>
-          <SelectItem key="whatsapp" textValue={t("contacts.source.whatsapp")}>{t("contacts.source.whatsapp")}</SelectItem>
-          <SelectItem key="other" textValue={t("contacts.source.other")}>{t("contacts.source.other")}</SelectItem>
-        </Select>
-
-        {/* Status Filter */}
-        <Select
-          {...selectFieldProps({ compact: true })}
-          size="sm"
-          variant="bordered"
-          label={t("contacts.filters.status")}
-          className="w-full sm:w-32"
-          selectedKeys={params.status && params.status !== "all" ? [params.status] : []}
-          onSelectionChange={(keys) => {
-            const v = Array.from(keys)[0] as ContactStatus | undefined;
-            setParams((p) => ({ ...p, status: v || "all", page: 1 }));
-          }}
-        >
-          <SelectItem key="active" textValue={t("contacts.status.active")}>{t("contacts.status.active")}</SelectItem>
-          <SelectItem key="inactive" textValue={t("contacts.status.inactive")}>{t("contacts.status.inactive")}</SelectItem>
-          <SelectItem key="archived" textValue={t("contacts.status.archived")}>{t("contacts.status.archived")}</SelectItem>
-        </Select>
-
-        {/* Satisfaction Filter */}
-        <Select
-          {...selectFieldProps({ compact: true })}
-          size="sm"
-          variant="bordered"
-          label={t("contacts.filters.satisfaction")}
-          className="w-full sm:w-36"
-          selectedKeys={params.satisfaction && params.satisfaction !== "all" ? [params.satisfaction] : []}
-          onSelectionChange={(keys) => {
-            const v = Array.from(keys)[0] as CustomerSatisfaction | undefined;
-            setParams((p) => ({ ...p, satisfaction: v || "all", page: 1 }));
-          }}
-        >
-          <SelectItem key="satisfied" textValue={t("contacts.satisfaction.satisfied")}>
-            😊 {t("contacts.satisfaction.satisfied")}
-          </SelectItem>
-          <SelectItem key="neutral" textValue={t("contacts.satisfaction.neutral")}>
-            😐 {t("contacts.satisfaction.neutral")}
-          </SelectItem>
-          <SelectItem key="unsatisfied" textValue={t("contacts.satisfaction.unsatisfied")}>
-            😞 {t("contacts.satisfaction.unsatisfied")}
-          </SelectItem>
-        </Select>
-
-        {(params.search ||
-          params.assignedTo ||
-          (params.entityType && params.entityType !== "all") ||
-          (params.relationship && params.relationship !== "all") ||
-          (params.classification && params.classification !== "all") ||
-          (params.source && params.source !== "all") ||
-          (params.status && params.status !== "all") ||
-          (params.satisfaction && params.satisfaction !== "all")) && (
-          <Button
+      {/* Filters Bar: Horizontally scrollable strip for filters */}
+      <div className="bg-default-50/90 p-3 sm:p-4 rounded-3xl border border-default-100 shadow-sm min-w-0 max-w-full space-y-2.5">
+        {/* Mobile Search input */}
+        <div className="md:hidden w-full">
+          <Input
+            isClearable
             size="sm"
-            variant="light"
-            color="danger"
-            onPress={() => setParams(DEFAULT_PARAMS)}
-          >
-            {t("contacts.filters.clear")}
-          </Button>
-        )}
+            variant="bordered"
+            placeholder={t("contacts.searchPlaceholder")}
+            value={params.search ?? ""}
+            onValueChange={(v) => setParams((p) => ({ ...p, search: v, page: 1 }))}
+            startContent={<Search className="h-4 w-4 text-default-400" />}
+            className="w-full"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 min-w-0 max-w-full">
+          {/* Desktop Search Input (pinned) */}
+          <div className="hidden md:block w-60 shrink-0">
+            <Input
+              isClearable
+              size="sm"
+              variant="bordered"
+              placeholder={t("contacts.searchPlaceholder")}
+              value={params.search ?? ""}
+              onValueChange={(v) => setParams((p) => ({ ...p, search: v, page: 1 }))}
+              startContent={<Search className="h-4 w-4 text-default-400" />}
+              className="w-full"
+            />
+          </div>
+
+          {/* Horizontally scrollable filters strip */}
+          <div className="flex flex-nowrap items-center gap-2.5 overflow-x-auto min-w-0 flex-1 py-1 px-1 scrollbar-thin [scrollbar-width:thin] scrollbar-thumb-default-200 scroll-smooth">
+            {/* Assigned Follow-Up Employee Filter */}
+            <Select
+              {...selectFieldProps({ compact: true })}
+              size="sm"
+              variant="bordered"
+              label={t("contacts.filters.assignedTo")}
+              className="w-44 shrink-0"
+              selectedKeys={params.assignedTo ? [params.assignedTo] : []}
+              onSelectionChange={(keys) => {
+                const v = Array.from(keys)[0] as string | undefined;
+                setParams((p) => ({ ...p, assignedTo: v, page: 1 }));
+              }}
+              items={[
+                { id: "__unassigned__", name: t("contacts.filters.unassigned") },
+                ...(users ?? []).map((u) => ({ id: u.id, name: u.name })),
+              ]}
+            >
+              {(item) => <SelectItem key={item.id} textValue={item.name}>{item.name}</SelectItem>}
+            </Select>
+
+            {/* Entity Type Filter */}
+            <Select
+              {...selectFieldProps({ compact: true })}
+              size="sm"
+              variant="bordered"
+              label={t("contacts.filters.entityType")}
+              className="w-36 shrink-0"
+              selectedKeys={params.entityType && params.entityType !== "all" ? [params.entityType] : []}
+              onSelectionChange={(keys) => {
+                const v = Array.from(keys)[0] as EntityType | undefined;
+                setParams((p) => ({ ...p, entityType: v || "all", page: 1 }));
+              }}
+            >
+              <SelectItem key="all" textValue={t("contacts.entityType.all")}>{t("contacts.entityType.all")}</SelectItem>
+              <SelectItem key="individual" textValue={t("contacts.entityType.individual")}>👤 {t("contacts.entityType.individual")}</SelectItem>
+              <SelectItem key="company" textValue={t("contacts.entityType.company")}>🏢 {t("contacts.entityType.company")}</SelectItem>
+              <SelectItem key="establishment" textValue={t("contacts.entityType.establishment")}>🏬 {t("contacts.entityType.establishment")}</SelectItem>
+              <SelectItem key="government" textValue={t("contacts.entityType.government")}>🏛️ {t("contacts.entityType.government")}</SelectItem>
+              <SelectItem key="non_profit" textValue={t("contacts.entityType.non_profit")}>🤝 {t("contacts.entityType.non_profit")}</SelectItem>
+              <SelectItem key="bank" textValue={t("contacts.entityType.bank")}>🏦 {t("contacts.entityType.bank")}</SelectItem>
+              <SelectItem key="media" textValue={t("contacts.entityType.media")}>📻 {t("contacts.entityType.media")}</SelectItem>
+              <SelectItem key="influencer" textValue={t("contacts.entityType.influencer")}>✨ {t("contacts.entityType.influencer")}</SelectItem>
+              <SelectItem key="other" textValue={t("contacts.entityType.other")}>❓ {t("contacts.entityType.other")}</SelectItem>
+            </Select>
+
+            {/* Relationship Filter */}
+            <Select
+              {...selectFieldProps({ compact: true })}
+              size="sm"
+              variant="bordered"
+              label={t("contacts.filters.relationships")}
+              className="w-40 shrink-0"
+              selectedKeys={params.relationship && params.relationship !== "all" ? [params.relationship] : []}
+              onSelectionChange={(keys) => {
+                const v = Array.from(keys)[0] as ContactRelationship | undefined;
+                setParams((p) => ({ ...p, relationship: v || "all", page: 1 }));
+              }}
+            >
+              <SelectItem key="all" textValue={t("contacts.relationships.all")}>{t("contacts.relationships.all")}</SelectItem>
+              <SelectItem key="lead" textValue={t("contacts.relationships.lead")}>🎯 {t("contacts.relationships.lead")}</SelectItem>
+              <SelectItem key="new_client" textValue={t("contacts.relationships.new_client")}>✨ {t("contacts.relationships.new_client")}</SelectItem>
+              <SelectItem key="active_client" textValue={t("contacts.relationships.active_client")}>🟢 {t("contacts.relationships.active_client")}</SelectItem>
+              <SelectItem key="vip_client" textValue={t("contacts.relationships.vip_client")}>💎 {t("contacts.relationships.vip_client")}</SelectItem>
+              <SelectItem key="vendor" textValue={t("contacts.relationships.vendor")}>📦 {t("contacts.relationships.vendor")}</SelectItem>
+              <SelectItem key="partner" textValue={t("contacts.relationships.partner")}>🤝 {t("contacts.relationships.partner")}</SelectItem>
+              <SelectItem key="contractor" textValue={t("contacts.relationships.contractor")}>📝 {t("contacts.relationships.contractor")}</SelectItem>
+              <SelectItem key="referral" textValue={t("contacts.relationships.referral")}>📣 {t("contacts.relationships.referral")}</SelectItem>
+              <SelectItem key="media" textValue={t("contacts.relationships.media")}>📻 {t("contacts.relationships.media")}</SelectItem>
+              <SelectItem key="influencer" textValue={t("contacts.relationships.influencer")}>🌟 {t("contacts.relationships.influencer")}</SelectItem>
+            </Select>
+
+            {/* Dynamic Classification Filter */}
+            <Select
+              {...selectFieldProps({ compact: true })}
+              size="sm"
+              variant="bordered"
+              label={t("contacts.filters.classification")}
+              className="w-44 shrink-0"
+              selectedKeys={params.classification && params.classification !== "all" ? [params.classification] : []}
+              onSelectionChange={(keys) => {
+                const v = Array.from(keys)[0] as string | undefined;
+                setParams((p) => ({ ...p, classification: v || "all", page: 1 }));
+              }}
+            >
+              {activeClassifications.map((c: ContactClassificationItem) => {
+                const label = isAr ? c.nameAr : c.nameEn;
+                return (
+                  <SelectItem key={c.key} textValue={label}>
+                    <div className="flex items-center gap-1.5">
+                      <span>{c.emoji || "🏷️"}</span>
+                      <span>{label}</span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
+            </Select>
+
+            {/* Sender / Source Filter */}
+            <Select
+              {...selectFieldProps({ compact: true })}
+              size="sm"
+              variant="bordered"
+              label={t("contacts.filters.source")}
+              className="w-36 shrink-0"
+              selectedKeys={params.source && params.source !== "all" ? [params.source] : []}
+              onSelectionChange={(keys) => {
+                const v = Array.from(keys)[0] as ContactSource | undefined;
+                setParams((p) => ({ ...p, source: v || "all", page: 1 }));
+              }}
+            >
+              <SelectItem key="website" textValue={t("contacts.source.website")}>{t("contacts.source.website")}</SelectItem>
+              <SelectItem key="referral" textValue={t("contacts.source.referral")}>{t("contacts.source.referral")}</SelectItem>
+              <SelectItem key="social_media" textValue={t("contacts.source.social_media")}>{t("contacts.source.social_media")}</SelectItem>
+              <SelectItem key="cold_call" textValue={t("contacts.source.cold_call")}>{t("contacts.source.cold_call")}</SelectItem>
+              <SelectItem key="event" textValue={t("contacts.source.event")}>{t("contacts.source.event")}</SelectItem>
+              <SelectItem key="whatsapp" textValue={t("contacts.source.whatsapp")}>{t("contacts.source.whatsapp")}</SelectItem>
+              <SelectItem key="other" textValue={t("contacts.source.other")}>{t("contacts.source.other")}</SelectItem>
+            </Select>
+
+            {/* Status Filter */}
+            <Select
+              {...selectFieldProps({ compact: true })}
+              size="sm"
+              variant="bordered"
+              label={t("contacts.filters.status")}
+              className="w-32 shrink-0"
+              selectedKeys={params.status && params.status !== "all" ? [params.status] : []}
+              onSelectionChange={(keys) => {
+                const v = Array.from(keys)[0] as ContactStatus | undefined;
+                setParams((p) => ({ ...p, status: v || "all", page: 1 }));
+              }}
+            >
+              <SelectItem key="active" textValue={t("contacts.status.active")}>{t("contacts.status.active")}</SelectItem>
+              <SelectItem key="inactive" textValue={t("contacts.status.inactive")}>{t("contacts.status.inactive")}</SelectItem>
+              <SelectItem key="archived" textValue={t("contacts.status.archived")}>{t("contacts.status.archived")}</SelectItem>
+            </Select>
+
+            {/* Satisfaction Filter */}
+            <Select
+              {...selectFieldProps({ compact: true })}
+              size="sm"
+              variant="bordered"
+              label={t("contacts.filters.satisfaction")}
+              className="w-36 shrink-0"
+              selectedKeys={params.satisfaction && params.satisfaction !== "all" ? [params.satisfaction] : []}
+              onSelectionChange={(keys) => {
+                const v = Array.from(keys)[0] as CustomerSatisfaction | undefined;
+                setParams((p) => ({ ...p, satisfaction: v || "all", page: 1 }));
+              }}
+            >
+              <SelectItem key="satisfied" textValue={t("contacts.satisfaction.satisfied")}>
+                😊 {t("contacts.satisfaction.satisfied")}
+              </SelectItem>
+              <SelectItem key="neutral" textValue={t("contacts.satisfaction.neutral")}>
+                😐 {t("contacts.satisfaction.neutral")}
+              </SelectItem>
+              <SelectItem key="unsatisfied" textValue={t("contacts.satisfaction.unsatisfied")}>
+                😞 {t("contacts.satisfaction.unsatisfied")}
+              </SelectItem>
+            </Select>
+
+            {/* Clear Filters Button */}
+            {(params.search ||
+              params.assignedTo ||
+              (params.entityType && params.entityType !== "all") ||
+              (params.relationship && params.relationship !== "all") ||
+              (params.classification && params.classification !== "all") ||
+              (params.source && params.source !== "all") ||
+              (params.status && params.status !== "all") ||
+              (params.satisfaction && params.satisfaction !== "all")) && (
+              <Button
+                size="sm"
+                variant="flat"
+                color="danger"
+                className="shrink-0 rounded-full font-bold px-3"
+                startContent={<X className="h-3.5 w-3.5" />}
+                onPress={() => setParams(DEFAULT_PARAMS)}
+              >
+                {t("contacts.filters.clear")}
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* VIEW 1: Contacts Table View */}

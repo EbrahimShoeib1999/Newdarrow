@@ -401,5 +401,40 @@
     "commentAddFailed": "Failed to add comment",
     "commentUpdateFailed": "Failed to update comment",
     "commentDeleteFailed": "Failed to delete comment"
+  },
+  "assignment": {
+    "assigned": "Assigned",
+    "unassigned": "Unassigned",
+    "error": "Error during assignment",
+    "assignTo": "Assign to",
+    "smartAssign": "Smart Assign by Skill",
+    "unassign": "Unassign",
+    "selectAssignee": "Select Assignee",
+    "me": "Me",
+    "availableUsers": "Available Users",
+    "updated": "Assignment updated successfully"
+  },
+  "filters": {
+    "searchPlaceholder": "Search tasks…",
+    "search": "Search",
+    "status": "Status",
+    "allStatuses": "All statuses",
+    "priority": "Priority",
+    "allPriorities": "All priorities",
+    "advanced": "Advanced filters",
+    "assignee": "Assignee",
+    "selectAssignee": "Select assignee",
+    "unassigned": "Unassigned",
+    "showingResults": "Showing results"
+  },
+  "daily_report": {
+    "page_title": "Task Daily Reports",
+    "page_subtitle": "Track daily team achievements and updates",
+    "scope_own": "My reports only",
+    "refresh": "Refresh",
+    "search_placeholder": "Search daily reports…",
+    "col_employee": "Employee",
+    "col_date_time": "Date & Time",
+    "col_summary": "Summary"
   }
 }

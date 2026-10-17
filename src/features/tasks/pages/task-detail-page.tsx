@@ -455,6 +455,13 @@ export function TaskDetailPage() {
     return () => observers.forEach((o) => o.disconnect());
   }, []);
 
+  // Sync delayReasonInput from task data (hoisted before early returns to preserve Hook order)
+  useEffect(() => {
+    if (data?.data?.delayReason) {
+      setDelayReasonInput(data.data.delayReason);
+    }
+  }, [data?.data?.delayReason]);
+
   // Click a tab → scroll that section into view using its id
   const scrollToSection = (key: string) => {
     const el = document.getElementById(`section-${key}`);
@@ -535,11 +542,6 @@ export function TaskDetailPage() {
     setIsDirty(true);
   };
 
-  useEffect(() => {
-    if (baseTask?.delayReason) {
-      setDelayReasonInput(baseTask.delayReason);
-    }
-  }, [baseTask?.delayReason]);
 
   const handleClaimAndStart = () => {
     if (!task) return;
