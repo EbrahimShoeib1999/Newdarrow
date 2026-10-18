@@ -494,6 +494,12 @@ export function TaskDetailPage() {
       }
     : null;
 
+  const isOverdue = Boolean(
+    task?.dueDate &&
+    new Date(task.dueDate).getTime() < Date.now() &&
+    task.status !== "done"
+  );
+
   if (!task) {
     return (
       <div className="text-center py-12">
@@ -906,7 +912,7 @@ export function TaskDetailPage() {
                 )}
 
                 {/* 2. OVERDUE DELAY ALERT & DELAY REASON LOGGING */}
-                {task.dueDate && new Date(task.dueDate).getTime() < Date.now() && task.status !== "done" && (
+                {isOverdue && (
                   <div className="p-4 bg-danger-500/10 rounded-2xl border border-danger-200 dark:border-danger-900/50 space-y-3">
                     <div className="flex items-start gap-3">
                       <div className="p-2 bg-danger-500 text-white rounded-xl">

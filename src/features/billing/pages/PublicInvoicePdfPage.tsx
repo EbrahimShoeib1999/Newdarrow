@@ -34,7 +34,7 @@ export default function PublicInvoicePdfPage() {
   const viewportRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const [share, setShare] = useState<InvoicePublicShare | null>(null);
-  const [error, setError] = useState<"missing" | "not_ready" | "failed" | null>(
+  const [error, setError] = useState<"missing" | "not_ready" | "failed" | "revoked" | "expired" | "cancelled" | null>(
     null
   );
   const [exporting, setExporting] = useState(false);
@@ -54,6 +54,19 @@ export default function PublicInvoicePdfPage() {
       try {
         const data = await getInvoicePublicShare(token.trim());
         if (cancelled) return;
+
+        if (data?.status === "revoked" || data?.isRevoked) {
+          setError("revoked");
+          return;
+        }
+        if (data?.status === "expired") {
+          setError("expired");
+          return;
+        }
+        if (data?.status === "cancelled") {
+          setError("cancelled");
+          return;
+        }
 
         const ready = !!(
           data?.snapshot ||
@@ -148,16 +161,25 @@ export default function PublicInvoicePdfPage() {
   };
 
   if (error) {
+    let title = t("invoices.public.pdf_unavailable");
+    let hint = t("invoices.public.pdf_unavailable_hint");
+    if (error === "not_ready") {
+      title = t("invoices.public.pdf_not_ready");
+    } else if (error === "revoked") {
+      title = "تم إلغاء رابط مشاركة هذه الفاتورة";
+      hint = "تم إيقاف صلاحية هذا الرابط من قبل المنشأة.";
+    } else if (error === "expired") {
+      title = "انتهت صلاحية رابط مشاركة الفاتورة";
+      hint = "يرجى التواصل مع المنشأة لإصدار رابط مشاركة جديد.";
+    } else if (error === "cancelled") {
+      title = "هذه الفاتورة ملغاة";
+      hint = "تم إلغاء هذه الفاتورة ولا يمكن عرضها.";
+    }
+
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-background px-6 text-center">
-        <p className="text-base font-bold text-default-800">
-          {error === "not_ready"
-            ? t("invoices.public.pdf_not_ready")
-            : t("invoices.public.pdf_unavailable")}
-        </p>
-        <p className="max-w-sm text-sm text-default-500">
-          {t("invoices.public.pdf_unavailable_hint")}
-        </p>
+        <p className="text-base font-bold text-default-800">{title}</p>
+        <p className="max-w-sm text-sm text-default-500">{hint}</p>
       </div>
     );
   }

@@ -11,6 +11,7 @@ import {
   limit,
   serverTimestamp,
   runTransaction,
+  increment,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { ApiResponse } from "@/types/api.types";
@@ -126,16 +127,17 @@ export function createBillingCollectionService<T extends { id?: string }, Create
   serviceName: string,
   defaults?: Partial<CreateDTO>
 ) {
-  const collPath = (companyId: string) =>
-    collection(db, "companies", companyId, collectionName);
+  const collPath = (companyId: string, customDb?: any) =>
+    collection(customDb || db, "companies", companyId, collectionName);
 
   return {
     async getAll(
       companyId: string,
-      options?: BillingListOptions
+      options?: BillingListOptions,
+      customDb?: any
     ): Promise<ApiResponse<T[]>> {
       return withLogging(serviceName, "getAll", (async () => {
-        const ref = collPath(companyId);
+        const ref = collPath(companyId, customDb);
         const q = query(
           ref,
           orderBy(options?.orderByField ?? "createdAt", options?.orderDirection ?? "desc"),
@@ -149,9 +151,9 @@ export function createBillingCollectionService<T extends { id?: string }, Create
       })());
     },
 
-    async getById(companyId: string, id: string): Promise<ApiResponse<T>> {
+    async getById(companyId: string, id: string, customDb?: any): Promise<ApiResponse<T>> {
       return withLogging(serviceName, "getById", (async () => {
-        const docSnap = await getDoc(doc(db, "companies", companyId, collectionName, id));
+        const docSnap = await getDoc(doc(customDb || db, "companies", companyId, collectionName, id));
         if (!docSnap.exists()) throw new Error(`${serviceName}: not found`);
         return {
           data: mapDocWithTimestamps<T>(docSnap.id, docSnap.data() as Record<string, unknown>),
@@ -160,7 +162,7 @@ export function createBillingCollectionService<T extends { id?: string }, Create
       })());
     },
 
-    async create(companyId: string, data: CreateDTO): Promise<ApiResponse<T>> {
+    async create(companyId: string, data: CreateDTO, customDb?: any): Promise<ApiResponse<T>> {
       return withLogging(serviceName, "create", (async () => {
         const payload = stripUndefined({
           ...defaults,
@@ -168,7 +170,7 @@ export function createBillingCollectionService<T extends { id?: string }, Create
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         } as Record<string, unknown>);
-        const docRef = await addDoc(collPath(companyId), payload);
+        const docRef = await addDoc(collPath(companyId, customDb), payload);
         const newDoc = await getDoc(docRef);
         return {
           data: mapDocWithTimestamps<T>(newDoc.id, newDoc.data() as Record<string, unknown>),
@@ -177,9 +179,9 @@ export function createBillingCollectionService<T extends { id?: string }, Create
       })());
     },
 
-    async update(companyId: string, id: string, data: UpdateDTO): Promise<ApiResponse<T>> {
+    async update(companyId: string, id: string, data: UpdateDTO, customDb?: any): Promise<ApiResponse<T>> {
       return withLogging(serviceName, "update", (async () => {
-        const docRef = doc(db, "companies", companyId, collectionName, id);
+        const docRef = doc(customDb || db, "companies", companyId, collectionName, id);
         const clean = stripUndefined({ ...data, updatedAt: serverTimestamp() } as Record<string, unknown>);
         await updateDoc(docRef, clean);
         const updated = await getDoc(docRef);
@@ -190,9 +192,9 @@ export function createBillingCollectionService<T extends { id?: string }, Create
       })());
     },
 
-    async delete(companyId: string, id: string): Promise<void> {
+    async delete(companyId: string, id: string, customDb?: any): Promise<void> {
       return withLogging(serviceName, "delete", (async () => {
-        await deleteDoc(doc(db, "companies", companyId, collectionName, id));
+        await deleteDoc(doc(customDb || db, "companies", companyId, collectionName, id));
       })());
     },
   };
@@ -322,21 +324,342 @@ export const BillingService = {
     const accountsRes = await BillingService.accounts.getAll(companyId);
     const deltas = aggregateBalanceDeltas(accountsRes.data, journal.lines);
 
-    const journalRes = await BillingService.journals.create(companyId, journal);
+    const isReversal =
+      journal.sourceType === "refund" ||
+      !!journal.reversalOfId ||
+      Boolean(journal.reference?.startsWith("REV-"));
 
-    await Promise.all(
-      Array.from(deltas.entries()).map(async ([accountId, delta]) => {
-        const account = accountsRes.data.find((a) => a.id === accountId);
-        if (!account) return;
-        await BillingService.accounts.update(companyId, accountId, {
-          currentBalance: (account.currentBalance ?? 0) + delta,
+    const deterministicId =
+      isReversal && journal.sourceId
+        ? `je_rev_${journal.sourceType}_${journal.sourceId}`
+        : (journal.sourceType && journal.sourceId
+          ? `je_${journal.sourceType}_${journal.sourceId}`
+          : doc(collection(db, "companies", companyId, "journals")).id);
+
+    const journalRef = doc(db, "companies", companyId, "journals", deterministicId);
+
+    return runTransaction(db, async (tx) => {
+      const snap = await tx.get(journalRef);
+      if (snap.exists()) {
+        const existingData = snap.data() as Record<string, unknown>;
+        // Idempotency Conflict Guard: If amounts differ from the previously posted entry, throw explicit conflict
+        const existingDebit = Number(existingData.totalDebit ?? 0);
+        if (Math.abs(existingDebit - journal.totalDebit) > 0.01) {
+          throw new Error(
+            `Idempotency conflict: journal ${deterministicId} already exists with debit ${existingDebit}, but requested amount is ${journal.totalDebit}`
+          );
+        }
+        return mapDocWithTimestamps<JournalEntry>(snap.id, existingData);
+      }
+
+      const payload = stripUndefined({
+        ...journal,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      } as Record<string, unknown>);
+
+      tx.set(journalRef, payload);
+
+      for (const [accountId, delta] of deltas.entries()) {
+        const accRef = doc(db, "companies", companyId, "accounts", accountId);
+        tx.update(accRef, {
+          currentBalance: increment(delta),
+          updatedAt: serverTimestamp(),
         });
-      })
-    );
+      }
 
-    return journalRes.data;
+      if (journal.sourceType === "invoice" && journal.sourceId) {
+        const invRef = doc(db, "companies", companyId, "invoices", journal.sourceId);
+        tx.update(invRef, {
+          journalEntryId: deterministicId,
+          postedAt: serverTimestamp(),
+        });
+      }
+
+      return {
+        id: deterministicId,
+        ...journal,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as JournalEntry;
+    });
   },
-  
+
+  async executeCustomerPaymentTransaction(
+    companyId: string,
+    params: {
+      invoiceId: string;
+      payment: Omit<CreatePaymentDTO, "invoiceId" | "type" | "currency"> & { id?: string };
+    },
+    customDb?: any
+  ): Promise<{ payment: Payment; invoice: Invoice; journal: JournalEntry }> {
+    return withLogging("BillingService", "executeCustomerPaymentTransaction", (async () => {
+      const targetDb = customDb || db;
+      const { buildPaymentJournalEntry, aggregateBalanceDeltas } = await import("../utils/accounting-engine");
+      
+      const accountsRes = await BillingService.accounts.getAll(companyId, undefined, targetDb);
+      let accounts = accountsRes.data;
+      if (accounts.length === 0) {
+        const { DEFAULT_CHART_OF_ACCOUNTS } = await import("../schemas/account");
+        const seeded = await Promise.all(
+          DEFAULT_CHART_OF_ACCOUNTS.map((acc) =>
+            BillingService.accounts.create(companyId, { ...acc, isActive: true }, targetDb)
+          )
+        );
+        accounts = seeded.map((s) => s.data);
+      }
+
+      const invoiceRef = doc(targetDb, "companies", companyId, "invoices", params.invoiceId);
+      const paymentId = params.payment.id || doc(collection(targetDb, "companies", companyId, "payments")).id;
+      const paymentRef = doc(targetDb, "companies", companyId, "payments", paymentId);
+      const journalId = `je_payment_${paymentId}`;
+      const journalRef = doc(targetDb, "companies", companyId, "journals", journalId);
+
+      return runTransaction(targetDb, async (tx) => {
+        // 1. Transaction Reads (all reads strictly before any writes)
+        const invoiceSnap = await tx.get(invoiceRef);
+        if (!invoiceSnap.exists()) {
+          throw new Error(`Invoice ${params.invoiceId} not found`);
+        }
+        const invoiceData = mapDocWithTimestamps<Invoice>(invoiceSnap.id, invoiceSnap.data() as Record<string, unknown>);
+
+        // Idempotency check with full field validation
+        const existingPaymentSnap = await tx.get(paymentRef);
+        if (existingPaymentSnap.exists()) {
+          const existingPayment = mapDocWithTimestamps<Payment>(existingPaymentSnap.id, existingPaymentSnap.data() as Record<string, unknown>);
+          
+          const isMatchingInvoice = existingPayment.invoiceId === params.invoiceId;
+          const isMatchingAmount = Math.abs(Number(existingPayment.amount) - Number(params.payment.amount)) < 0.0001;
+          const isMatchingCurrency = (existingPayment.currency || "SAR") === (invoiceData.currency || "SAR");
+          const isMatchingType = existingPayment.type === "customer";
+
+          if (isMatchingInvoice && isMatchingAmount && isMatchingCurrency && isMatchingType) {
+            const journalSnap = await tx.get(journalRef);
+            return {
+              payment: existingPayment,
+              invoice: invoiceData,
+              journal: journalSnap.exists()
+                ? mapDocWithTimestamps<JournalEntry>(journalSnap.id, journalSnap.data() as Record<string, unknown>)
+                : ({} as JournalEntry),
+            };
+          }
+
+          throw new Error(
+            `Payment ${paymentId} already exists with conflicting details: ` +
+            (!isMatchingInvoice ? `invoiceId mismatch (${existingPayment.invoiceId} vs ${params.invoiceId}); ` : "") +
+            (!isMatchingAmount ? `amount mismatch (${existingPayment.amount} vs ${params.payment.amount}); ` : "") +
+            (!isMatchingCurrency ? `currency mismatch (${existingPayment.currency} vs ${invoiceData.currency}); ` : "")
+          );
+        }
+
+        // 2. Concurrency & Balance Validation in Integer Cents (prevents floating-point tolerance overpayments)
+        const grandTotalCents = Math.round(Number(invoiceData.grandTotal ?? 0) * 100);
+        const currentPaidCents = Math.round(Number(invoiceData.amountPaid ?? 0) * 100);
+        const remainingDueCents = Math.max(0, grandTotalCents - currentPaidCents);
+        const paymentCents = Math.round(Number(params.payment.amount) * 100);
+
+        if (paymentCents <= 0) {
+          throw new Error(`Payment amount must be greater than zero`);
+        }
+
+        if (paymentCents > remainingDueCents) {
+          const remainingFormatted = (remainingDueCents / 100).toFixed(2);
+          throw new Error(`Payment exceeds amount due (${remainingFormatted})`);
+        }
+
+        const newAmountPaidCents = currentPaidCents + paymentCents;
+        const newAmountPaid = Number((newAmountPaidCents / 100).toFixed(2));
+        const newStatus = newAmountPaidCents >= grandTotalCents
+          ? "paid"
+          : (invoiceData.status === "draft" ? "sent" : invoiceData.status);
+
+        // 3. Prepare Double-Entry Journal
+        const paymentRecord: Payment = {
+          id: paymentId,
+          invoiceId: params.invoiceId,
+          type: "customer",
+          amount: params.payment.amount,
+          currency: invoiceData.currency || "SAR",
+          date: params.payment.date ? new Date(params.payment.date) : new Date(),
+          methodId: params.payment.methodId,
+          methodName: params.payment.methodName,
+          reference: params.payment.reference,
+          notes: params.payment.notes,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        const journalDTO = buildPaymentJournalEntry(paymentRecord, invoiceData, accounts);
+        const deltas = aggregateBalanceDeltas(accounts, journalDTO.lines);
+
+        // 4. Atomic Transaction Writes
+        tx.set(paymentRef, deepStripUndefined({
+          ...paymentRecord,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        } as Record<string, unknown>));
+
+        tx.set(journalRef, deepStripUndefined({
+          ...journalDTO,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        } as Record<string, unknown>));
+
+        for (const [accountId, delta] of deltas.entries()) {
+          const accRef = doc(targetDb, "companies", companyId, "accounts", accountId);
+          tx.update(accRef, {
+            currentBalance: increment(delta),
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        tx.update(invoiceRef, {
+          amountPaid: newAmountPaid,
+          status: newStatus,
+          updatedAt: serverTimestamp(),
+        });
+
+        return {
+          payment: paymentRecord,
+          invoice: { ...invoiceData, amountPaid: newAmountPaid, status: newStatus },
+          journal: { id: journalId, ...journalDTO } as JournalEntry,
+        };
+      });
+    })());
+  },
+
+  async executeVendorPaymentTransaction(
+    companyId: string,
+    params: {
+      billId: string;
+      payment: Omit<CreatePaymentDTO, "billId" | "type" | "currency"> & { id?: string };
+    },
+    customDb?: any
+  ): Promise<{ payment: Payment; bill: Bill; journal: JournalEntry }> {
+    return withLogging("BillingService", "executeVendorPaymentTransaction", (async () => {
+      const targetDb = customDb || db;
+      const { buildVendorPaymentJournalEntry, aggregateBalanceDeltas } = await import("../utils/accounting-engine");
+      
+      const accountsRes = await BillingService.accounts.getAll(companyId, undefined, targetDb);
+      const accounts = accountsRes.data;
+
+      const billRef = doc(targetDb, "companies", companyId, "bills", params.billId);
+      const paymentId = params.payment.id || doc(collection(targetDb, "companies", companyId, "payments")).id;
+      const paymentRef = doc(targetDb, "companies", companyId, "payments", paymentId);
+      const journalId = `je_vendor_payment_${paymentId}`;
+      const journalRef = doc(targetDb, "companies", companyId, "journals", journalId);
+
+      return runTransaction(targetDb, async (tx) => {
+        // Reads
+        const billSnap = await tx.get(billRef);
+        if (!billSnap.exists()) {
+          throw new Error(`Bill ${params.billId} not found`);
+        }
+        const billData = mapDocWithTimestamps<Bill>(billSnap.id, billSnap.data() as Record<string, unknown>);
+
+        // Idempotency check with full field validation
+        const existingPaymentSnap = await tx.get(paymentRef);
+        if (existingPaymentSnap.exists()) {
+          const existingPayment = mapDocWithTimestamps<Payment>(existingPaymentSnap.id, existingPaymentSnap.data() as Record<string, unknown>);
+          
+          const isMatchingBill = existingPayment.billId === params.billId;
+          const isMatchingAmount = Math.abs(Number(existingPayment.amount) - Number(params.payment.amount)) < 0.0001;
+          const isMatchingCurrency = (existingPayment.currency || "SAR") === (billData.currency || "SAR");
+          const isMatchingType = existingPayment.type === "vendor";
+
+          if (isMatchingBill && isMatchingAmount && isMatchingCurrency && isMatchingType) {
+            const journalSnap = await tx.get(journalRef);
+            return {
+              payment: existingPayment,
+              bill: billData,
+              journal: journalSnap.exists()
+                ? mapDocWithTimestamps<JournalEntry>(journalSnap.id, journalSnap.data() as Record<string, unknown>)
+                : ({} as JournalEntry),
+            };
+          }
+
+          throw new Error(
+            `Payment ${paymentId} already exists with conflicting details: ` +
+            (!isMatchingBill ? `billId mismatch (${existingPayment.billId} vs ${params.billId}); ` : "") +
+            (!isMatchingAmount ? `amount mismatch (${existingPayment.amount} vs ${params.payment.amount}); ` : "") +
+            (!isMatchingCurrency ? `currency mismatch (${existingPayment.currency} vs ${billData.currency}); ` : "")
+          );
+        }
+
+        // Concurrency & Balance Validation in Integer Cents
+        const grandTotalCents = Math.round(Number(billData.grandTotal ?? 0) * 100);
+        const currentPaidCents = Math.round(Number(billData.amountPaid ?? 0) * 100);
+        const remainingDueCents = Math.max(0, grandTotalCents - currentPaidCents);
+        const paymentCents = Math.round(Number(params.payment.amount) * 100);
+
+        if (paymentCents <= 0) {
+          throw new Error(`Payment amount must be greater than zero`);
+        }
+
+        if (paymentCents > remainingDueCents) {
+          const remainingFormatted = (remainingDueCents / 100).toFixed(2);
+          throw new Error(`Payment exceeds amount due (${remainingFormatted})`);
+        }
+
+        const newAmountPaidCents = currentPaidCents + paymentCents;
+        const newAmountPaid = Number((newAmountPaidCents / 100).toFixed(2));
+        const newStatus = newAmountPaidCents >= grandTotalCents
+          ? "paid"
+          : (billData.status === "draft" ? "open" : billData.status);
+
+        const paymentRecord: Payment = {
+          id: paymentId,
+          billId: params.billId,
+          type: "vendor",
+          amount: params.payment.amount,
+          currency: billData.currency || "SAR",
+          date: params.payment.date ? new Date(params.payment.date) : new Date(),
+          methodId: params.payment.methodId,
+          methodName: params.payment.methodName,
+          reference: params.payment.reference,
+          notes: params.payment.notes,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        const journalDTO = buildVendorPaymentJournalEntry(paymentRecord, billData, accounts);
+        const deltas = aggregateBalanceDeltas(accounts, journalDTO.lines);
+
+        // Writes
+        tx.set(paymentRef, deepStripUndefined({
+          ...paymentRecord,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        } as Record<string, unknown>));
+
+        tx.set(journalRef, deepStripUndefined({
+          ...journalDTO,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        } as Record<string, unknown>));
+
+        for (const [accountId, delta] of deltas.entries()) {
+          const accRef = doc(targetDb, "companies", companyId, "accounts", accountId);
+          tx.update(accRef, {
+            currentBalance: increment(delta),
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        tx.update(billRef, {
+          amountPaid: newAmountPaid,
+          status: newStatus,
+          updatedAt: serverTimestamp(),
+        });
+
+        return {
+          payment: paymentRecord,
+          bill: { ...billData, amountPaid: newAmountPaid, status: newStatus },
+          journal: { id: journalId, ...journalDTO } as JournalEntry,
+        };
+      });
+    })());
+  },
   
   settings: {
     async get(companyId: string): Promise<ApiResponse<BillingSettings>> {

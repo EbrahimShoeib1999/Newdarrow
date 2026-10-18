@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Button,
@@ -26,10 +27,13 @@ import {
   ArchiveRestore,
   Tag,
   Sliders,
+  ListTodo,
+  CheckCircle2,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
 import { useAppPermissions } from "@/features/companies/hooks/use-app-permissions";
+import { useAllTasksQuery } from "@/features/tasks/hooks/use-tasks";
 import {
   useDeleteProjectMutation,
   useUpdateProjectMutation,
@@ -66,6 +70,8 @@ export function ProjectsListPage({
   const canManage = can("projects.manage");
   const canDelete = can("projects.delete");
   const { data: projects = [], isLoading } = useProjects();
+  const { data: allTasksRes } = useAllTasksQuery();
+  const allTasks = allTasksRes?.data || [];
   const deleteProject = useDeleteProjectMutation();
   const updateProject = useUpdateProjectMutation();
 
@@ -418,6 +424,45 @@ export function ProjectsListPage({
                       </span>
                     )}
                   </div>
+
+                  {/* Task progress and view tasks link */}
+                  {(() => {
+                    const projTasks = allTasks.filter((t) => t.projectId === project.id);
+                    const doneTasks = projTasks.filter((t) => t.status === "done");
+                    const pct = projTasks.length > 0 ? Math.round((doneTasks.length / projTasks.length) * 100) : 0;
+                    return (
+                      <div className="mt-2 w-full pt-2.5 border-t border-default-100/80 flex flex-col gap-2">
+                        <div className="flex items-center justify-between text-xs text-default-500 font-semibold">
+                          <span className="inline-flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                            {projTasks.length > 0
+                              ? `${doneTasks.length}/${projTasks.length} مهام منجزة`
+                              : "لا توجد مهام حالياً"}
+                          </span>
+                          {projTasks.length > 0 && <span className="font-bold text-primary">{pct}%</span>}
+                        </div>
+                        {projTasks.length > 0 && (
+                          <div className="w-full h-1.5 bg-default-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all duration-300"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        )}
+                        <Button
+                          as={Link}
+                          to={`/tasks/work?projectId=${project.id}`}
+                          size="sm"
+                          variant="flat"
+                          color="primary"
+                          className="w-full font-semibold text-xs h-8 rounded-lg mt-0.5"
+                          startContent={<ListTodo className="h-3.5 w-3.5" />}
+                        >
+                          استعراض مهام المشروع ({projTasks.length})
+                        </Button>
+                      </div>
+                    );
+                  })()}
                 </CardBody>
               </Card>
             );

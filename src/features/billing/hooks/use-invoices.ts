@@ -20,19 +20,72 @@ import {
 } from "@/lib/permissions/document-approval";
 
 async function postInvoiceIfNeeded(
-  _companyId: string,
+  companyId: string,
   invoice: Invoice,
   shouldPost: boolean
 ) {
   if (!shouldPost) return;
   if (invoice.status !== "sent" && invoice.status !== "paid") return;
+  if (!invoice.id || !companyId) return;
+
+  // Idempotency: don't post if already posted
+  if (invoice.journalEntryId) {
+    return;
+  }
 
   try {
-    // Import dynamically to avoid circular dependencies if any
-    const { automationService } = await import("@/features/accounting/services/automationService");
-    await automationService.postInvoiceToAccounting(invoice);
+    const { buildInvoiceJournalEntry } = await import("../utils/accounting-engine");
+    const { DEFAULT_CHART_OF_ACCOUNTS } = await import("../schemas/account");
+
+    const accountsRes = await BillingService.accounts.getAll(companyId);
+    let accounts = accountsRes.data;
+
+    // Ensure standard chart of accounts exists if company has no accounts
+    const existingCodes = new Set(accounts.map((a) => a.code));
+    const missing = DEFAULT_CHART_OF_ACCOUNTS.filter((a) => !existingCodes.has(a.code));
+    if (missing.length > 0) {
+      const seeded = await Promise.all(
+        missing.map((acc) =>
+          BillingService.accounts.create(companyId, { ...acc, isActive: true })
+        )
+      );
+      accounts = [...accounts, ...seeded.map((s) => s.data)];
+    }
+
+    const journalDTO = buildInvoiceJournalEntry(invoice, accounts);
+    const postedJournal = await BillingService.postJournalWithBalances(companyId, journalDTO);
+
+    // Update invoice with journalEntryId and postedAt to ensure idempotency and linkage
+    await BillingService.invoices.update(companyId, invoice.id, {
+      journalEntryId: postedJournal.id,
+      postedAt: new Date(),
+    });
   } catch (error) {
     console.error("Failed to post invoice to accounting module:", error);
+  }
+}
+
+async function reverseInvoiceIfNeeded(
+  companyId: string,
+  invoice: Invoice
+) {
+  if (invoice.status !== "cancelled" || !invoice.id || !companyId) return;
+  if (!invoice.journalEntryId || invoice.reversalJournalEntryId) return;
+
+  try {
+    const { buildInvoiceReversalJournalEntry } = await import("../utils/accounting-engine");
+    const accountsRes = await BillingService.accounts.getAll(companyId);
+    if (!accountsRes.data.length) return;
+
+    const reversalDTO = buildInvoiceReversalJournalEntry(invoice, accountsRes.data);
+    const postedReversal = await BillingService.postJournalWithBalances(companyId, reversalDTO);
+
+    await BillingService.invoices.update(companyId, invoice.id, {
+      reversalJournalEntryId: postedReversal.id,
+      reversedAt: new Date(),
+    });
+  } catch (error) {
+    console.error("Failed to reverse invoice journal in accounting:", error);
   }
 }
 
@@ -284,7 +337,11 @@ export function useUpdateInvoiceMutation(options?: { useGenericSystem?: boolean 
         }
       }
 
-      await postInvoiceIfNeeded(companyId!, updatedInvoice, shouldPost);
+      if (updatedInvoice.status === "cancelled") {
+        await reverseInvoiceIfNeeded(companyId!, updatedInvoice);
+      } else {
+        await postInvoiceIfNeeded(companyId!, updatedInvoice, shouldPost);
+      }
       return { invoice: updatedInvoice, notifyApprovers: issuingFromDraft && updatedInvoice.status === "pending" };
     },
     onSuccess: (result, variables) => {
@@ -427,4 +484,48 @@ export function useApproveInvoiceMutation() {
     },
     onError: () => toast.error(t("documentApproval.approveError")),
   });
+}
+
+export function useInvoiceLedgerReconciliation() {
+  const { companyId } = useCompany();
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ["billing", "reconciliation", companyId],
+    queryFn: async () => {
+      const [invRes, jrnRes] = await Promise.all([
+        BillingService.invoices.getAll(companyId!),
+        BillingService.journals.getAll(companyId!),
+      ]);
+      const invoices = convertTimestampsToDates(invRes.data) as Invoice[];
+      const journals = convertTimestampsToDates(jrnRes.data) as any[];
+      const { reconcileInvoicesWithLedger } = await import("../utils/accounting-engine");
+      return reconcileInvoicesWithLedger(invoices, journals);
+    },
+    enabled: !!companyId,
+  });
+
+  const reconcileMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const invRes = await BillingService.invoices.getById(companyId!, invoiceId);
+      const invoice = convertTimestampsToDates(invRes.data) as Invoice;
+      await postInvoiceIfNeeded(companyId!, invoice, true);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing", "reconciliation"] });
+      queryClient.invalidateQueries({ queryKey: ["billing", "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["billing", "journals"] });
+      queryClient.invalidateQueries({ queryKey: ["billing", "accounts"] });
+      toast.success("Successfully reconciled and posted invoice to ledger.");
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || "Failed to reconcile invoice.");
+    },
+  });
+
+  return {
+    ...query,
+    reconcileInvoice: reconcileMutation.mutateAsync,
+    isReconciling: reconcileMutation.isPending,
+  };
 }

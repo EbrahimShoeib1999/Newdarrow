@@ -2,16 +2,99 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Public invoice PDFs opened via QR scan (/i/:token → this file)
-    match /invoice-pdfs/{companyId}/{invoiceId}/{fileName} {
-      allow read: if true;
-      allow write: if request.auth != null
-        && request.resource.size < 20 * 1024 * 1024
-        && request.resource.contentType == 'application/pdf';
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function hasUserDoc() {
+      return isSignedIn() && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Authoritative tenant boundary:
+    // 1. Checks real Firestore user profile document (/users/{uid}.companyId)
+    // 2. Or fallback to auth token custom claim (for admin tokens or future SSO claims)
+    function isMemberOf(companyId) {
+      return isSignedIn() && (
+        ('companyId' in request.auth.token && request.auth.token.companyId == companyId) ||
+        (hasUserDoc() && userDoc().companyId == companyId)
+      );
+    }
+
+    function isAllowedImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+    }
+
+    function isAllowedPdf() {
+      return request.resource.contentType == 'application/pdf';
+    }
+
+    function isAllowedDocument() {
+      return request.resource.contentType.matches('application/(pdf|vnd.openxmlformats-officedocument.*|vnd.ms-excel|msword|zip)');
+    }
+
+    // 1. User Avatars: strictly isolated to the user
+    match /avatars/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId)
+        && request.resource.size < 5 * 1024 * 1024
+        && isAllowedImage();
+      allow delete: if isOwner(userId);
+    }
+
+    // 2. Public invoice PDFs: read is public for QR scans, write is company-restricted
+    match /invoice-pdfs/{companyId}/{invoiceId}/{fileName} {
+      allow read: if true;
+      allow write: if isMemberOf(companyId)
+        && request.resource.size < 20 * 1024 * 1024
+        && isAllowedPdf();
+      allow delete: if isMemberOf(companyId);
+    }
+
+    // 3. CRM attachments: lead/deal/customer attachments
+    match /crm/{companyId}/{entityType}/{entityId}/{fileName} {
+      allow read: if isMemberOf(companyId);
+      allow write: if isMemberOf(companyId)
+        && request.resource.size < 25 * 1024 * 1024
+        && (isAllowedImage() || isAllowedDocument());
+      allow delete: if isMemberOf(companyId);
+    }
+
+    // 4. Task attachments
+    match /tasks/{companyId}/attachments/{fileName} {
+      allow read: if isMemberOf(companyId);
+      allow write: if isMemberOf(companyId)
+        && request.resource.size < 25 * 1024 * 1024;
+      allow delete: if isMemberOf(companyId);
+    }
+
+    // 5. Chat attachments
+    match /chat/{companyId}/{conversationId}/{fileName} {
+      allow read: if isMemberOf(companyId);
+      allow write: if isMemberOf(companyId)
+        && request.resource.size < 50 * 1024 * 1024;
+      allow delete: if isMemberOf(companyId);
+    }
+
+    // 6. Generic company partition
+    match /companies/{companyId}/{allPaths=**} {
+      allow read: if isMemberOf(companyId);
+      allow write: if isMemberOf(companyId)
+        && request.resource.size < 25 * 1024 * 1024;
+      allow delete: if isMemberOf(companyId);
+    }
+
+    // Default Deny for all other paths (wildcard unrestricted read/write removed)
     match /{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

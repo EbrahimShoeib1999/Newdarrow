@@ -28,6 +28,7 @@ import {
   Layers,
   Clock,
   ExternalLink,
+  ReceiptText,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -907,6 +908,42 @@ export function ContractBuilderForm() {
             >
               {t("contract.downloadPdf")}
             </Button>
+            {activeSaved?.id && (
+              <Button
+                variant="flat"
+                color="secondary"
+                className="font-bold rounded-2xl"
+                startContent={<ReceiptText className="h-4 w-4" />}
+                onPress={() => {
+                  const amount = parseFloat(fieldValue("amountExclVat")) || 0;
+                  navigate("/billing/invoices/new", {
+                    state: {
+                      fromContract: {
+                        contractId: activeSaved.id,
+                        contractNumber: form.contractNumber,
+                        contactId: form.contactId,
+                        customerName: form.client.name,
+                        dealId: form.dealId,
+                        amount,
+                        currency: "SAR",
+                        title: `دفعة تعاقدية - عقد #${form.contractNumber}`,
+                        items: (form.services || [])
+                          .filter((s) => s.selected)
+                          .map((s) => ({
+                            description: s.name,
+                            quantity: 1,
+                            unitPrice: s.estimatedHours
+                              ? s.estimatedHours * 100
+                              : amount / Math.max(1, (form.services || []).filter((x) => x.selected).length),
+                          })),
+                      },
+                    },
+                  });
+                }}
+              >
+                إصدار فاتورة مرحلية
+              </Button>
+            )}
             <Button
               variant="flat"
               className="font-bold rounded-2xl"

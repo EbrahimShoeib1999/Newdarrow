@@ -9,13 +9,14 @@ import {
   DropdownTrigger,
   Input,
 } from "@heroui/react";
-import { Filter, Search, UserCircle2, X, CircleDot, AlertTriangle, CheckCircle2, Zap, Briefcase } from "lucide-react";
+import { Filter, Search, UserCircle2, X, CircleDot, AlertTriangle, CheckCircle2, Zap, Briefcase, FolderKanban } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { localizedName } from "@/lib/localized-name";
 import { TASK_STATUSES } from "@/lib/constants";
 import { useAllUsers } from "@/features/users/hooks/use-users";
 import { useSprintsQuery } from "../hooks/use-tasks";
+import { useProjects } from "@/features/projects/hooks/use-projects";
 import { useTasksUIStore } from "../store/tasks-ui.store";
 import { DEPARTMENT_OPTIONS } from "./task-form";
 import type { TaskPriority, TaskStatus } from "../types/task.types";
@@ -26,6 +27,7 @@ interface TasksWorkspaceFiltersProps {
 
 /** Sentinel for the "no sprint filter" choice; the store keeps it as `null`. */
 const ALL_SPRINTS_KEY = "__all__";
+const ALL_PROJECTS_KEY = "__all_projects__";
 
 export function TasksWorkspaceFilters({ compact }: TasksWorkspaceFiltersProps) {
   const { t, i18n } = useTranslation("tasks");
@@ -34,10 +36,14 @@ export function TasksWorkspaceFilters({ compact }: TasksWorkspaceFiltersProps) {
   const { filters, setFilter, resetFilters } = useTasksUIStore();
   const { data: allUsers } = useAllUsers();
   const { data: allSprints } = useSprintsQuery();
+  const { data: allProjects = [] } = useProjects();
 
   const sprints = allSprints?.data || [];
   const selectedSprint = sprints.find((s) => s.id === filters.sprintId) ?? null;
   const allSprintsLabel = t("workspace.filters.allSprints", isAr ? "كل الدورات" : "All sprints");
+
+  const selectedProject = allProjects.find((p) => p.id === filters.projectId) ?? null;
+  const allProjectsLabel = isAr ? "كل المشاريع" : "All projects";
 
   const priorities = ["low", "medium", "high", "urgent"] as const;
   const selectedAssignee = allUsers?.find((u) => u.id === filters.assigneeId) ?? null;
@@ -47,6 +53,7 @@ export function TasksWorkspaceFilters({ compact }: TasksWorkspaceFiltersProps) {
     filters.status.length > 0 ||
     !!filters.assigneeId ||
     !!filters.sprintId ||
+    !!filters.projectId ||
     !!filters.department ||
     filters.overdueOnly ||
     filters.completedThisWeek;
@@ -135,6 +142,57 @@ export function TasksWorkspaceFilters({ compact }: TasksWorkspaceFiltersProps) {
               >
                 {s.name}
               </DropdownItem>
+            ))}
+          </DropdownSection>
+        </DropdownMenu>
+      </Dropdown>
+
+      {/* Project Filter */}
+      <Dropdown>
+        <DropdownTrigger>
+          <Button
+            size="sm"
+            variant="bordered"
+            className={cn(
+              "rounded-md border-default-200/80 bg-content1 font-semibold gap-1.5 h-9 min-h-9",
+              compact ? "text-xs" : "text-xs",
+              filters.projectId && "border-primary/40 bg-primary/10 text-primary"
+            )}
+            startContent={<FolderKanban className="h-3.5 w-3.5 text-primary" />}
+          >
+            {selectedProject ? selectedProject.name : allProjectsLabel}
+            {filters.projectId && (
+              <span
+                role="button"
+                className="ms-1 hover:text-danger p-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilter("projectId", null);
+                }}
+              >
+                <X className="h-3 w-3" />
+              </span>
+            )}
+          </Button>
+        </DropdownTrigger>
+        <DropdownMenu
+          aria-label="Filter by project"
+          selectionMode="single"
+          selectedKeys={new Set([filters.projectId ?? ALL_PROJECTS_KEY])}
+          onSelectionChange={(keys) => {
+            const selected = Array.from(keys)[0] as string | undefined;
+            setFilter(
+              "projectId",
+              !selected || selected === ALL_PROJECTS_KEY ? null : selected
+            );
+          }}
+        >
+          <DropdownSection showDivider>
+            <DropdownItem key={ALL_PROJECTS_KEY}>{allProjectsLabel}</DropdownItem>
+          </DropdownSection>
+          <DropdownSection>
+            {allProjects.map((p) => (
+              <DropdownItem key={p.id}>{p.name}</DropdownItem>
             ))}
           </DropdownSection>
         </DropdownMenu>

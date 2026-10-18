@@ -30,6 +30,7 @@ import { useAllUsers } from "@/features/users/hooks/use-users";
 import { useAuthStore } from "@/stores/auth.store";
 import { useTasksPermissions } from "../hooks/use-tasks-permissions";
 import { useAllTasksQuery, useSprintsQuery } from "../hooks/use-tasks";
+import { useProjects } from "@/features/projects/hooks/use-projects";
 import type { CreateTaskDTO, Task, TaskPriority, TaskStatus } from "../types/task.types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -64,6 +65,7 @@ type TaskFormValues = {
   assigneeId?: string | null;
   parentId?: string | null;
   sprintId?: string | null;
+  projectId?: string | null;
   dueDate?: string | null;
   department?: string | null;
   estimatedHours?: number | string | null;
@@ -80,6 +82,7 @@ const taskSchema = z
     assigneeId: z.string().nullable().optional(),
     parentId: z.string().nullable().optional(),
     sprintId: z.string().nullable().optional(),
+    projectId: z.string().nullable().optional(),
     dueDate: z.string().nullable().optional(),
     department: z.string().nullable().optional(),
     estimatedHours: z.union([z.number(), z.string()]).nullable().optional(),
@@ -148,6 +151,7 @@ export function TaskForm({
     ? allTasks?.data?.find((t) => t.id === parentTaskId)
     : null;
   const sprints = allSprints?.data || [];
+  const { data: allProjects = [] } = useProjects();
   const { companyId } = useCompany();
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<string[]>(
@@ -181,6 +185,7 @@ export function TaskForm({
       assigneeId: defaultValues?.assigneeId ?? null,
       parentId: parentTaskId ?? defaultValues?.parentId ?? null,
       sprintId: defaultValues?.sprintId ?? null,
+      projectId: defaultValues?.projectId ?? null,
       dueDate: defaultValues?.dueDate
         ? defaultValues.dueDate.split("T")[0]
         : null,
@@ -275,6 +280,7 @@ export function TaskForm({
       type: values.type === "subtask" ? "subtask" : "task",
       parentId: values.type === "subtask" ? values.parentId : null,
       sprintId: values.sprintId ?? null,
+      projectId: values.projectId ?? null,
       assigneeId: values.assigneeId ?? null,
       dueDate: isoDueDate,
       department: values.department ? String(values.department) : undefined,
@@ -715,6 +721,37 @@ export function TaskForm({
             ))}
           </SearchableSelect>
         )}
+      />
+
+      <Controller
+        name="projectId"
+        control={control}
+        render={({ field }: { field: any }) => {
+          const selectedProj = allProjects.find((p) => p.id === field.value);
+          return (
+            <SearchableSelect
+              label="المشروع التابع له (اختياري)"
+              aria-label="المشروع التابع له"
+              placeholder="اختر مشروعاً..."
+              searchPlaceholder="بحث في المشاريع..."
+              selectedKey={field.value ?? null}
+              triggerLabel={selectedProj ? selectedProj.name : undefined}
+              onSelectionChange={(key) => {
+                const val = key as string | null;
+                field.onChange(!val || val === "no-project" ? null : val);
+              }}
+            >
+              {[
+                { id: "no-project", name: "بدون مشروع (مستقل)" },
+                ...allProjects.map((p) => ({ id: p.id, name: p.name })),
+              ].map((proj) => (
+                <SelectItem key={proj.id} textValue={proj.name}>
+                  {proj.name}
+                </SelectItem>
+              ))}
+            </SearchableSelect>
+          );
+        }}
       />
 
       <div className="grid grid-cols-2 gap-3">

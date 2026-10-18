@@ -12,22 +12,42 @@ import { getInvoiceAmountDue } from "../utils/accounting-engine";
 const SERVICE = "InvoiceShareService";
 const MAX_BASE64_CHARS = 700_000;
 
-/** Lightweight printable invoice payload for public /i/:token (no auth). */
+/** Minimal, display-safe public invoice representation for external recipients (/i/:token).
+ * Internal linkage IDs, journals, approval metadata, and internal notes are strictly excluded.
+ */
+export interface DisplaySafePublicInvoice {
+  id?: string;
+  invoiceNumber: string;
+  status: "draft" | "pending" | "sent" | "paid" | "overdue" | "cancelled";
+  customerName?: string;
+  issueDate: string;
+  dueDate: string;
+  currency: string;
+  items: Array<{
+    id?: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    taxRate: number;
+    discount?: number;
+    total: number;
+  }>;
+  subTotal: number;
+  totalTax: number;
+  totalDiscount?: number;
+  grandTotal: number;
+  amountPaid?: number;
+  termsAndConditions?: string;
+}
+
 export interface InvoicePublicSnapshot {
-  invoice: Omit<Invoice, "issueDate" | "dueDate" | "postedAt" | "createdAt" | "updatedAt"> & {
-    issueDate: string;
-    dueDate: string;
-    postedAt?: string;
-  };
+  invoice: DisplaySafePublicInvoice;
   amountDue: number;
   customerName: string;
   customer?: {
-    email?: string;
-    phone?: string;
     taxNumber?: string;
     commercialRegister?: string;
     billingAddress?: string;
-    accountName?: string;
   };
   company: {
     name: string;
@@ -50,6 +70,10 @@ export interface InvoicePublicShare {
   snapshot?: InvoicePublicSnapshot;
   pdfUrl?: string;
   pdfBase64?: string;
+  expiresAt?: string;
+  revokedAt?: string;
+  isRevoked?: boolean;
+  status?: "active" | "revoked" | "expired" | "cancelled";
   updatedAt?: unknown;
 }
 
@@ -86,30 +110,45 @@ export function buildInvoicePublicSnapshot(input: {
     invoice.customerName || "—"
   );
 
-  const {
-    createdAt: _c,
-    updatedAt: _u,
-    ...invoiceFields
-  } = invoice;
+  // Strict allowlist of display-safe fields ONLY.
+  // Explicitly excludes internal linkage: dealId, contractId, quotationId, milestoneId,
+  // costCenterId, journalEntryId, reversalJournalEntryId, approval metadata, internal notes, customerId.
+  const displaySafeInvoice: DisplaySafePublicInvoice = {
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    status: invoice.status,
+    customerName,
+    issueDate: toIso(invoice.issueDate) || new Date().toISOString(),
+    dueDate: toIso(invoice.dueDate) || new Date().toISOString(),
+    currency: invoice.currency || "SAR",
+    subTotal: Number(invoice.subTotal ?? 0),
+    totalTax: Number(invoice.totalTax ?? 0),
+    totalDiscount: Number(invoice.totalDiscount ?? 0),
+    grandTotal: Number(invoice.grandTotal ?? 0),
+    amountPaid: Number(invoice.amountPaid ?? 0),
+    termsAndConditions: invoice.termsAndConditions,
+    items: (invoice.items || []).map((it) => ({
+      id: it.id,
+      description: it.description,
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+      taxRate: it.taxRate,
+      discount: it.discount || 0,
+      total: it.total,
+    })),
+  };
 
   return stripUndefined({
-    invoice: {
-      ...invoiceFields,
-      issueDate: toIso(invoice.issueDate) || new Date().toISOString(),
-      dueDate: toIso(invoice.dueDate) || new Date().toISOString(),
-      postedAt: toIso(invoice.postedAt),
-    },
+    invoice: displaySafeInvoice,
     amountDue: getInvoiceAmountDue(invoice),
     customerName,
     locale: locale || "ar",
-    customer: customer
+    // Only essential B2B tax/CR identifiers if provided; no private contact PII (email, phone).
+    customer: customer && (customer.taxNumber || customer.commercialRegister || customer.billingAddress)
       ? {
-          email: customer.email,
-          phone: customer.phone,
           taxNumber: customer.taxNumber,
           commercialRegister: customer.commercialRegister,
           billingAddress: customer.billingAddress,
-          accountName: customer.accountName,
         }
       : undefined,
     company: {
@@ -154,19 +193,29 @@ export function hydrateInvoiceFromSnapshot(
   const raw = snapshot.invoice;
   const invoice: Invoice = {
     ...raw,
+    customerId: (raw as any).customerId || "",
     issueDate: new Date(raw.issueDate),
     dueDate: new Date(raw.dueDate),
-    postedAt: raw.postedAt ? new Date(raw.postedAt) : undefined,
+    totalDiscount: raw.totalDiscount ?? 0,
+    items: (raw.items || []).map((it, idx) => ({
+      id: it.id || `item_${idx}`,
+      description: it.description,
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+      taxRate: it.taxRate,
+      discount: it.discount ?? 0,
+      total: it.total,
+    })),
   };
 
   const customer = snapshot.customer
     ? ({
-        id: invoice.customerId || "public",
+        id: "public",
         firstName: snapshot.customerName,
         lastName: "",
-        email: snapshot.customer.email || "",
-        phone: snapshot.customer.phone || "",
-        accountName: snapshot.customer.accountName,
+        email: (snapshot.customer as any).email || "",
+        phone: (snapshot.customer as any).phone || "",
+        accountName: (snapshot.customer as any).accountName || snapshot.customerName,
         taxNumber: snapshot.customer.taxNumber,
         commercialRegister: snapshot.customer.commercialRegister,
         billingAddress: snapshot.customer.billingAddress,
@@ -205,7 +254,82 @@ export async function getInvoicePublicShare(
   return withLogging(SERVICE, "getInvoicePublicShare", (async () => {
     const snap = await getDoc(doc(db, "publicInvoiceShares", token));
     if (!snap.exists()) return null;
-    return snap.data() as InvoicePublicShare;
+    const share = snap.data() as InvoicePublicShare;
+
+    // Lifecycle enforcement: Revoked, expired, or cancelled invoices must NOT return invoice content.
+    if (share.revokedAt || share.isRevoked || share.status === "revoked") {
+      return {
+        token: share.token,
+        companyId: share.companyId,
+        invoiceId: share.invoiceId,
+        invoiceNumber: share.invoiceNumber,
+        isRevoked: true,
+        status: "revoked",
+      };
+    }
+
+    if (share.expiresAt) {
+      const exp = new Date(share.expiresAt);
+      if (!Number.isNaN(exp.getTime()) && exp.getTime() < Date.now()) {
+        return {
+          token: share.token,
+          companyId: share.companyId,
+          invoiceId: share.invoiceId,
+          invoiceNumber: share.invoiceNumber,
+          status: "expired",
+        };
+      }
+    }
+
+    if (share.snapshot?.invoice?.status === "cancelled" || share.status === "cancelled") {
+      return {
+        token: share.token,
+        companyId: share.companyId,
+        invoiceId: share.invoiceId,
+        invoiceNumber: share.invoiceNumber,
+        status: "cancelled",
+      };
+    }
+
+    return share;
+  })());
+}
+
+export async function revokeInvoicePublicShare(
+  token: string,
+  companyId: string
+): Promise<void> {
+  return withLogging(SERVICE, "revokeInvoicePublicShare", (async () => {
+    const docRef = doc(db, "publicInvoiceShares", token);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) throw new Error("Share not found");
+    const data = snap.data() as InvoicePublicShare;
+    if (data.companyId !== companyId) {
+      throw new Error("Unauthorized to revoke share of another company");
+    }
+
+    await setDoc(
+      docRef,
+      {
+        isRevoked: true,
+        revokedAt: new Date().toISOString(),
+        status: "revoked",
+        snapshot: null,
+        pdfUrl: null,
+        pdfBase64: null,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    if (data.pdfUrl) {
+      try {
+        const { deleteStorageFileByUrl } = await import("@/lib/storage-utils");
+        await deleteStorageFileByUrl(data.pdfUrl);
+      } catch (err) {
+        console.warn("Could not delete stored PDF blob on revoke:", err);
+      }
+    }
   })());
 }
 

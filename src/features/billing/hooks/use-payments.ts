@@ -7,12 +7,6 @@ import { createLinkedVoucher } from "../api/create-voucher";
 import { useCompany } from "@/features/companies/context/company-context";
 import { convertTimestampsToDates } from "../utils/timestamp";
 import type { Voucher } from "../schemas/voucher";
-import {
-  buildPaymentJournalEntry,
-  buildVendorPaymentJournalEntry,
-  getInvoiceAmountDue,
-} from "../utils/accounting-engine";
-import { getBillAmountDue } from "../utils/aged-reports";
 
 export type RecordPaymentResult = {
   payment: Payment;
@@ -63,51 +57,24 @@ export function useRecordPaymentMutation() {
       payment,
     }: {
       invoice: Invoice;
-      payment: Omit<CreatePaymentDTO, "invoiceId" | "type" | "currency">;
+      payment: Omit<CreatePaymentDTO, "invoiceId" | "type" | "currency"> & { id?: string };
     }) => {
-      const amountDue = getInvoiceAmountDue(invoice);
-      if (payment.amount > amountDue + 0.001) {
-        throw new Error("Payment exceeds amount due");
-      }
-
-      const paymentRes = await BillingService.payments.create(companyId!, {
-        ...payment,
-        type: "customer",
-        invoiceId: invoice.id,
-        currency: invoice.currency,
-      });
-      const savedPayment = convertTimestampsToDates(
-        paymentRes.data
-      ) as Payment;
-
-      const accountsRes = await BillingService.accounts.getAll(companyId!);
-      const journal = buildPaymentJournalEntry(
-        savedPayment,
-        invoice,
-        accountsRes.data
-      );
-      await BillingService.postJournalWithBalances(companyId!, journal);
-
-      const newPaid = (invoice.amountPaid ?? 0) + payment.amount;
-      const newStatus =
-        newPaid >= invoice.grandTotal - 0.001 ? "paid" : invoice.status;
-
-      await BillingService.invoices.update(companyId!, invoice.id!, {
-        amountPaid: newPaid,
-        status: newStatus,
+      const result = await BillingService.executeCustomerPaymentTransaction(companyId!, {
+        invoiceId: invoice.id!,
+        payment,
       });
 
       const voucher = await createLinkedVoucher({
         companyId: companyId!,
         type: "receipt",
-        payment: savedPayment,
+        payment: result.payment,
         partyName: invoice.customerName?.trim() || invoice.customerId || "—",
         partyId: invoice.customerId,
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
       });
 
-      return { payment: savedPayment, voucher } satisfies RecordPaymentResult;
+      return { payment: result.payment, voucher } satisfies RecordPaymentResult;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["billing", "payments"] });
@@ -132,51 +99,24 @@ export function useRecordVendorPaymentMutation() {
       payment,
     }: {
       bill: Bill;
-      payment: Omit<CreatePaymentDTO, "billId" | "type" | "currency">;
+      payment: Omit<CreatePaymentDTO, "billId" | "type" | "currency"> & { id?: string };
     }) => {
-      const amountDue = getBillAmountDue(bill);
-      if (payment.amount > amountDue + 0.001) {
-        throw new Error("Payment exceeds amount due");
-      }
-
-      const paymentRes = await BillingService.payments.create(companyId!, {
-        ...payment,
-        type: "vendor",
-        billId: bill.id,
-        currency: bill.currency,
-      });
-      const savedPayment = convertTimestampsToDates(
-        paymentRes.data
-      ) as Payment;
-
-      const accountsRes = await BillingService.accounts.getAll(companyId!);
-      const journal = buildVendorPaymentJournalEntry(
-        savedPayment,
-        bill,
-        accountsRes.data
-      );
-      await BillingService.postJournalWithBalances(companyId!, journal);
-
-      const newPaid = (bill.amountPaid ?? 0) + payment.amount;
-      const newStatus =
-        newPaid >= bill.grandTotal - 0.001 ? "paid" : bill.status;
-
-      await BillingService.bills.update(companyId!, bill.id!, {
-        amountPaid: newPaid,
-        status: newStatus,
+      const result = await BillingService.executeVendorPaymentTransaction(companyId!, {
+        billId: bill.id!,
+        payment,
       });
 
       const voucher = await createLinkedVoucher({
         companyId: companyId!,
         type: "disbursement",
-        payment: savedPayment,
+        payment: result.payment,
         partyName: bill.vendorName?.trim() || bill.vendorId || "—",
         partyId: bill.vendorId,
         billId: bill.id,
         billNumber: bill.billNumber,
       });
 
-      return { payment: savedPayment, voucher } satisfies RecordPaymentResult;
+      return { payment: result.payment, voucher } satisfies RecordPaymentResult;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["billing", "payments"] });

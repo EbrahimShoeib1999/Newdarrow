@@ -18,6 +18,7 @@ import {
   updateDoc,
   collection,
   getDocs,
+  deleteDoc,
   query,
   where,
 } from "firebase/firestore";
@@ -65,6 +66,23 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
     customPermissions: ["people.view_all_reports"],
   });
   await setDoc(doc(db, "users", "outsider"), { companyId: "other-co", role: "manager" });
+  await setDoc(doc(db, "users", "admin"), { companyId: COMPANY, role: "admin" });
+
+  await setDoc(doc(db, "companies", COMPANY, "conversations", "pub1"), {
+    type: "public",
+    name: "General",
+    companyId: COMPANY,
+  });
+  await setDoc(doc(db, "companies", COMPANY, "conversations", "priv1"), {
+    type: "private",
+    name: "Executive",
+    memberIds: ["emp1", "admin"],
+    companyId: COMPANY,
+  });
+  await setDoc(doc(db, "companies", COMPANY, "conversations", "priv1", "messages", "m1"), {
+    body: "Secret message",
+    companyId: COMPANY,
+  });
 
   await setDoc(doc(db, "companies", COMPANY, "daily_reports", "r1"), {
     employeeId: "emp1",
@@ -293,6 +311,180 @@ await check("company member can create project with custom fields and priority",
       slug: "beta-project",
       priority: "medium",
       customFields: [{ key: "Budget", value: "50000" }],
+    })
+  )
+);
+
+// --- Additional Security & Tenant Boundary Checks ---
+await check("unauthenticated user cannot read otpResets", () =>
+  assertFails(getDoc(doc(unauth, "otpResets", "some_id")))
+);
+await check("authenticated user cannot read otpResets directly", () =>
+  assertFails(getDoc(doc(asUser("emp1"), "otpResets", "some_id")))
+);
+await check("company member can read public channel", () =>
+  assertSucceeds(getDoc(doc(asUser("emp1"), "companies", COMPANY, "conversations", "pub1")))
+);
+await check("member in private channel memberIds can read private channel", () =>
+  assertSucceeds(getDoc(doc(asUser("emp1"), "companies", COMPANY, "conversations", "priv1")))
+);
+await check("member in private channel memberIds can read private messages", () =>
+  assertSucceeds(getDocs(collection(asUser("emp1"), "companies", COMPANY, "conversations", "priv1", "messages")))
+);
+await check("employee NOT in private channel memberIds CANNOT read private channel", () =>
+  assertFails(getDoc(doc(asUser("emp2"), "companies", COMPANY, "conversations", "priv1")))
+);
+await check("employee NOT in private channel memberIds CANNOT read private messages", () =>
+  assertFails(getDocs(collection(asUser("emp2"), "companies", COMPANY, "conversations", "priv1", "messages")))
+);
+await check("company admin CAN read private channel and messages", () =>
+  assertSucceeds(getDoc(doc(asUser("admin"), "companies", COMPANY, "conversations", "priv1")))
+);
+await check("outsider CANNOT read company chat conversations or messages", () =>
+  assertFails(getDoc(doc(asUser("outsider"), "companies", COMPANY, "conversations", "priv1")))
+);
+await check("employee CANNOT promote self to admin", () =>
+  assertFails(updateDoc(doc(asUser("emp1"), "users", "emp1"), { role: "admin" }))
+);
+await check("employee CANNOT change own companyId to another company", () =>
+  assertFails(updateDoc(doc(asUser("emp1"), "users", "emp1"), { companyId: "other-co" }))
+);
+await check("employee CAN update own safe profile fields (e.g. name)", () =>
+  assertSucceeds(updateDoc(doc(asUser("emp1"), "users", "emp1"), { name: "Updated Name" }))
+);
+await check("company admin CAN update employee role", () =>
+  assertSucceeds(updateDoc(doc(asUser("admin"), "users", "emp1"), { role: "manager" }))
+);
+await check("outsider CANNOT update user in another company", () =>
+  assertFails(updateDoc(doc(asUser("outsider"), "users", "emp1"), { name: "Hacked" }))
+);
+
+// --- Public Invoice Shares Tests ---
+const SHARE_TOKEN = "share_tok_test_01";
+await check("company admin CAN create public invoice share for own company", () =>
+  assertSucceeds(
+    setDoc(doc(asUser("admin"), "publicInvoiceShares", SHARE_TOKEN), {
+      token: SHARE_TOKEN,
+      companyId: COMPANY,
+      invoiceId: "inv_123",
+      snapshot: { amountDue: 1000, customerName: "Acme Client" },
+    })
+  )
+);
+
+await check("unauthenticated user CAN get public invoice share by token", () =>
+  assertSucceeds(getDoc(doc(unauth, "publicInvoiceShares", SHARE_TOKEN)))
+);
+
+await check("unauthenticated user CANNOT list publicInvoiceShares collection", () =>
+  assertFails(getDocs(collection(unauth, "publicInvoiceShares")))
+);
+
+await check("unauthenticated user CANNOT write public invoice share", () =>
+  assertFails(
+    setDoc(doc(unauth, "publicInvoiceShares", "hack_token"), {
+      token: "hack_token",
+      companyId: COMPANY,
+      invoiceId: "inv_fake",
+      snapshot: { amountDue: 0 },
+    })
+  )
+);
+
+await check("company member CAN update own public invoice share", () =>
+  assertSucceeds(
+    updateDoc(doc(asUser("emp1"), "publicInvoiceShares", SHARE_TOKEN), {
+      pdfUrl: "https://example.com/inv.pdf",
+    })
+  )
+);
+
+await check("outsider CANNOT update company public invoice share", () =>
+  assertFails(
+    updateDoc(doc(asUser("outsider"), "publicInvoiceShares", SHARE_TOKEN), {
+      pdfUrl: "https://hacked.com/inv.pdf",
+    })
+  )
+);
+
+await check("outsider CANNOT delete company public invoice share", () =>
+  assertFails(deleteDoc(doc(asUser("outsider"), "publicInvoiceShares", SHARE_TOKEN)))
+);
+
+await check("company member CAN delete own public invoice share", () =>
+  assertSucceeds(deleteDoc(doc(asUser("emp1"), "publicInvoiceShares", SHARE_TOKEN)))
+);
+
+// --- Financial Ledger & Payment Security ---
+const JRN_ID = "jrn_test_01";
+await check("company member CAN create balanced journal entry", () =>
+  assertSucceeds(
+    setDoc(doc(asUser("emp1"), "companies", COMPANY, "journals", JRN_ID), {
+      entryNumber: "JE-2026-001",
+      date: "2026-10-18",
+      totalDebit: 500,
+      totalCredit: 500,
+      description: "Balanced test journal",
+    })
+  )
+);
+
+await check("company member CANNOT create UNBALANCED journal entry", () =>
+  assertFails(
+    setDoc(doc(asUser("emp1"), "companies", COMPANY, "journals", "jrn_unbalanced"), {
+      entryNumber: "JE-2026-002",
+      date: "2026-10-18",
+      totalDebit: 500,
+      totalCredit: 400,
+      description: "Unbalanced journal should fail",
+    })
+  )
+);
+
+await check("company member CANNOT update posted journal entry", () =>
+  assertFails(
+    updateDoc(doc(asUser("emp1"), "companies", COMPANY, "journals", JRN_ID), {
+      totalDebit: 600,
+      totalCredit: 600,
+    })
+  )
+);
+
+await check("company member CANNOT delete posted journal entry", () =>
+  assertFails(deleteDoc(doc(asUser("emp1"), "companies", COMPANY, "journals", JRN_ID)))
+);
+
+const PAY_ID = "pay_test_01";
+await check("company member CAN create payment with amount > 0", () =>
+  assertSucceeds(
+    setDoc(doc(asUser("emp1"), "companies", COMPANY, "payments", PAY_ID), {
+      amount: 150,
+      currency: "SAR",
+      invoiceId: "inv_123",
+      paymentDate: "2026-10-18",
+    })
+  )
+);
+
+await check("company member CANNOT create payment with amount <= 0", () =>
+  assertFails(
+    setDoc(doc(asUser("emp1"), "companies", COMPANY, "payments", "pay_zero"), {
+      amount: 0,
+      currency: "SAR",
+      invoiceId: "inv_123",
+    })
+  )
+);
+
+await check("company member CANNOT delete payment document", () =>
+  assertFails(deleteDoc(doc(asUser("emp1"), "companies", COMPANY, "payments", PAY_ID)))
+);
+
+await check("outsider CANNOT read or write payments in another company", () =>
+  assertFails(
+    setDoc(doc(asUser("outsider"), "companies", COMPANY, "payments", "pay_hack"), {
+      amount: 999,
+      currency: "SAR",
     })
   )
 );

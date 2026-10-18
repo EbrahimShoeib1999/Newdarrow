@@ -80,8 +80,14 @@ export async function uploadStorageFile(
         console.warn(
           `[uploadStorageFile] Storage REST upload failed: ${response.status} ${response.statusText}`
         );
+        if (response.status === 403 || response.status === 401) {
+          throw new Error(`Storage upload denied (${response.status}): unauthorized or forbidden`);
+        }
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.message?.includes("Storage upload denied")) {
+        throw e;
+      }
       // Network-level failure (missing bucket, CORS, blocked request). Trying the
       // SDK next would fail the same way, so stop here unless we are simply offline.
       if (navigator.onLine === false) {
@@ -97,13 +103,28 @@ export async function uploadStorageFile(
         const storageRef = ref(storage, path);
         const result = await uploadBytes(storageRef, file, { contentType: fileType });
         return await getDownloadURL(result.ref);
-      } catch (e) {
+      } catch (e: any) {
+        if (
+          e?.code === "storage/unauthorized" ||
+          e?.code === "storage/unauthenticated" ||
+          e?.code === "storage/canceled"
+        ) {
+          throw new Error(`Storage upload denied: ${e?.message || e}`);
+        }
         console.warn("[uploadStorageFile] Firebase Storage SDK upload failed:", e);
+        throw e;
       }
     }
   }
 
-  // 3. Robust Fallback: Convert to Base64 data URL
+  // 3. Constrained Fallback: Only permitted for small assets (< 100KB) to prevent Firestore document bloating
+  const fileSize = file.size;
+  if (fileSize > 100 * 1024) {
+    throw new Error(
+      `Storage upload failed for ${path} (${fileSize} bytes). Inline Base64 storage is prohibited for files over 100KB to protect Firestore quotas and access control.`
+    );
+  }
+
   return blobToDataUrl(file);
 }
 

@@ -8,6 +8,7 @@ interface TasksUIState {
     priority: TaskPriority[];
     assigneeId: string | null;
     sprintId: string | null;
+    projectId: string | null;
     department: string | null;
     search: string;
     overdueOnly: boolean;
@@ -34,6 +35,7 @@ const defaultFilters = {
   priority: [] as TaskPriority[],
   assigneeId: null as string | null,
   sprintId: null as string | null,
+  projectId: null as string | null,
   department: null as string | null,
   search: "",
   overdueOnly: false,

@@ -627,6 +627,7 @@ export function KanbanBoard() {
     priority: filters.priority.length ? filters.priority : undefined,
     assigneeId: filters.assigneeId ?? undefined,
     sprintId: filters.sprintId ?? undefined,
+    projectId: filters.projectId ?? undefined,
     overdueOnly: filters.overdueOnly || undefined,
     completedThisWeek: filters.completedThisWeek || undefined,
     // The board has no pagination, so keep this aligned with the service fetch

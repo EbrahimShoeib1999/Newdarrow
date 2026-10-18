@@ -80,6 +80,7 @@ export const TASKS_NAV_TREE: PortalNavTreeGroup[] = [
       { labelKey: "nav.tasks", path: "/tasks/work", icon: ListTodo },
       { labelKey: "nav.sprints", path: "/tasks/sprints", icon: Clock },
       { labelKey: "nav.daily_reports", path: "/tasks/daily-reports", icon: ClipboardCheck },
+      { labelKey: "nav.meetings", path: "/meetings", icon: Calendar },
     ],
   },
 ];

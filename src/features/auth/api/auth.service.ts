@@ -172,6 +172,17 @@ export const AuthService = {
 
       const idToken = await getIdToken(firebaseUser);
 
+      // Generate a collision-free, secure company ID decoupled from just the company name
+      const cleanPrefix = data.companyName
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 16) || "company";
+      const uniqueSuffix = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+      const generatedCompanyId = `${cleanPrefix}-${uniqueSuffix}`;
+      const companySlug = cleanPrefix;
+
       const userData: User = {
         id: firebaseUser.uid,
         email: data.email,
@@ -179,7 +190,7 @@ export const AuthService = {
         nameAr: "",
         avatar: `https://avatar.vercel.sh/${firebaseUser.uid}`,
         role: "admin",
-        companyId: data.companyName.toLowerCase().replace(/\s+/g, "-") || "default-company",
+        companyId: generatedCompanyId,
         companyName: data.companyName,
       };
 
@@ -191,7 +202,9 @@ export const AuthService = {
       });
 
       await setDoc(doc(db, "companies", userData.companyId), {
+        id: userData.companyId,
         name: data.companyName,
+        slug: companySlug,
         commercialRegister: data.commercialRegister?.trim() || "",
         defaultCurrency: "SAR",
         createdAt: new Date().toISOString(),

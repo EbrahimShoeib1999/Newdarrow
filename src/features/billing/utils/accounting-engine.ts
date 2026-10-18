@@ -1,7 +1,7 @@
 import type { Account, AccountSubType } from "../schemas/account";
 import type { Invoice } from "../schemas/invoice";
 import type { Bill } from "../schemas/bill";
-import type { CreateJournalEntryDTO, JournalLine } from "../schemas/journal";
+import type { CreateJournalEntryDTO, JournalEntry, JournalLine } from "../schemas/journal";
 import type { Payment } from "../schemas/payment";
 import type { SalesOrder } from "../schemas/sales-workflow";
 import type { PurchaseOrder } from "../schemas/purchase-workflow";
@@ -101,7 +101,10 @@ export function buildInvoiceJournalEntry(
   accounts: Account[]
 ): CreateJournalEntryDTO {
   const ar = requireAccount(accounts, "accounts_receivable", "1200");
-  const revenue = requireAccount(accounts, "operating_income", "4000");
+  const revenue =
+    findAccountByCode(accounts, "4000") ??
+    findAccountBySubType(accounts, "sales_revenue") ??
+    requireAccount(accounts, "operating_income", "4000");
   const tax =
     findAccountBySubType(accounts, "current_liability") ??
     findAccountByCode(accounts, "2100") ??
@@ -225,7 +228,14 @@ export function buildPaymentJournalEntry(
   accounts: Account[]
 ): CreateJournalEntryDTO {
   const ar = requireAccount(accounts, "accounts_receivable", "1200");
+  const methodStr = `${payment.methodId ?? ""} ${payment.methodName ?? ""} ${(payment as any).method ?? ""}`.toLowerCase();
+  const isCash = methodStr.includes("cash") || methodStr.includes("نقدي");
+  const liquidAccount = isCash
+    ? (findAccountBySubType(accounts, "cash") ?? findAccountByCode(accounts, "1000"))
+    : (findAccountBySubType(accounts, "bank") ?? findAccountByCode(accounts, "1100"));
+
   const bank =
+    liquidAccount ??
     findAccountBySubType(accounts, "bank") ??
     findAccountBySubType(accounts, "cash") ??
     requireAccount(accounts, "cash", "1000");
@@ -567,5 +577,145 @@ export function quotationToInvoiceDraft(input: {
     currency: input.currency,
     quotationId: input.quotationId,
     paymentTermDays: input.paymentTermDays ?? 30,
+  };
+}
+
+export function buildInvoiceReversalJournalEntry(
+  invoice: Invoice,
+  accounts: Account[]
+): CreateJournalEntryDTO {
+  const normalEntry = buildInvoiceJournalEntry(invoice, accounts);
+  const reversedLines: JournalLine[] = normalEntry.lines.map((l) => ({
+    ...l,
+    id: lineId(),
+    debit: l.credit,
+    credit: l.debit,
+    description: `Reversal: ${l.description}`,
+  }));
+
+  return {
+    journalNumber: `JE-REV-${invoice.invoiceNumber}-${Date.now()}`,
+    date: new Date(),
+    reference: `REV-${invoice.invoiceNumber}`,
+    notes: `Reversal entry for invoice ${invoice.invoiceNumber}`,
+    sourceType: "refund",
+    sourceId: invoice.id,
+    reversalOfId: invoice.journalEntryId,
+    totalDebit: normalEntry.totalCredit,
+    totalCredit: normalEntry.totalDebit,
+    currency: invoice.currency,
+    status: "posted",
+    lines: reversedLines,
+  };
+}
+
+export interface InvoiceLedgerReconciliationItem {
+  invoiceId: string;
+  invoiceNumber: string;
+  customerName?: string;
+  status: Invoice["status"];
+  grandTotal: number;
+  issueDate: Date;
+  journalEntryId?: string;
+  issueType: "unposted" | "duplicate_journal" | "amount_mismatch";
+  details: string;
+}
+
+export interface InvoiceLedgerReconciliationSummary {
+  totalInvoicesAudited: number;
+  synchronizedCount: number;
+  unpostedCount: number;
+  duplicateCount: number;
+  mismatchCount: number;
+  issues: InvoiceLedgerReconciliationItem[];
+}
+
+export function reconcileInvoicesWithLedger(
+  invoices: Invoice[],
+  journals: JournalEntry[]
+): InvoiceLedgerReconciliationSummary {
+  const issues: InvoiceLedgerReconciliationItem[] = [];
+  let synchronizedCount = 0;
+  let unpostedCount = 0;
+  let duplicateCount = 0;
+  let mismatchCount = 0;
+
+  // Map journals by sourceId or reference
+  const journalsByInvoice = new Map<string, JournalEntry[]>();
+  for (const j of journals) {
+    if (j.sourceType === "invoice" && j.sourceId) {
+      const list = journalsByInvoice.get(j.sourceId) ?? [];
+      list.push(j);
+      journalsByInvoice.set(j.sourceId, list);
+    }
+  }
+
+  for (const inv of invoices) {
+    if (!inv.id) continue;
+    const isPostedStatus = inv.status === "sent" || inv.status === "paid" || inv.status === "overdue";
+    const linkedJournals = journalsByInvoice.get(inv.id) ?? [];
+
+    if (!isPostedStatus) {
+      // Draft / cancelled shouldn't have active non-reversal journals without reversal
+      continue;
+    }
+
+    if (linkedJournals.length === 0 && !inv.journalEntryId) {
+      unpostedCount++;
+      issues.push({
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        status: inv.status,
+        grandTotal: inv.grandTotal,
+        issueDate: inv.issueDate,
+        issueType: "unposted",
+        details: "Invoice is in issued status but has no associated journal entry in the ledger",
+      });
+      continue;
+    }
+
+    if (linkedJournals.length > 1) {
+      duplicateCount++;
+      issues.push({
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        status: inv.status,
+        grandTotal: inv.grandTotal,
+        issueDate: inv.issueDate,
+        journalEntryId: inv.journalEntryId,
+        issueType: "duplicate_journal",
+        details: `Found ${linkedJournals.length} distinct journal entries referencing this invoice`,
+      });
+      continue;
+    }
+
+    const primaryJournal = linkedJournals[0] ?? journals.find((j) => j.id === inv.journalEntryId);
+    if (primaryJournal) {
+      if (Math.abs(primaryJournal.totalDebit - inv.grandTotal) > 0.01) {
+        mismatchCount++;
+        issues.push({
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          status: inv.status,
+          grandTotal: inv.grandTotal,
+          issueDate: inv.issueDate,
+          journalEntryId: primaryJournal.id,
+          issueType: "amount_mismatch",
+          details: `Journal debit (${primaryJournal.totalDebit}) does not match invoice grand total (${inv.grandTotal})`,
+        });
+        continue;
+      }
+    }
+
+    synchronizedCount++;
+  }
+
+  return {
+    totalInvoicesAudited: invoices.length,
+    synchronizedCount,
+    unpostedCount,
+    duplicateCount,
+    mismatchCount,
+    issues,
   };
 }

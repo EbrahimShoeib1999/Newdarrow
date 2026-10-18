@@ -46,6 +46,10 @@ export function TasksWorkspacePage() {
     if (sprintIdFromUrl) {
       setFilter("sprintId", sprintIdFromUrl);
     }
+    const projectIdFromUrl = searchParams.get("projectId");
+    if (projectIdFromUrl) {
+      setFilter("projectId", projectIdFromUrl);
+    }
   }, [searchParams, setFilter]);
 
   const viewTabs = [

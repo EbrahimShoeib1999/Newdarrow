@@ -28,7 +28,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
 
   login: async (email: string, password: string) => {
-    set({ isLoading: true });
     try {
       const response = await AuthService.login({ email, password });
       const { user: userData, refreshToken } = response.data;
@@ -41,13 +40,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
-      set({ isLoading: false });
       throw error;
     }
   },
 
   loginWithGoogle: async () => {
-    set({ isLoading: true });
     try {
       const response = await AuthService.loginWithGoogle();
       const { user: userData, refreshToken } = response.data;
@@ -60,7 +57,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
-      set({ isLoading: false });
       throw error;
     }
   },

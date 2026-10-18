@@ -40,11 +40,66 @@ export default function LeaveTrackerPage() {
     rejected: "danger",
   };
 
+  const getLeaveDays = (start: any, end: any): number => {
+    if (!start || !end) return 1;
+    const s = start instanceof Date ? start : typeof start?.toDate === 'function' ? start.toDate() : new Date(start);
+    const e = end instanceof Date ? end : typeof end?.toDate === 'function' ? end.toDate() : new Date(end);
+    const diffTime = Math.max(0, e.getTime() - s.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return isNaN(diffDays) ? 1 : diffDays;
+  };
+
+  const totalAnnualEntitlement = 30;
+  const annualTaken = requests
+    .filter((r) => r.status === "approved" && (r.type === "vacation" || (r.type as string) === "annual"))
+    .reduce((sum, r) => sum + getLeaveDays(r.startDate, r.endDate), 0);
+  const annualRemaining = Math.max(0, totalAnnualEntitlement - annualTaken);
+
+  const totalSickEntitlement = 15;
+  const sickTaken = requests
+    .filter((r) => r.status === "approved" && r.type === "sick")
+    .reduce((sum, r) => sum + getLeaveDays(r.startDate, r.endDate), 0);
+  const sickRemaining = Math.max(0, totalSickEntitlement - sickTaken);
+
+  const unpaidTaken = requests
+    .filter((r) => r.status === "approved" && r.type === "unpaid")
+    .reduce((sum, r) => sum + getLeaveDays(r.startDate, r.endDate), 0);
+
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
+
   const balances = [
-    { label: isAr ? "الإجازة السنوية (المستحقة)" : "Annual Leave", value: "21", total: "30", icon: <Umbrella size={24} />, color: "text-primary", bg: "bg-primary/10" },
-    { label: isAr ? "الإجازات المرضية" : "Sick Leave", value: "15", total: "15", icon: <Thermometer size={24} />, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-    { label: isAr ? "إجازات بدون راتب" : "Unpaid Leave", value: "5", total: "10", icon: <UserMinus size={24} />, color: "text-purple-500", bg: "bg-purple-500/10" },
-    { label: isAr ? "طلبات قيد المراجعة" : "Pending Requests", value: requests.filter((r) => r.status === "pending").length.toString(), total: null, icon: <Clock size={24} />, color: "text-amber-500", bg: "bg-amber-500/10" },
+    {
+      label: isAr ? "الإجازة السنوية (المتبقي)" : "Annual Leave (Balance)",
+      value: annualRemaining.toString(),
+      total: totalAnnualEntitlement.toString(),
+      icon: <Umbrella size={24} />,
+      color: "text-primary",
+      bg: "bg-primary/10",
+    },
+    {
+      label: isAr ? "الإجازات المرضية (المتبقي)" : "Sick Leave (Balance)",
+      value: sickRemaining.toString(),
+      total: totalSickEntitlement.toString(),
+      icon: <Thermometer size={24} />,
+      color: "text-emerald-500",
+      bg: "bg-emerald-500/10",
+    },
+    {
+      label: isAr ? "إجازات بدون راتب المستهلكة" : "Unpaid Leave (Taken)",
+      value: unpaidTaken.toString(),
+      total: null,
+      icon: <UserMinus size={24} />,
+      color: "text-purple-500",
+      bg: "bg-purple-500/10",
+    },
+    {
+      label: isAr ? "طلبات قيد المراجعة" : "Pending Requests",
+      value: pendingCount.toString(),
+      total: null,
+      icon: <Clock size={24} />,
+      color: "text-amber-500",
+      bg: "bg-amber-500/10",
+    },
   ];
 
   return (

@@ -4,6 +4,7 @@ import HttpBackend from "i18next-http-backend";
 import LanguageDetector from "i18next-browser-languagedetector";
 
 function applyDocumentDirection(lng: string | undefined) {
+  if (typeof document === "undefined") return;
   const language = lng || i18n.language || "en";
   const dir = language.toLowerCase().startsWith("ar") ? "rtl" : "ltr";
   document.documentElement.dir = dir;
@@ -32,8 +33,10 @@ i18n
   });
 
 // languageChanged does not run on first load — set dir immediately too.
-applyDocumentDirection(i18n.language);
-i18n.on("initialized", () => applyDocumentDirection(i18n.language));
-i18n.on("languageChanged", applyDocumentDirection);
+if (typeof document !== "undefined") {
+  applyDocumentDirection(i18n.language);
+  i18n.on("initialized", () => applyDocumentDirection(i18n.language));
+  i18n.on("languageChanged", applyDocumentDirection);
+}
 
 export default i18n;

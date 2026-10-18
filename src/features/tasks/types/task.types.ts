@@ -145,6 +145,7 @@ export interface TaskFilters {
   contractId?: string;
   dealId?: string;
   contactId?: string;
+  projectId?: string | null;
   search?: string;
   page?: number;
   pageSize?: number;

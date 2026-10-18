@@ -35,6 +35,12 @@ export const invoiceSchema = z
     grandTotal: z.number().min(0),
     amountPaid: z.number().min(0).optional(),
     quotationId: z.string().optional(),
+    contractId: z.string().optional(),
+    dealId: z.string().optional(),
+    milestoneId: z.string().optional(),
+    journalEntryId: z.string().optional(),
+    reversalJournalEntryId: z.string().optional(),
+    reversedAt: z.date().optional(),
     paymentTermDays: z.number().int().min(0).optional(),
     postedAt: z.date().optional(),
 

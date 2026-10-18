@@ -74,6 +74,26 @@ export default function CreateInvoicePage() {
     };
   } })?.fromQuotation;
 
+  const fromContract = (location.state as { fromContract?: {
+    contractId: string;
+    contractNumber?: string;
+    contactId?: string;
+    customerName?: string;
+    dealId?: string;
+    milestoneId?: string;
+    title?: string;
+    currency?: string;
+    amount?: number;
+    vatRate?: number;
+    items?: Array<{
+      description: string;
+      quantity: number;
+      unitPrice: number;
+      taxRate?: number;
+      total?: number;
+    }>;
+  } })?.fromContract;
+
   const { data: contactsRes } = useContactsQuery();
   const contacts = contactsRes?.data || [];
   const createContact = useCreateContactMutation();
@@ -158,6 +178,65 @@ export default function CreateInvoicePage() {
       setCustomerInput(customerName);
     }
   }, [isEditing, fromQuotation, control, contacts]);
+
+  useEffect(() => {
+    if (!isEditing && fromContract?.contractId) {
+      const contact = contacts.find((c) => c.id === fromContract.contactId);
+      const customerName = fromContract.customerName || (contact ? invoiceCustomerPickerLabel(contact) : "");
+      const vatRate = fromContract.vatRate ?? defaultTax?.rate ?? 15;
+
+      const items = fromContract.items && fromContract.items.length > 0
+        ? fromContract.items.map((i) => {
+            const beforeTax = i.quantity * i.unitPrice;
+            const tax = beforeTax * ((i.taxRate ?? vatRate) / 100);
+            return {
+              description: i.description,
+              quantity: i.quantity,
+              unitPrice: i.unitPrice,
+              taxRate: i.taxRate ?? vatRate,
+              taxRateId: defaultTax?.id ?? null,
+              discount: 0,
+              total: beforeTax + tax,
+            };
+          })
+        : [{
+            description: fromContract.title || `دفعة تعاقدية - عقد #${fromContract.contractNumber || fromContract.contractId}`,
+            quantity: 1,
+            unitPrice: fromContract.amount || 0,
+            taxRate: vatRate,
+            taxRateId: defaultTax?.id ?? null,
+            discount: 0,
+            total: (fromContract.amount || 0) * (1 + vatRate / 100),
+          }];
+
+      const subTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+      const totalTax = items.reduce((s, i) => s + (i.quantity * i.unitPrice * (i.taxRate ?? 0)) / 100, 0);
+      const grandTotal = subTotal + totalTax;
+
+      const resetData = {
+        invoiceNumber: "DRAFT",
+        status: "draft" as const,
+        customerId: fromContract.contactId || "",
+        customerName,
+        contractId: fromContract.contractId,
+        dealId: fromContract.dealId,
+        milestoneId: fromContract.milestoneId,
+        currency: fromContract.currency || DEFAULT_BILLING_CURRENCY,
+        issueDate: new Date(),
+        dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+        items,
+        subTotal,
+        totalTax,
+        totalDiscount: 0,
+        grandTotal,
+        amountPaid: 0,
+        notes: `فاتورة مرحلية مرتبطة بالعقد رقم ${fromContract.contractNumber || fromContract.contractId}`,
+      };
+
+      control._reset(resetData as any);
+      setCustomerInput(customerName);
+    }
+  }, [isEditing, fromContract, control, contacts, defaultTax]);
 
   useEffect(() => {
     if (isEditing && existingInvoice) {

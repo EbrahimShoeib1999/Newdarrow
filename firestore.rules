@@ -63,10 +63,16 @@ service cloud.firestore {
       // New account (register / invite accept / Google)
       allow create: if signedIn() && request.auth.uid == userId;
 
-      // Self update, or company admin updating teammates
+      // Self update (without privilege escalation), or company admin updating teammates
       allow update: if signedIn() && (
-        request.auth.uid == userId
-        || (hasUserDoc() && isCompanyAdmin(resource.data.companyId))
+        (hasUserDoc() && isCompanyAdmin(resource.data.companyId))
+        || (
+          request.auth.uid == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.companyId == resource.data.companyId
+          && request.resource.data.get('customPermissions', []) == resource.data.get('customPermissions', [])
+          && request.resource.data.get('portalSubRoles', {}) == resource.data.get('portalSubRoles', {})
+        )
       );
 
       allow delete: if hasUserDoc() && isCompanyAdmin(resource.data.companyId);
@@ -99,16 +105,16 @@ service cloud.firestore {
       allow delete: if signedIn() && isCompanyAdmin(resource.data.companyId);
     }
 
-    // OTP password-reset codes (EmailJS flow)
+    // OTP password-reset codes - secure against public enumeration and tampering.
     match /otpResets/{id} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
     // Public invoice PDF shares (QR scan → PDF). No auth required to open.
     match /publicInvoiceShares/{token} {
       allow get: if true;
       allow list: if false;
-      allow create, update: if signedIn()
+      allow create: if signedIn()
         && request.resource.data.token == token
         && request.resource.data.companyId is string
         && request.resource.data.invoiceId is string
@@ -118,7 +124,18 @@ service cloud.firestore {
           || request.resource.data.pdfUrl is string
           || request.resource.data.pdfBase64 is string
         );
+      allow update: if signedIn()
+        && request.resource.data.token == token
+        && resource.data.companyId is string
+        && request.resource.data.companyId == resource.data.companyId
+        && belongsToCompany(resource.data.companyId)
+        && (
+          request.resource.data.snapshot is map
+          || request.resource.data.pdfUrl is string
+          || request.resource.data.pdfBase64 is string
+        );
       allow delete: if signedIn()
+        && resource.data.companyId is string
         && belongsToCompany(resource.data.companyId);
     }
 
@@ -151,17 +168,83 @@ service cloud.firestore {
         allow delete: if isCompanyAdmin(companyId);
       }
 
+      // Conversations & Chat channels: protect private channels and DMs
+      match /conversations/{conversationId} {
+        allow read: if belongsToCompany(companyId) && (
+          resource.data.type == 'public'
+          || (resource.data.type == 'channel' && resource.data.get('visibility', 'public') == 'public')
+          || ('memberIds' in resource.data && resource.data.memberIds is list && request.auth.uid in resource.data.memberIds)
+          || isCompanyAdmin(companyId)
+        );
+        allow create: if belongsToCompany(companyId);
+        allow update: if belongsToCompany(companyId) && (
+          ('memberIds' in resource.data && resource.data.memberIds is list && request.auth.uid in resource.data.memberIds)
+          || isCompanyAdmin(companyId)
+        );
+        allow delete: if isCompanyAdmin(companyId);
+
+        match /messages/{messageId} {
+          function parentConversation() {
+            return get(/databases/$(database)/documents/companies/$(companyId)/conversations/$(conversationId)).data;
+          }
+
+          function canAccessParent() {
+            return belongsToCompany(companyId) && (
+              parentConversation().type == 'public'
+              || (parentConversation().type == 'channel' && parentConversation().get('visibility', 'public') == 'public')
+              || ('memberIds' in parentConversation() && parentConversation().memberIds is list && request.auth.uid in parentConversation().memberIds)
+              || isCompanyAdmin(companyId)
+            );
+          }
+
+          allow read: if canAccessParent();
+          allow create: if canAccessParent()
+            && request.resource.data.senderId == request.auth.uid;
+          allow update: if canAccessParent() && (
+            resource.data.senderId == request.auth.uid
+            || isCompanyAdmin(companyId)
+          );
+          allow delete: if canAccessParent() && (
+            resource.data.senderId == request.auth.uid
+            || isCompanyAdmin(companyId)
+          );
+        }
+      }
+
+      // Accounting General Ledger journals: Immutable audit trail once posted.
+      // Must have balanced debits and credits; updates and deletions are prohibited to prevent tampering.
+      match /journals/{journalId} {
+        allow read: if belongsToCompany(companyId);
+        allow create: if belongsToCompany(companyId)
+          && request.resource.data.totalDebit == request.resource.data.totalCredit
+          && request.resource.data.totalDebit >= 0;
+        allow update, delete: if false;
+      }
+
+      // Payments: Permanent financial transaction records; deletions are prohibited.
+      match /payments/{paymentId} {
+        allow read: if belongsToCompany(companyId);
+        allow create, update: if belongsToCompany(companyId)
+          && request.resource.data.amount > 0;
+        allow delete: if false;
+      }
+
       // Every other company subcollection stays open to company members.
-      // Rules are additive, so `daily_reports` must be excluded by name here —
-      // otherwise this block would re-grant what the stricter rule above denies.
+      // Rules are additive, so explicit collections are excluded by name here.
       match /{collection}/{docId} {
         allow read, write: if belongsToCompany(companyId)
-          && collection != 'daily_reports';
+          && collection != 'daily_reports'
+          && collection != 'conversations'
+          && collection != 'journals'
+          && collection != 'payments';
 
-        // Nested data such as tasks/{id}/comments and conversations/{id}/messages.
+        // Nested data such as tasks/{id}/comments
         match /{nested=**} {
           allow read, write: if belongsToCompany(companyId)
-            && collection != 'daily_reports';
+            && collection != 'daily_reports'
+            && collection != 'conversations'
+            && collection != 'journals'
+            && collection != 'payments';
         }
       }
     }

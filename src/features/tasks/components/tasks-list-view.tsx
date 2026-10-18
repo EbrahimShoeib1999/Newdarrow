@@ -45,6 +45,7 @@ export function TasksListView() {
     priority: filters.priority.length ? filters.priority : undefined,
     assigneeId: filters.assigneeId ?? undefined,
     sprintId: filters.sprintId ?? undefined,
+    projectId: filters.projectId ?? undefined,
     search: filters.search || undefined,
     overdueOnly: filters.overdueOnly || undefined,
     completedThisWeek: filters.completedThisWeek || undefined,

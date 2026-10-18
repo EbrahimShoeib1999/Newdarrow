@@ -94,7 +94,7 @@ function mapTaskDoc(id: string, data: Record<string, unknown>): Task {
 export const TaskService = {
   async getTasks(
     companyId: string,
-    filters?: TaskFilters & { projectId?: string }
+    filters?: TaskFilters
   ): Promise<PaginatedResponse<Task>> {
     return withLogging(SERVICE_NAME, "getTasks", (async () => {
       if (!companyId) {
@@ -153,6 +153,9 @@ export const TaskService = {
       }
       if (filters?.contactId) {
         tasks = tasks.filter(t => t.contactId === filters.contactId);
+      }
+      if (filters?.projectId) {
+        tasks = tasks.filter(t => t.projectId === filters.projectId);
       }
       if (filters?.search) {
         const search = filters.search.toLowerCase();
