@@ -83,7 +83,7 @@ const ALL_PERMISSIONS: Permission[] = [
 export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   super_admin: ALL_PERMISSIONS,
   admin: ALL_PERMISSIONS.filter(
-    (p) => p !== "admin.seed" && p !== "company.identity"
+    (p) => p !== "company.identity"
   ),
   manager: [
     "portals.tasks",

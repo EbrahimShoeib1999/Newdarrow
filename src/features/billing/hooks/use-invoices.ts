@@ -106,7 +106,7 @@ export function useInvoices() {
       const res = await BillingService.invoices.getAll(companyId!);
       const data = convertTimestampsToDates(res.data) as Invoice[];
       const sorted = data.sort(
-        (a, b) => b.issueDate.getTime() - a.issueDate.getTime()
+        (a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()
       );
       const synced = syncInvoiceStatuses(sorted);
 

@@ -28,7 +28,10 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-export const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
+export const analytics =
+  typeof window !== "undefined" && env.VITE_USE_FIREBASE_EMULATOR !== "true"
+    ? getAnalytics(app)
+    : null;
 
 import { connectAuthEmulator } from "firebase/auth";
 import { connectFirestoreEmulator } from "firebase/firestore";

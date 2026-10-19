@@ -730,7 +730,6 @@ export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormM
                             label={t("contacts.form.city")}
                             placeholder="مثال: الرياض"
                             {...register("city")}
-                            isRequired
                           />
                         </div>
 
