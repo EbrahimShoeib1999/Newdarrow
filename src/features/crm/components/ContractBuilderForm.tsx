@@ -41,6 +41,7 @@ import { TaskService } from "@/features/tasks/api/tasks.service";
 import { useContactsQuery } from "../hooks/use-contacts";
 import { contactDisplayName } from "../utils/contacts-list.utils";
 import { generateQuotationPdf } from "../utils/generate-quotation-pdf";
+import { buildContractInvoicePrefill } from "../utils/contract-invoice-prefill";
 import { ContractPrintDocument } from "./ContractPrintDocument";
 import type {
   ContractClause,
@@ -915,7 +916,9 @@ export function ContractBuilderForm() {
                 className="font-bold rounded-2xl"
                 startContent={<ReceiptText className="h-4 w-4" />}
                 onPress={() => {
-                  const amount = parseFloat(fieldValue("amountExclVat")) || 0;
+                  // Commercial rule: the interim invoice mirrors the contract's own recorded
+                  // value (amountExclVat + vatRate) — never a fabricated hourly rate.
+                  const prefill = buildContractInvoicePrefill(form);
                   navigate("/billing/invoices/new", {
                     state: {
                       fromContract: {
@@ -924,18 +927,11 @@ export function ContractBuilderForm() {
                         contactId: form.contactId,
                         customerName: form.client.name,
                         dealId: form.dealId,
-                        amount,
-                        currency: "SAR",
-                        title: `دفعة تعاقدية - عقد #${form.contractNumber}`,
-                        items: (form.services || [])
-                          .filter((s) => s.selected)
-                          .map((s) => ({
-                            description: s.name,
-                            quantity: 1,
-                            unitPrice: s.estimatedHours
-                              ? s.estimatedHours * 100
-                              : amount / Math.max(1, (form.services || []).filter((x) => x.selected).length),
-                          })),
+                        amount: prefill.amount,
+                        vatRate: prefill.vatRate,
+                        currency: prefill.currency,
+                        title: prefill.title,
+                        items: prefill.items,
                       },
                     },
                   });

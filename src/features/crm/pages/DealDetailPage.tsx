@@ -30,6 +30,7 @@ import {
   Clock,
   MessageSquare,
   Plus,
+  ReceiptText,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { FieldBox } from "@/components/shared/field-box";
@@ -176,6 +177,35 @@ export function DealDetailPage() {
                 >
                   {dealContracts.length > 0 ? (isAr ? "إنشاء عقد إضافي" : "Add Contract") : (isAr ? "صياغة عقد للصفقة" : "Draft Contract")}
                 </Button>
+                {deal.stage === "won" && (
+                  <Button
+                    color="secondary"
+                    variant="solid"
+                    startContent={<ReceiptText className="h-4 w-4" />}
+                    className="rounded-full font-bold shadow-md shadow-secondary/20 transition-all hover:scale-[1.02]"
+                    onPress={() => {
+                      if (dealContracts.length > 0) {
+                        // If deal has contracts, navigate to contract invoice flow
+                        navigate(`/crm/contracts?id=${dealContracts[0].id}`);
+                      } else {
+                        // If no contract, create invoice directly from deal
+                        navigate("/billing/invoices/new", {
+                          state: {
+                            fromDeal: {
+                              dealId: deal.id,
+                              contactId: deal.contactId,
+                              amount: deal.amount,
+                              currency: deal.currency,
+                              title: deal.title,
+                            },
+                          },
+                        });
+                      }
+                    }}
+                  >
+                    {isAr ? "إصدار فاتورة" : "Create Invoice"}
+                  </Button>
+                )}
                 {canManageDeals && (
                   <Button
                     color="default"

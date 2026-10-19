@@ -615,7 +615,11 @@
       "invoice_not_found": "Invoice not found or loading...",
       "pdf_failed": "Failed to generate PDF",
       "no_email": "Customer has no email on file",
-      "email_opened": "Email client opened"
+      "email_opened": "Email client opened",
+      "related_records": "Related Records",
+      "customer": "Customer",
+      "deal": "Deal",
+      "contract": "Contract"
     },
     "public": {
       "opening_pdf": "Opening PDF…",

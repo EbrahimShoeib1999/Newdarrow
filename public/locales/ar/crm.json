@@ -1,6 +1,7 @@
 {
   "nav": {
     "dashboard": "لوحة التحكم",
+    "operations": "عمليات العملاء",
     "leads": "العملاء المحتملون",
     "contacts": "جهات الاتصال",
     "deals": "الصفقات",
@@ -646,7 +647,34 @@
     }
   },
   "timeline": {
-    "empty": "لا نشاط بعد."
+    "empty": "لا نشاط بعد.",
+    "loading": "جارٍ تحميل الخط الزمني للنشاط…",
+    "error": "تعذّر تحميل الخط الزمني للنشاط.",
+    "categories": {
+      "customer": "العميل",
+      "deal": "الصفقة",
+      "contract": "العقد",
+      "task": "المهمة",
+      "invoice": "الفاتورة",
+      "payment": "الدفعة",
+      "activity": "ملاحظة"
+    },
+    "events": {
+      "customer_created": "تم إنشاء سجل العميل",
+      "deal_created": "تم إنشاء الصفقة: {{title}}",
+      "deal_stage_changed": "تغيّرت مرحلة الصفقة ({{transition}})",
+      "contract_created": "تم إنشاء العقد: {{title}}",
+      "contract_approved": "تمت الموافقة على العقد: {{title}}",
+      "task_created": "تم إنشاء المهمة: {{title}}",
+      "task_claimed": "تم تولّي المهمة: {{title}}",
+      "task_completed": "تم إنجاز المهمة: {{title}}",
+      "task_status_changed": "حالة المهمة: {{from}} ← {{to}} ({{title}})",
+      "invoice_issued": "تم إصدار الفاتورة: {{number}} ({{amount}})",
+      "invoice_approved": "تمت الموافقة على الفاتورة: {{number}}",
+      "invoice_reversed": "تم عكس الفاتورة: {{number}}",
+      "payment_recorded": "تم تسجيل دفعة: {{amount}}",
+      "activity_logged": "{{subject}}"
+    }
   },
   "attachments": {
     "upload": "رفع ملف",

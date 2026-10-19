@@ -59,7 +59,6 @@ import { SmartTaskAssignmentModal } from "@/features/tasks/components/SmartTaskA
 import type { Task } from "@/features/tasks/types/task.types";
 
 import {
-  useCrmEntityActivities,
   useCrmEntityAttachments,
   useCrmEntityNotes,
   useCrmEntityTasks,
@@ -73,7 +72,7 @@ import { useAllUsers } from "@/features/users/hooks/use-users";
 import { ContactFormModal } from "../components/ContactFormModal";
 import { CrmNotesSection } from "../components/shared/CrmNotesSection";
 import { CrmAttachmentsSection } from "../components/shared/CrmAttachmentsSection";
-import { CrmTimeline } from "../components/shared/CrmTimeline";
+import { UnifiedCustomerTimeline } from "../components/shared/UnifiedCustomerTimeline";
 import { contactDisplayName } from "../utils/contacts-list.utils";
 import { formatDate } from "@/lib/utils";
 import { MoneyAmount } from "@/components/shared/riyal-symbol";
@@ -95,10 +94,6 @@ export function ContactDetailPage() {
   const [tab, setTab] = useState("overview");
 
   const { data: notes = [], isLoading: notesLoading } = useCrmEntityNotes("contact", contactId);
-  const { data: activities = [], isLoading: activitiesLoading } = useCrmEntityActivities(
-    "contact",
-    contactId
-  );
   const { data: tasks = [], isLoading: tasksLoading } = useCrmEntityTasks("contact", contactId);
   const { data: attachments = [], isLoading: attachmentsLoading } = useCrmEntityAttachments(
     "contact",
@@ -1117,11 +1112,7 @@ export function ContactDetailPage() {
           }
         >
           <div className="pt-4">
-            {activitiesLoading ? (
-              <LoadingSpinner />
-            ) : (
-              <CrmTimeline activities={activities} />
-            )}
+            <UnifiedCustomerTimeline contactId={contactId} />
           </div>
         </Tab>
         <Tab

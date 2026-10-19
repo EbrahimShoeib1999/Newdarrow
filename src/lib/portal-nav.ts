@@ -36,6 +36,7 @@ import {
   FolderKanban,
   FolderOpen,
   CheckCircle2,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 
@@ -93,6 +94,7 @@ export const CRM_NAV_TREE: PortalNavTreeGroup[] = [
     namespace: "crm",
     items: [
       { labelKey: "nav.dashboard", path: "/crm", icon: LayoutDashboard, end: true, namespace: "crm" },
+      { labelKey: "nav.operations", path: "/crm/operations", icon: Activity, namespace: "crm" },
     ],
   },
   {

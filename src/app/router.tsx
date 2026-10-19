@@ -34,6 +34,7 @@ import { CrmTasksPage } from "@/features/crm/pages/CrmTasksPage";
 import { CrmReportsPage } from "@/features/crm/pages/CrmReportsPage";
 import { ClientReportsPage } from "@/features/crm/pages/ClientReportsPage";
 import { QuotationPage } from "@/features/crm/pages/QuotationPage";
+import { CustomerOperationsDashboard } from "@/features/crm/pages/CustomerOperationsDashboard";
 
 import { ContractPage } from "@/features/crm/pages/ContractPage";
 import { PeopleLayout } from "@/features/people/components/PeopleLayout";
@@ -179,6 +180,7 @@ export const router = createBrowserRouter([
               { path: "contracts", element: <ContractPage /> },
               { path: "reports", element: <CrmReportsPage /> },
               { path: "client-reports", element: <ClientReportsPage /> },
+              { path: "operations", element: <CustomerOperationsDashboard /> },
 
             ],
           },

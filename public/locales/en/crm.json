@@ -1,6 +1,7 @@
 {
   "nav": {
     "dashboard": "Dashboard",
+    "operations": "Customer Operations",
     "leads": "Leads",
     "contacts": "Contacts",
     "deals": "Deals",
@@ -652,7 +653,34 @@
     }
   },
   "timeline": {
-    "empty": "No activity yet."
+    "empty": "No activity yet.",
+    "loading": "Loading activity timeline…",
+    "error": "Couldn't load the activity timeline.",
+    "categories": {
+      "customer": "Customer",
+      "deal": "Deal",
+      "contract": "Contract",
+      "task": "Task",
+      "invoice": "Invoice",
+      "payment": "Payment",
+      "activity": "Note"
+    },
+    "events": {
+      "customer_created": "Customer record created",
+      "deal_created": "Deal created: {{title}}",
+      "deal_stage_changed": "Deal stage changed ({{transition}})",
+      "contract_created": "Contract created: {{title}}",
+      "contract_approved": "Contract approved: {{title}}",
+      "task_created": "Task created: {{title}}",
+      "task_claimed": "Task claimed: {{title}}",
+      "task_completed": "Task completed: {{title}}",
+      "task_status_changed": "Task status: {{from}} → {{to}} ({{title}})",
+      "invoice_issued": "Invoice issued: {{number}} ({{amount}})",
+      "invoice_approved": "Invoice approved: {{number}}",
+      "invoice_reversed": "Invoice reversed: {{number}}",
+      "payment_recorded": "Payment recorded: {{amount}}",
+      "activity_logged": "{{subject}}"
+    }
   },
   "attachments": {
     "upload": "Upload file",

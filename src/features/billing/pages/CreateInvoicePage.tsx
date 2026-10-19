@@ -94,6 +94,14 @@ export default function CreateInvoicePage() {
     }>;
   } })?.fromContract;
 
+  const fromDeal = (location.state as { fromDeal?: {
+    dealId: string;
+    contactId?: string;
+    amount?: number;
+    currency?: string;
+    title?: string;
+  } })?.fromDeal;
+
   const { data: contactsRes } = useContactsQuery();
   const contacts = contactsRes?.data || [];
   const createContact = useCreateContactMutation();
@@ -239,6 +247,49 @@ export default function CreateInvoicePage() {
   }, [isEditing, fromContract, control, contacts, defaultTax]);
 
   useEffect(() => {
+    if (!isEditing && fromDeal?.dealId) {
+      const contact = contacts.find((c) => c.id === fromDeal.contactId);
+      const customerName = contact ? invoiceCustomerPickerLabel(contact) : "";
+      const vatRate = defaultTax?.rate ?? 15;
+
+      const items = [{
+        description: fromDeal.title || `خدمات مرتبطة بالصفقة #${fromDeal.dealId}`,
+        quantity: 1,
+        unitPrice: fromDeal.amount || 0,
+        taxRate: vatRate,
+        taxRateId: defaultTax?.id ?? null,
+        discount: 0,
+        total: (fromDeal.amount || 0) * (1 + vatRate / 100),
+      }];
+
+      const subTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+      const totalTax = items.reduce((s, i) => s + (i.quantity * i.unitPrice * (i.taxRate ?? 0)) / 100, 0);
+      const grandTotal = subTotal + totalTax;
+
+      const resetData = {
+        invoiceNumber: "DRAFT",
+        status: "draft" as const,
+        customerId: fromDeal.contactId || "",
+        customerName,
+        dealId: fromDeal.dealId,
+        currency: fromDeal.currency || DEFAULT_BILLING_CURRENCY,
+        issueDate: new Date(),
+        dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+        items,
+        subTotal,
+        totalTax,
+        totalDiscount: 0,
+        grandTotal,
+        amountPaid: 0,
+        notes: `فاتورة مرتبطة بالصفقة #${fromDeal.dealId}`,
+      };
+
+      control._reset(resetData as any);
+      setCustomerInput(customerName);
+    }
+  }, [isEditing, fromDeal, control, contacts, defaultTax]);
+
+  useEffect(() => {
     if (isEditing && existingInvoice) {
       const name = resolveInvoiceCustomerName(
         existingInvoice,
@@ -257,10 +308,10 @@ export default function CreateInvoicePage() {
   }, [isEditing, existingInvoice, control, contacts]);
 
   useEffect(() => {
-    if (!isEditing && !fromQuotation && billingSettings) {
+    if (!isEditing && !fromQuotation && !fromContract && !fromDeal && billingSettings) {
       setValue("currency", getDefaultBillingCurrency(billingSettings));
     }
-  }, [billingSettings, fromQuotation, isEditing, setValue]);
+  }, [billingSettings, fromQuotation, fromContract, fromDeal, isEditing, setValue]);
 
   useEffect(() => {
     if (isEditing || fromQuotation || !defaultTax) return;

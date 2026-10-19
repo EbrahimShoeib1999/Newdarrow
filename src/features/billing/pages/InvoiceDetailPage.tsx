@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Chip } from "@heroui/react";
+import { Button, Chip, Card, CardBody } from "@heroui/react";
 import {
   Printer,
   Download,
@@ -11,6 +11,10 @@ import {
   CreditCard,
   Edit2,
   FileCheck2,
+  FileSignature,
+  Briefcase,
+  User,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCompany } from "@/features/companies/context/company-context";
@@ -21,6 +25,8 @@ import {
 } from "../hooks/use-invoices";
 import { usePayments } from "../hooks/use-payments";
 import { useContactsQuery } from "@/features/crm/hooks/use-contacts";
+import { useContractsQuery } from "@/features/crm/hooks/use-contracts";
+import { useDealsQuery } from "@/features/crm/hooks/use-deals";
 import { useBillingSettings } from "../hooks/use-billing-settings";
 import { useCompanyProfile } from "@/features/companies/hooks/use-company-profile";
 import { RecordPaymentModal } from "../components/RecordPaymentModal";
@@ -62,10 +68,16 @@ export default function InvoiceDetailPage() {
   const { data: payments = [] } = usePayments(id);
   const { data: contactsRes } = useContactsQuery();
   const contacts = contactsRes?.data || [];
+  const { data: contractsRes } = useContractsQuery();
+  const contracts = contractsRes?.data || [];
+  const { data: dealsRes } = useDealsQuery();
+  const deals = dealsRes?.data || [];
   const { data: settings } = useBillingSettings();
   const { data: company } = useCompanyProfile();
 
   const customer = contacts.find((c) => c.id === invoice?.customerId);
+  const contract = contracts.find((c) => c.id === invoice?.contractId);
+  const deal = deals.find((d) => d.id === invoice?.dealId);
 
   const pdfShareUrl = invoice?.shareToken
     ? invoicePdfShareUrl(invoice.shareToken)
@@ -426,6 +438,71 @@ export default function InvoiceDetailPage() {
           </Button>
         </div>
       </div>
+
+      {/* Related Records Section */}
+      {(invoice.contractId || invoice.dealId || invoice.customerId) && (
+        <Card className="border border-default-200 bg-default-50/50 print:hidden">
+          <CardBody className="p-4">
+            <h3 className="text-sm font-bold text-default-700 mb-3 flex items-center gap-2">
+              <FileSignature className="h-4 w-4 text-primary" />
+              {t("invoices.detail.related_records") || "Related Records"}
+            </h3>
+            <div className="flex flex-wrap gap-3">
+              {customer && (
+                <Link
+                  to={`/crm/contacts/${customer.id}`}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-background border border-default-200 hover:border-primary hover:bg-primary/5 transition-all"
+                >
+                  <User className="h-4 w-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-foreground">
+                      {customer.accountName || customer.fullName || customer.firstName}
+                    </span>
+                    <span className="text-[10px] text-default-500">
+                      {t("invoices.detail.customer") || "Customer"}
+                    </span>
+                  </div>
+                  <ExternalLink className="h-3 w-3 text-default-400" />
+                </Link>
+              )}
+              {deal && (
+                <Link
+                  to={`/crm/deals/${deal.id}`}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-background border border-default-200 hover:border-primary hover:bg-primary/5 transition-all"
+                >
+                  <Briefcase className="h-4 w-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-foreground line-clamp-1 max-w-[150px]">
+                      {deal.title}
+                    </span>
+                    <span className="text-[10px] text-default-500">
+                      {t("invoices.detail.deal") || "Deal"}
+                    </span>
+                  </div>
+                  <ExternalLink className="h-3 w-3 text-default-400" />
+                </Link>
+              )}
+              {contract && (
+                <Link
+                  to={`/crm/contracts?id=${contract.id}`}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-background border border-default-200 hover:border-primary hover:bg-primary/5 transition-all"
+                >
+                  <FileSignature className="h-4 w-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-foreground line-clamp-1 max-w-[150px]">
+                      {contract.title}
+                    </span>
+                    <span className="text-[10px] text-default-500">
+                      {t("invoices.detail.contract") || "Contract"}
+                    </span>
+                  </div>
+                  <ExternalLink className="h-3 w-3 text-default-400" />
+                </Link>
+              )}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       <div
         ref={printRef}

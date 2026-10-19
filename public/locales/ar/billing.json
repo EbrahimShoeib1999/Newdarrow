@@ -622,7 +622,11 @@
       "invoice_not_found": "لم يتم العثور على الفاتورة",
       "pdf_failed": "فشل إنشاء PDF",
       "no_email": "لا يوجد بريد إلكتروني للعميل",
-      "email_opened": "تم فتح تطبيق البريد"
+      "email_opened": "تم فتح تطبيق البريد",
+      "related_records": "السجلات المرتبطة",
+      "customer": "العميل",
+      "deal": "الصفقة",
+      "contract": "العقد"
     },
     "public": {
       "opening_pdf": "جاري فتح ملف PDF...",
