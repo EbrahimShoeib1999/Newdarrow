@@ -44,6 +44,7 @@ export function LoginPage() {
       brandDescription={t("login.brandDescription")}
       features={LOGIN_FEATURES}
       featureLabel={(key) => t(`login.brandFeatures.${key}`)}
+      appearance="light"
     >
       <LoginForm />
     </AuthBrandLayout>
