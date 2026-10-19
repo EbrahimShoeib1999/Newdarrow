@@ -50,7 +50,11 @@ export function GoogleSignInButton({
           ? String((err as { code: string }).code)
           : "";
       if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
-        setError("");
+        setError(
+          code === "auth/popup-closed-by-user"
+            ? t("login.googlePopupClosed")
+            : ""
+        );
       } else {
         setError(t("login.googleError"));
       }
