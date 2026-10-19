@@ -19,6 +19,7 @@
     "test:workflows": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project workflow-check \"node scripts/test-live-workflows.mjs\"",
     "demo": "npx -y firebase-tools@13.35.1 emulators:exec --only auth,firestore,storage --project demo-darrow \"node scripts/start-demo-suite.mjs\"",
     "test:client-demo": "npx -y firebase-tools@13.35.1 emulators:exec --only auth,firestore,storage --project demo-acceptance-suite \"node scripts/test-client-demo-acceptance.mjs\"",
+    "test:simulation": "npx tsx scripts/test-business-lifecycle-simulation.ts",
     "preview": "vite preview"
   },
   "dependencies": {
