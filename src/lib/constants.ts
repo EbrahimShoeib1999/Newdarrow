@@ -1,9 +1,9 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
-export const ENABLE_MOCKS = import.meta.env.VITE_ENABLE_MOCKS === "true";
+export const API_BASE_URL = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "/api";
+export const ENABLE_MOCKS = typeof import.meta !== "undefined" && import.meta.env?.VITE_ENABLE_MOCKS === "true";
 
 /** Public site origin for share links (invoice QR → PDF). Prefer env on preview/local. */
 export const APP_URL = (
-  import.meta.env.VITE_APP_URL as string | undefined
+  typeof import.meta !== "undefined" ? (import.meta.env?.VITE_APP_URL as string | undefined) : undefined
 )?.replace(/\/$/, "");
 
 export function getAppOrigin(): string {

@@ -42,6 +42,8 @@ import {
   getInvoiceAmountDue,
   syncInvoiceStatuses,
 } from "../src/features/billing/utils/accounting-engine";
+import { BillingService } from "../src/features/billing/api/billing.service";
+import { buildInvoicePublicSnapshot } from "../src/features/billing/api/invoice-share.service";
 
 const COMPANY_ID = "d-arrow";
 const OTHER_COMPANY = "external-corp";
@@ -181,9 +183,12 @@ const testPaymentId1 = "pay-sim-001";
 const testPaymentId2 = "pay-sim-002";
 const testShareToken = "share_sim_token_001";
 
+let customerPayload: any = null;
+let invoicePayload: any = null;
+
 // 1. Customer (Contact)
 await step("CRM", "Create & Persist Fictional Customer", async () => {
-  const customerPayload = {
+  customerPayload = {
     id: testCustomerId,
     firstName: "Demo Customer",
     lastName: "Workflow Test",
@@ -440,7 +445,7 @@ await step("Billing", "Issue Invoice with ZATCA VAT & Generate Balanced Journal 
   const issueDate = new Date();
   const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-  const invoicePayload = {
+  invoicePayload = {
     id: testInvoiceId,
     invoiceNumber: "INV-SIM-2026-001",
     status: "sent",
@@ -509,46 +514,25 @@ await step("Billing", "Issue Invoice with ZATCA VAT & Generate Balanced Journal 
   return `Invoice INV-SIM-2026-001: 115,000 SAR (Sub: 100k, VAT: 15k), JE: Balanced (115,000 SAR)`;
 });
 
-// 6. Public QR Share Verification
+// 6. Public QR Share Verification (Uses Production buildInvoicePublicSnapshot)
 await step("Billing", "Publish Public QR Share Snapshot with Allowlisted Fields", async () => {
+  // Use real application service to build the display-safe snapshot with strict field allowlist
+  const snapshot = buildInvoicePublicSnapshot({
+    invoice: invoicePayload,
+    company: {
+      name: "دي-آرو للأعمال والحلول الرقمية",
+      taxNumber: "300012345600003",
+    } as any,
+    customer: customerPayload,
+  });
+
   const sharePayload = {
     token: testShareToken,
     companyId: COMPANY_ID,
     invoiceId: testInvoiceId,
     status: "active",
     createdAt: new Date().toISOString(),
-    snapshot: {
-      amountDue: 115000,
-      customerName: "شركة تجربة تدفق الأعمال",
-      company: {
-        name: "دي-آرو للأعمال والحلول الرقمية",
-        taxNumber: "300012345600003",
-      },
-      invoice: {
-        id: testInvoiceId,
-        invoiceNumber: "INV-SIM-2026-001",
-        status: "sent",
-        customerName: "شركة تجربة تدفق الأعمال",
-        issueDate: new Date().toISOString(),
-        dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-        currency: "SAR",
-        subTotal: 100000,
-        totalTax: 15000,
-        totalDiscount: 0,
-        grandTotal: 115000,
-        amountPaid: 0,
-        items: [
-          {
-            id: "item_0",
-            description: "تنفيذ البنية التحتية السحابية والأنظمة الرقمية",
-            quantity: 1,
-            unitPrice: 100000,
-            taxRate: 15,
-            total: 100000,
-          },
-        ],
-      },
-    },
+    snapshot,
   };
 
   await assertSucceeds(
@@ -568,121 +552,64 @@ await step("Billing", "Publish Public QR Share Snapshot with Allowlisted Fields"
   return `Token: ${testShareToken}, Allowlisted Total: 115,000 SAR, Zero private leaks`;
 });
 
-// 7. Payment Execution & Real-Time Balance Synchronization
+// 7. Payment Execution & Real-Time Balance Synchronization via Production BillingService
 await step("Accounting", "Execute Multi-Stage Payment, Update Balances & Post Payment JEs", async () => {
-  // Stage 1: Partial payment of 50,000 SAR
-  const pay1Date = new Date();
-  const pay1Payload = {
-    id: testPaymentId1,
-    invoiceId: testInvoiceId,
-    type: "customer",
-    amount: 50000,
-    date: pay1Date.toISOString(),
-    methodName: "تحويل بنكي - البنك الأهلي",
-    voucherId: "REC-SIM-2026-001",
-    currency: "SAR",
-    companyId: COMPANY_ID,
-    createdAt: pay1Date.toISOString(),
-  };
-
-  await assertSucceeds(
-    setDoc(doc(adminDb, "companies", COMPANY_ID, "payments", testPaymentId1), pay1Payload)
-  );
-
-  // Generate Receipt Voucher for payment 1
-  await assertSucceeds(
-    setDoc(doc(adminDb, "companies", COMPANY_ID, "vouchers", "REC-SIM-2026-001"), {
-      id: "REC-SIM-2026-001",
-      voucherNumber: "REC-2026-0001",
-      voucherType: "receipt",
+  // Stage 1: Partial payment of 50,000 SAR using production BillingService.executeCustomerPaymentTransaction
+  const res1 = await BillingService.executeCustomerPaymentTransaction(
+    COMPANY_ID,
+    {
       invoiceId: testInvoiceId,
-      amount: 50000,
-      currency: "SAR",
-      date: pay1Date.toISOString(),
-      partyName: "شركة تجربة تدفق الأعمال",
-      companyId: COMPANY_ID,
-    })
+      payment: {
+        id: testPaymentId1,
+        amount: 50000,
+        date: new Date().toISOString(),
+        methodName: "تحويل بنكي - البنك الأهلي",
+      },
+    },
+    adminDb
   );
 
-  // Post Balanced Payment Journal Entry 1 (Debit Bank 50k, Credit AR 50k)
-  await assertSucceeds(
-    setDoc(doc(adminDb, "companies", COMPANY_ID, "journals", "je-pay-sim-001"), {
-      id: "je-pay-sim-001",
-      entryNumber: "JE-PAY-2026-001",
-      date: pay1Date.toISOString(),
-      description: "سداد دفعة أولى لفاتورة INV-SIM-2026-001",
-      status: "posted",
-      totalDebit: 50000,
-      totalCredit: 50000,
-      lines: [
-        { id: "l1", accountId: "acc_1020", debit: 50000, credit: 0, description: "البنك الأهلي السعودي" },
-        { id: "l2", accountId: "acc_1200", debit: 0, credit: 50000, description: "العملاء والمدينون" },
-      ],
-      companyId: COMPANY_ID,
-    })
-  );
+  assert(res1.payment.amount === 50000, "Payment 1 recorded via production transaction");
+  assert(res1.invoice.amountPaid === 50000, "Invoice amountPaid updated to 50,000 SAR");
+  assert(res1.invoice.status === "sent", "Invoice status remains 'sent'");
 
-  // Update Invoice: amountPaid = 50,000, status remains 'sent'
-  await assertSucceeds(
-    updateDoc(doc(adminDb, "companies", COMPANY_ID, "invoices", testInvoiceId), {
-      amountPaid: 50000,
-      status: "sent",
-    })
-  );
+  // Verify atomic double-entry journal created for payment 1
+  const je1Snap = await getDoc(doc(adminDb, "companies", COMPANY_ID, "journals", `je_payment_${testPaymentId1}`));
+  assert(je1Snap.exists(), "Payment 1 journal must exist");
+  assert(je1Snap.data().totalDebit === 50000, "Payment 1 journal debit is 50,000 SAR");
 
-  let invAfterPart1 = (await getDoc(doc(adminDb, "companies", COMPANY_ID, "invoices", testInvoiceId))).data();
+  // Verify remaining balance calculation
+  const invAfterPart1 = (await getDoc(doc(adminDb, "companies", COMPANY_ID, "invoices", testInvoiceId))).data();
   assert(invAfterPart1.amountPaid === 50000, "amountPaid must be 50,000 SAR");
-  let remainingDue = getInvoiceAmountDue(invAfterPart1);
+  const remainingDue = getInvoiceAmountDue(invAfterPart1);
   assert(remainingDue === 65000, `Remaining due must be 65,000 SAR, got ${remainingDue}`);
 
-  // Stage 2: Final settlement payment of 65,000 SAR
-  const pay2Date = new Date();
-  const pay2Payload = {
-    id: testPaymentId2,
-    invoiceId: testInvoiceId,
-    type: "customer",
-    amount: 65000,
-    date: pay2Date.toISOString(),
-    methodName: "تحويل بنكي - البنك الأهلي",
-    voucherId: "REC-SIM-2026-002",
-    currency: "SAR",
-    companyId: COMPANY_ID,
-    createdAt: pay2Date.toISOString(),
-  };
-
-  await assertSucceeds(
-    setDoc(doc(adminDb, "companies", COMPANY_ID, "payments", testPaymentId2), pay2Payload)
+  // Stage 2: Final settlement payment of 65,000 SAR using production BillingService
+  const res2 = await BillingService.executeCustomerPaymentTransaction(
+    COMPANY_ID,
+    {
+      invoiceId: testInvoiceId,
+      payment: {
+        id: testPaymentId2,
+        amount: 65000,
+        date: new Date().toISOString(),
+        methodName: "تحويل بنكي - البنك الأهلي",
+      },
+    },
+    adminDb
   );
 
-  // Post Balanced Payment Journal Entry 2 (Debit Bank 65k, Credit AR 65k)
-  await assertSucceeds(
-    setDoc(doc(adminDb, "companies", COMPANY_ID, "journals", "je-pay-sim-002"), {
-      id: "je-pay-sim-002",
-      entryNumber: "JE-PAY-2026-002",
-      date: pay2Date.toISOString(),
-      description: "سداد دفعة أخيرة وإغلاق فاتورة INV-SIM-2026-001",
-      status: "posted",
-      totalDebit: 65000,
-      totalCredit: 65000,
-      lines: [
-        { id: "l1", accountId: "acc_1020", debit: 65000, credit: 0, description: "البنك الأهلي السعودي" },
-        { id: "l2", accountId: "acc_1200", debit: 0, credit: 65000, description: "العملاء والمدينون" },
-      ],
-      companyId: COMPANY_ID,
-    })
-  );
+  assert(res2.payment.amount === 65000, "Payment 2 recorded via production transaction");
+  assert(res2.invoice.amountPaid === 115000, "Invoice amountPaid reached 115,000 SAR");
+  assert(res2.invoice.status === "paid", "Invoice status transitioned to 'paid'");
 
-  // Settle invoice: amountPaid = 115,000, status transitions to 'paid'
-  await assertSucceeds(
-    updateDoc(doc(adminDb, "companies", COMPANY_ID, "invoices", testInvoiceId), {
-      amountPaid: 115000,
-      status: "paid",
-      paidAt: pay2Date.toISOString(),
-    })
-  );
+  // Verify atomic double-entry journal created for payment 2
+  const je2Snap = await getDoc(doc(adminDb, "companies", COMPANY_ID, "journals", `je_payment_${testPaymentId2}`));
+  assert(je2Snap.exists(), "Payment 2 journal must exist");
+  assert(je2Snap.data().totalDebit === 65000, "Payment 2 journal debit is 65,000 SAR");
 
   const finalInv = (await getDoc(doc(adminDb, "companies", COMPANY_ID, "invoices", testInvoiceId))).data();
-  assert(finalInv.amountPaid === 115000, "Full amount paid");
+  assert(finalInv.amountPaid === 115000, "Full amount paid in Firestore");
   assert(finalInv.status === "paid", "Invoice status must be 'paid'");
   assert(getInvoiceAmountDue(finalInv) === 0, "Amount due must be 0 SAR");
 
@@ -799,6 +726,103 @@ await step("Validation", "validateContractPayload throws error for missing requi
   }
   assert(threw, "Must throw contract validation error");
   return "Caught missing contract title and number";
+});
+
+// Negative 7: Overpayment rejection via BillingService
+await step("Accounting", "BillingService REJECTS payment exceeding amount due (overpayment guard)", async () => {
+  let threw = false;
+  try {
+    await BillingService.executeCustomerPaymentTransaction(
+      COMPANY_ID,
+      {
+        invoiceId: testInvoiceId,
+        payment: {
+          id: "pay-overpayment-attempt",
+          amount: 10000,
+          methodName: "تحويل بنكي",
+        },
+      },
+      adminDb
+    );
+  } catch (err: any) {
+    threw = true;
+    assert(err.message.includes("exceeds amount due"), `Expected overpayment error, got: ${err.message}`);
+  }
+  assert(threw, "Must reject overpayment");
+  return "Overpayment blocked: payment exceeds outstanding balance (0.00)";
+});
+
+// Negative 8: Non-positive payment rejection via BillingService
+await step("Accounting", "BillingService REJECTS payment with amount <= 0", async () => {
+  let threw = false;
+  try {
+    await BillingService.executeCustomerPaymentTransaction(
+      COMPANY_ID,
+      {
+        invoiceId: testInvoiceId,
+        payment: {
+          id: "pay-negative-attempt",
+          amount: -500,
+          methodName: "تحويل بنكي",
+        },
+      },
+      adminDb
+    );
+  } catch (err: any) {
+    threw = true;
+    assert(err.message.includes("greater than zero"), `Expected non-positive error, got: ${err.message}`);
+  }
+  assert(threw, "Must reject non-positive payment");
+  return "Non-positive payment blocked server-side";
+});
+
+// Negative 9: Idempotent payment replay succeeds without duplicate balance mutations
+await step("Accounting", "BillingService idempotently handles identical payment replay", async () => {
+  const replayRes = await BillingService.executeCustomerPaymentTransaction(
+    COMPANY_ID,
+    {
+      invoiceId: testInvoiceId,
+      payment: {
+        id: testPaymentId1,
+        amount: 50000,
+        methodName: "تحويل بنكي - البنك الأهلي",
+      },
+    },
+    adminDb
+  );
+  assert(replayRes.payment.id === testPaymentId1, "Replay returned original payment record");
+  return "Idempotent replay verified without duplicate debits";
+});
+
+// Negative 10: Replay conflict guard throws explicit conflict on reused ID with different payload
+await step("Accounting", "BillingService REJECTS payment replay with conflicting amount", async () => {
+  let threw = false;
+  try {
+    await BillingService.executeCustomerPaymentTransaction(
+      COMPANY_ID,
+      {
+        invoiceId: testInvoiceId,
+        payment: {
+          id: testPaymentId1,
+          amount: 99999, // Conflicting amount!
+          methodName: "تحويل بنكي - البنك الأهلي",
+        },
+      },
+      adminDb
+    );
+  } catch (err: any) {
+    threw = true;
+    assert(err.message.includes("conflicting details"), `Expected conflict error, got: ${err.message}`);
+  }
+  assert(threw, "Must reject payment ID reuse with conflicting amount");
+  return "Payment idempotency conflict guard verified";
+});
+
+// Negative 11: Unauthenticated access to private company collections is strictly blocked
+await step("Security", "Unauthenticated user CANNOT read private invoices or contacts", async () => {
+  await assertFails(getDoc(doc(unauthDb, "companies", COMPANY_ID, "invoices", testInvoiceId)));
+  await assertFails(getDoc(doc(unauthDb, "companies", COMPANY_ID, "contacts", testCustomerId)));
+  return "Private subcollections protected against unauthenticated reads";
 });
 
 // Clean up

@@ -15,59 +15,61 @@ import { doc, setDoc } from "firebase/firestore";
 const edgePath = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const profileDir = path.join(os.tmpdir(), `edge_client_demo_${Date.now()}`);
 const CDP_PORT = 9788;
-const VITE_PORT = 5175;
-const PROJECT_ID = "demo-acceptance-suite";
+let VITE_PORT = 5175;
+let PROJECT_ID = "demo-acceptance-suite";
+let viteProc = null;
 
 try {
-  rmSync(profileDir, { recursive: true, force: true });
+  const checkLive = await fetch("http://localhost:5173/");
+  if (checkLive.ok) {
+    VITE_PORT = 5173;
+    PROJECT_ID = "demo-darrow";
+    console.log(`Connected to active demo server on port ${VITE_PORT} (Project: ${PROJECT_ID})`);
+  }
 } catch (e) {}
-mkdirSync(profileDir, { recursive: true });
 
-console.log("\n========================================================================");
-console.log(" D-Arrow Business — Client Demo E2E Browser Acceptance (CDP)");
-console.log("========================================================================\n");
-
-// 1. Start isolated test Vite dev server
-console.log(`Starting isolated test Vite instance on port ${VITE_PORT}...`);
-const viteProc = spawn(
-  process.execPath,
-  ["node_modules/vite/bin/vite.js", "--port", String(VITE_PORT), "--strictPort"],
-  {
-    env: {
-      ...process.env,
-      VITE_USE_FIREBASE_EMULATOR: "true",
-      VITE_FIREBASE_EMULATOR_HOST: "127.0.0.1",
-      VITE_FIREBASE_PROJECT_ID: PROJECT_ID,
-      VITE_FIREBASE_AUTH_EMULATOR_PORT: "9099",
-      VITE_FIRESTORE_EMULATOR_PORT: "8080",
-      VITE_FIREBASE_STORAGE_EMULATOR_PORT: "9199",
-    },
-    stdio: "pipe",
-  }
-);
-
-viteProc.stdout.on("data", (d) => {
-  const msg = d.toString();
-  if (msg.includes("Local:")) {
-    console.log(`Vite test server ready: http://localhost:${VITE_PORT}`);
-  }
-});
-
-let viteReady = false;
-for (let i = 0; i < 30; i++) {
-  await new Promise((r) => setTimeout(r, 1000));
-  try {
-    const res = await fetch(`http://localhost:${VITE_PORT}/`);
-    if (res.ok) {
-      viteReady = true;
-      break;
+if (VITE_PORT !== 5173) {
+  console.log(`Starting isolated test Vite instance on port ${VITE_PORT}...`);
+  viteProc = spawn(
+    process.execPath,
+    ["node_modules/vite/bin/vite.js", "--port", String(VITE_PORT), "--strictPort"],
+    {
+      env: {
+        ...process.env,
+        VITE_USE_FIREBASE_EMULATOR: "true",
+        VITE_FIREBASE_EMULATOR_HOST: "127.0.0.1",
+        VITE_FIREBASE_PROJECT_ID: PROJECT_ID,
+        VITE_FIREBASE_AUTH_EMULATOR_PORT: "9099",
+        VITE_FIRESTORE_EMULATOR_PORT: "8080",
+        VITE_FIREBASE_STORAGE_EMULATOR_PORT: "9199",
+      },
+      stdio: "pipe",
     }
-  } catch (e) {}
-}
+  );
 
-if (!viteReady) {
-  viteProc.kill();
-  throw new Error("Vite test server failed to start");
+  viteProc.stdout.on("data", (d) => {
+    const msg = d.toString();
+    if (msg.includes("Local:")) {
+      console.log(`Vite test server ready: http://localhost:${VITE_PORT}`);
+    }
+  });
+
+  let viteReady = false;
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const res = await fetch(`http://localhost:${VITE_PORT}/`);
+      if (res.ok) {
+        viteReady = true;
+        break;
+      }
+    } catch (e) {}
+  }
+
+  if (!viteReady) {
+    viteProc.kill();
+    throw new Error("Vite test server failed to start");
+  }
 }
 
 // 2. Start Edge Headless with isolated debugging port
@@ -209,7 +211,11 @@ if (signUpData.localId) {
 // Seed Firestore records
 const testEnv = await initializeTestEnvironment({
   projectId: PROJECT_ID,
-  firestore: { rules: readFileSync("firestore.rules", "utf8") },
+  firestore: {
+    host: "127.0.0.1",
+    port: 8080,
+    rules: readFileSync("firestore.rules", "utf8"),
+  },
 });
 
 const companyId = "d-arrow";
