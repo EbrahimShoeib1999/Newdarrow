@@ -12,6 +12,15 @@ import { PORTAL_PATHS, type PortalId } from "@/lib/portal-permissions";
 import { PORTAL_META } from "../constants/portal-meta";
 import { usePortalStat } from "../hooks/use-portal-stats";
 
+const PORTAL_ICON_GRADIENTS: Record<PortalId, string> = {
+  tasks: "from-violet-500 to-indigo-600",
+  crm: "from-emerald-500 to-teal-600",
+  people: "from-orange-500 to-amber-600",
+  billing: "from-fuchsia-500 to-purple-600",
+  chat: "from-cyan-500 to-blue-600",
+  projects: "from-blue-500 to-indigo-600",
+};
+
 function PortalCard({ portal }: { portal: PortalId }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -30,8 +39,10 @@ function PortalCard({ portal }: { portal: PortalId }) {
     >
       <CardBody className="p-8 space-y-4">
         <div className="flex items-start justify-between">
-          <div className="p-3 rounded-2xl bg-primary/10 text-primary">
-            <Icon className="w-8 h-8" />
+          <div
+            className={`flex h-[72px] w-[72px] items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br text-white shadow-md transition-all duration-300 group-hover:-translate-y-1 group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-primary/20 ${PORTAL_ICON_GRADIENTS[portal]}`}
+          >
+            <Icon className="h-8 w-8 transition-transform duration-300 group-hover:rotate-6" strokeWidth={1.75} />
           </div>
           <ArrowRight className="h-5 w-5 text-default-300 transition-all group-hover:text-primary group-hover:translate-x-1 rtl:rotate-180 rtl:group-hover:-translate-x-1" />
         </div>

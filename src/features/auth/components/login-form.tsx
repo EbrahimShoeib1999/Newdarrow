@@ -18,10 +18,10 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 const authInputClassNames = {
-  label: "font-semibold text-slate-200 pb-1 text-xs sm:text-sm",
-  input: "text-sm text-slate-100 placeholder:text-slate-500",
+  label: "font-semibold text-slate-700 pb-1 text-xs sm:text-sm",
+  input: "text-sm text-slate-900 placeholder:text-slate-400",
   inputWrapper: cn(
-    "bg-slate-950/70 shadow-none border-white/10 hover:border-white/25",
+    "bg-white shadow-none border-slate-300 hover:border-slate-400",
     "group-data-[focus=true]:border-primary group-data-[focus=true]:ring-2 group-data-[focus=true]:ring-primary/20",
     "group-data-[invalid=true]:border-danger group-data-[invalid=true]:ring-2 group-data-[invalid=true]:ring-danger/20",
     "transition-all duration-200"
@@ -116,13 +116,13 @@ export function LoginForm() {
             <div className="flex items-center justify-between gap-3">
               <label
                 htmlFor="login-password"
-                className="text-xs sm:text-sm font-semibold text-slate-200"
+                className="text-xs sm:text-sm font-semibold text-slate-700"
               >
                 {t("login.password")}
               </label>
               <Link
                 to="/forgot-password"
-                className="shrink-0 text-xs font-medium text-slate-400 transition-colors hover:text-primary-300 hover:underline"
+                className="shrink-0 text-xs font-medium text-slate-500 transition-colors hover:text-primary hover:underline"
               >
                 {t("login.forgotPassword")}
               </Link>
@@ -140,12 +140,12 @@ export function LoginForm() {
               isInvalid={isSubmitted && !!errors.password}
               errorMessage={isSubmitted ? errors.password?.message : undefined}
               startContent={
-                <Lock className="pointer-events-none h-4 w-4 text-slate-500" />
+                <Lock className="pointer-events-none h-4 w-4 text-slate-400" />
               }
               classNames={authInputClassNames}
               endContent={
                 <button
-                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200 focus:outline-none"
+                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus:outline-none"
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
@@ -173,18 +173,18 @@ export function LoginForm() {
       </Button>
 
       <div className="relative flex items-center gap-3 py-1">
-        <div className="h-px flex-1 bg-white/10" />
-        <span className="text-xs font-medium text-slate-400">{t("login.or")}</span>
-        <div className="h-px flex-1 bg-white/10" />
+        <div className="h-px flex-1 bg-slate-200" />
+        <span className="text-xs font-medium text-slate-500">{t("login.or")}</span>
+        <div className="h-px flex-1 bg-slate-200" />
       </div>
 
-      <GoogleSignInButton />
+      <GoogleSignInButton appearance="light" />
 
-      <p className="text-center text-sm text-slate-400">
+      <p className="text-center text-sm text-slate-600">
         {t("login.dontHaveAccount")}{" "}
         <Link
           to="/register"
-          className="font-bold text-primary-400 transition-colors hover:text-primary-300 hover:underline"
+          className="font-bold text-primary transition-colors hover:text-primary-700 hover:underline"
         >
           {t("login.createAccountLink")}
         </Link>
