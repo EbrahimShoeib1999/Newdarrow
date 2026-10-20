@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { containsControlCharacters } from "@/lib/utils";
 
 const hexColorSchema = z
   .string()
@@ -7,8 +8,14 @@ const hexColorSchema = z
   .or(z.literal(""));
 
 export const companyProfileSchema = z.object({
-  name: z.string().min(2, "Company name is required"),
-  nameAr: z.string().optional(),
+  name: z
+    .string()
+    .min(2, "Company name is required")
+    .refine((v) => !containsControlCharacters(v), "Name contains invalid control characters"),
+  nameAr: z
+    .string()
+    .optional()
+    .refine((v) => !containsControlCharacters(v), "Name contains invalid control characters"),
   commercialRegister: z
     .string()
     .min(5, "Commercial register must be at least 5 characters")

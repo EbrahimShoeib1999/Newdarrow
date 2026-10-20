@@ -94,8 +94,13 @@ export function TaskCharts({ tasks }: { tasks: Task[] }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <TasksPanel title={t("dashboard.tasksByStatus")}>
-        <div className="min-h-[240px] flex-1">
-          <ResponsiveContainer width="100%" height="100%">
+        {/* Definite pixel height so recharts' ResponsiveContainer always has a
+            real box to measure, plus an explicit initialDimension seed — without
+            the seed recharts renders its first pass with its documented
+            {-1,-1} default and logs the `width(-1)/height(-1)` warning before
+            the ResizeObserver measurement lands. */}
+        <div className="h-[240px] w-full">
+          <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}>
             <BarChart
               data={statusData}
               margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
@@ -148,8 +153,8 @@ export function TaskCharts({ tasks }: { tasks: Task[] }) {
             {t("dashboard.noData")}
           </p>
         ) : (
-          <div className="min-h-[240px] flex-1">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[240px] w-full">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}>
               <PieChart>
                 <Pie
                   data={priorityData}

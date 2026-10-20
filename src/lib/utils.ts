@@ -67,6 +67,22 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * True if the string contains an ASCII control character (C0 range U+0000–U+001F
+ * or DEL U+007F). Names/labels may use any casing, spaces, Arabic and normal
+ * punctuation, but control codes would corrupt stored values and rendering.
+ * Implemented via code points (not a control-character regex) to stay clear of
+ * the `no-control-regex` lint rule while remaining a plain data-integrity check.
+ */
+export function containsControlCharacters(value: string | null | undefined): boolean {
+  if (!value) return false;
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c < 0x20 || c === 0x7f) return true;
+  }
+  return false;
+}
+
 /** App display currency is always Saudi Riyal. */
 export const APP_CURRENCY = "SAR";
 

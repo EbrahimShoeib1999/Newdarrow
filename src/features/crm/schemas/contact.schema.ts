@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { containsControlCharacters } from "@/lib/utils";
 import type { CreateContactDTO, EstablishmentType } from "../types/contacts.types";
 
 export const associatedContactPersonSchema = z.object({
@@ -158,6 +159,27 @@ export const contactFormSchema = z
     billingAddress: z.string().optional(),
   })
   .superRefine((data, ctx) => {
+    // Data-integrity guard: names may use any casing, spaces, Arabic, and normal
+    // business punctuation, but ASCII control characters (tab, newline, NUL, …)
+    // would corrupt stored/rendered values and are never part of a real name.
+    // Deliberately NOT a character-class allowlist — it only rejects control
+    // codes, so mixed case and symbols like & . , ' - ( ) and Arabic pass.
+    const nameFields: Array<["firstName" | "lastName" | "accountName" | "legalName", string | undefined]> = [
+      ["firstName", data.firstName],
+      ["lastName", data.lastName],
+      ["accountName", data.accountName],
+      ["legalName", data.legalName],
+    ];
+    for (const [path, value] of nameFields) {
+      if (containsControlCharacters(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [path],
+          message: "Name contains invalid control characters",
+        });
+      }
+    }
+
     // If Individual: firstName and lastName are required. Also must have phone or email.
     if (data.entityType === "individual") {
       if (!data.firstName?.trim()) {

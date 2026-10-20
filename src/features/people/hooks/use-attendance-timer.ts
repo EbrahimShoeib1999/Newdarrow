@@ -13,6 +13,8 @@ export function useAttendanceTimer() {
     isShiftLoading: state.isShiftLoading,
     isInitialized: state.isInitialized,
     isReportModalOpen: state.isReportModalOpen,
+    syncError: state.syncError,
+    retrySync: state.retrySync,
     setReportModalOpen: state.setReportModalOpen,
     checkIn: state.checkIn,
     takeBreak: state.takeBreak,
@@ -49,6 +51,8 @@ export function useAttendanceTimer() {
     isShiftLoading: store.isShiftLoading,
     isReportModalOpen: store.isReportModalOpen,
     setReportModalOpen: store.setReportModalOpen,
+    syncError: store.syncError,
+    retrySync: store.retrySync,
     handleCheckIn: () => store.checkIn(companyId || "", "", user?.id || ""),
     handleTakeBreak: () => {
       if (store.todayAttendance) store.takeBreak(companyId || "", store.todayAttendance.id, "", user?.id || "");

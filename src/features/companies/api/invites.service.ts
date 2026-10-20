@@ -16,6 +16,10 @@ import {
 import { db } from "@/lib/firebase";
 import { withLogging } from "@/lib/service-utils";
 import { canAssignRole } from "@/lib/permissions/role-assignment";
+import {
+  resendBlockedErrorCode,
+  resendBlockedReason,
+} from "../utils/invite-delivery";
 import type { UserRole } from "@/features/auth/types/auth.types";
 import type { CreateInviteInput, TeamInvite } from "../types/invite.types";
 
@@ -86,31 +90,54 @@ async function sendInviteEmail(params: {
     return "logged";
   }
 
-  await emailjs.send(
-    serviceId,
-    templateId,
-    {
-      to_email: params.email,
-      to_name: params.email.split("@")[0],
-      from_name: params.inviterName || "D-Arrow",
-      subject,
-      message,
-      // Invite-specific
-      invite_link: params.inviteUrl,
-      company_name: params.companyName,
-      inviter_name: params.inviterName,
-      role_name: params.role,
-      // Attendance template field mapping (same template as attendance emails)
-      employee_name: params.inviterName || params.companyName,
-      action_type: "Team Invitation — Set Password",
-      total_time: params.inviteUrl,
-      // OTP template fallback
-      otp_code: params.inviteUrl,
-      expiry_minutes: String(7 * 24 * 60),
-    },
-    { publicKey }
-  );
-  return "sent";
+  // Emulator-safe kill switch: automated/local verification runs set this so no
+  // real EmailJS API request is made (no quota burn, no live email). The invite
+  // document still persists and the link stays valid — only actual delivery is
+  // suppressed, which the caller must report as "not sent" ("logged").
+  if ((import.meta.env.VITE_DISABLE_EMAIL_DELIVERY as string) === "true") {
+    console.warn(
+      `[INVITE] Email delivery disabled in this environment; invite link remains valid.`
+    );
+    return "logged";
+  }
+
+  // Delivery is a courtesy notification: the `invites/{token}` document already
+  // exists and the UI surfaces a direct, copyable link regardless. A provider
+  // outage or misconfiguration must NOT reject the whole invite and hide that
+  // working link from the admin (that is what left new hires with no way in).
+  try {
+    await emailjs.send(
+      serviceId,
+      templateId,
+      {
+        to_email: params.email,
+        to_name: params.email.split("@")[0],
+        from_name: params.inviterName || "D-Arrow",
+        subject,
+        message,
+        // Invite-specific
+        invite_link: params.inviteUrl,
+        company_name: params.companyName,
+        inviter_name: params.inviterName,
+        role_name: params.role,
+        // Attendance template field mapping (same template as attendance emails)
+        employee_name: params.inviterName || params.companyName,
+        action_type: "Team Invitation — Set Password",
+        total_time: params.inviteUrl,
+        // OTP template fallback
+        otp_code: params.inviteUrl,
+        expiry_minutes: String(7 * 24 * 60),
+      },
+      { publicKey }
+    );
+    return "sent";
+  } catch (err) {
+    console.warn(
+      `[INVITE] Email delivery failed for ${params.email}; invite link remains valid:`,
+      err
+    );
+    return "logged";
+  }
 }
 
 export const InvitesService = {
@@ -224,6 +251,41 @@ export const InvitesService = {
         return { ...invite, status: "expired" };
       }
       return invite;
+    })());
+  },
+
+  /**
+   * Re-deliver an EXISTING pending invitation without creating a new invite
+   * document. This is the safe retry/resend path: it reuses the same `token`
+   * (same `invites/{token}` record, same expiry) so a failed first delivery can
+   * be retried without ever producing duplicate active invitations.
+   *
+   * Returns the same delivery mode as createInvite:
+   *   - "sent":   the EmailJS request succeeded.
+   *   - "logged": provider not configured or delivery failed — the caller must
+   *               surface that the email did NOT go out and offer the manual
+   *               link instead of falsely reporting success.
+   */
+  async resendInviteEmail(token: string): Promise<"sent" | "logged"> {
+    return withLogging(SERVICE_NAME, "resendInviteEmail", (async () => {
+      const snap = await getDoc(doc(db, "invites", token));
+      const invite = snap.exists()
+        ? mapInvite(snap.id, snap.data() as Record<string, unknown>)
+        : null;
+      // Single source of truth for resend eligibility (also unit-tested):
+      // only a still-pending, unexpired invite may be re-delivered, and we reuse
+      // its existing token so no duplicate invitation document is ever created.
+      const blocked = resendBlockedReason(invite);
+      if (blocked) {
+        throw new Error(resendBlockedErrorCode(blocked));
+      }
+      return sendInviteEmail({
+        email: invite!.email,
+        inviteUrl: inviteLink(invite!.token),
+        companyName: invite!.companyName,
+        inviterName: invite!.invitedByName,
+        role: invite!.role,
+      });
     })());
   },
 

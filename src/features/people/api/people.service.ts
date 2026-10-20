@@ -29,6 +29,12 @@ import type {
   AttendanceLatePolicy,
 } from "../types/people.types";
 import { DEFAULT_ATTENDANCE_LATE_POLICY } from "../types/people.types";
+import {
+  buildCheckInGeoFields,
+  buildCheckOutGeoFields,
+  isOpenSessionForDay,
+  pruneUndefinedFields,
+} from "../utils/geo";
 
 const SERVICE_NAME = "PeopleService";
 
@@ -403,16 +409,32 @@ export const PeopleService = {
         deductionMinutes,
         createdAt: serverTimestamp(),
       };
-      if (geo) {
-        payload.checkInLat = geo.lat;
-        payload.checkInLng = geo.lng;
-        payload.location = geo.locationName;
-        if (geo.locationId) payload.checkInLocationId = geo.locationId;
-        if (geo.locationName) payload.checkInLocationName = geo.locationName;
-        if (geo.distanceMeters != null) payload.checkInDistanceMeters = geo.distanceMeters;
+      // Optional geo facts are merged key-by-key: a flexible check-in with a
+      // working GPS but no configured work locations resolves locationName to
+      // undefined, and Firestore rejects explicit undefined values outright.
+      Object.assign(payload, buildCheckInGeoFields(geo));
+
+      // Idempotent retry: if a previous attempt already opened a session for
+      // today (e.g. the write succeeded but the response was lost), reuse it
+      // instead of creating a duplicate active attendance record.
+      const todayRes = await getDocs(query(attendanceRef, where("date", "==", date)));
+      const openExisting = todayRes.docs.find((d) => {
+        const data = d.data();
+        return data.employeeId === employeeId && isOpenSessionForDay(data, date);
+      });
+      if (openExisting) {
+        const employeeRef = doc(db, "companies", companyId, "employees", employeeId);
+        await updateDoc(employeeRef, {
+          shiftStatus: "working",
+          updatedAt: serverTimestamp(),
+        });
+        return {
+          data: { id: openExisting.id, ...openExisting.data() } as Attendance,
+          message: "Check-in session already active",
+        };
       }
-      
-      const docRef = await addDoc(attendanceRef, payload);
+
+      const docRef = await addDoc(attendanceRef, pruneUndefinedFields(payload));
 
       // Global status update for persistence across browsers
       const employeeRef = doc(db, "companies", companyId, "employees", employeeId);
@@ -450,15 +472,9 @@ export const PeopleService = {
         totalHours,
         updatedAt: serverTimestamp(),
       };
-      if (geo) {
-        update.checkOutLat = geo.lat;
-        update.checkOutLng = geo.lng;
-        if (geo.locationId) update.checkOutLocationId = geo.locationId;
-        if (geo.locationName) update.checkOutLocationName = geo.locationName;
-        if (geo.distanceMeters != null) update.checkOutDistanceMeters = geo.distanceMeters;
-      }
+      Object.assign(update, buildCheckOutGeoFields(geo));
 
-      await updateDoc(docRef, update);
+      await updateDoc(docRef, pruneUndefinedFields(update));
 
       // Global status update
       const employeeRef = doc(db, "companies", companyId, "employees", employeeId);
@@ -478,7 +494,7 @@ export const PeopleService = {
   async getAttendance(companyId: string, employeeId: string): Promise<ApiResponse<Attendance[]>> {
     return withLogging(SERVICE_NAME, "getAttendance", (async () => {
       const attendanceRef = collection(db, "companies", companyId, "attendance");
-      let q = query(attendanceRef, where("employeeId", "==", employeeId));
+      const q = query(attendanceRef, where("employeeId", "==", employeeId));
       
       const querySnapshot = await getDocs(q);
       const records = querySnapshot.docs.map(docSnap => {

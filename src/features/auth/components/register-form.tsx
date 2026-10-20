@@ -16,7 +16,7 @@ import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import * as z from "zod";
-import { cn } from "@/lib/utils";
+import { cn, containsControlCharacters } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
 import { AuthService } from "../api/auth.service";
 import { GoogleSignInButton } from "./google-sign-in-button";
@@ -45,7 +45,10 @@ export function RegisterForm() {
       z.object({
         name: z.string().min(2, t("register.error")),
         email: z.string().email(),
-        companyName: z.string().min(2),
+        companyName: z
+          .string()
+          .min(2)
+          .refine((v) => !containsControlCharacters(v), t("register.companyNameError")),
         commercialRegister: z
           .string()
           .min(5, t("register.commercialRegisterError"))

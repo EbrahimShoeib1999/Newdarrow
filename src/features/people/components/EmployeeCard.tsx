@@ -62,11 +62,21 @@ export function EmployeeCard({
       : t(`locations.${locationRaw}`, { defaultValue: locationRaw });
 
   return (
-    <Card
-      isPressable
-      onPress={onClick}
-      className="group h-full overflow-hidden rounded-2xl border border-default-200/80 bg-content1 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
-    >
+    <Card className="group relative h-full overflow-hidden rounded-2xl border border-default-200/80 bg-content1 shadow-sm transition-all hover:border-primary/30 hover:shadow-md">
+      {/*
+        Whole-card "open profile" action is a single real <button> laid over the
+        card surface. The card is deliberately NOT `isPressable` (HeroUI renders a
+        pressable card as a button); the dropdown trigger below is also a button,
+        and nesting them produced the invalid `<button> inside <button>` DOM that
+        React warned about on PeopleDashboardPage. A sibling overlay button keeps
+        the tap-to-open behavior without nesting interactive elements.
+      */}
+      <button
+        type="button"
+        aria-label={t("extra.view_profile")}
+        onClick={onClick}
+        className="absolute inset-0 z-10 h-full w-full cursor-pointer rounded-2xl bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+      />
       <CardBody className="gap-0 p-0">
         <div
           className={
@@ -108,7 +118,7 @@ export function EmployeeCard({
                 </div>
 
                 <div
-                  className="shrink-0"
+                  className="relative z-20 shrink-0"
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => e.stopPropagation()}
                 >

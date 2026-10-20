@@ -18,7 +18,11 @@ import * as z from "zod";
 import { useTranslation } from "react-i18next";
 import { selectFieldProps } from "@/components/shared/select-field";
 import { EMPLOYEE_EMAIL_EXISTS, PeopleService, type EmployeeEmailCheck } from "../api/people.service";
+import type { EmployeeStatus } from "../types/people.types";
 import { useCompany } from "@/features/companies/context/company-context";
+import { useAuth } from "@/features/auth/context/auth-context";
+import { InvitesService } from "@/features/companies/api/invites.service";
+import type { UserRole } from "@/features/auth/types/auth.types";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/constants";
@@ -52,10 +56,18 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
   const { t, i18n } = useTranslation("people");
   const isAr = i18n.language === "ar";
   const { companyId } = useCompany();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const [copiedLink, setCopiedLink] = useState(false);
-  const [createdInvite, setCreatedInvite] = useState<{ name: string; email: string; inviteUrl: string } | null>(null);
+  const [resending, setResending] = useState(false);
+  const [createdInvite, setCreatedInvite] = useState<{
+    name: string;
+    email: string;
+    inviteUrl: string;
+    token: string;
+    emailMode: "sent" | "logged";
+  } | null>(null);
 
   const { register, handleSubmit, reset, setError, control, formState: { errors, isSubmitting } } = useForm<HireFormData>({
     resolver: zodResolver(hireSchema),
@@ -102,9 +114,6 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
   const onSubmit = async (data: HireFormData) => {
     if (!companyId) return;
     try {
-      const inviteToken = "inv_" + Math.random().toString(36).substring(2, 11);
-      const inviteUrl = `${window.location.origin}/auth/register?invite=${inviteToken}&email=${encodeURIComponent(data.email)}`;
-
       await PeopleService.createEmployee(companyId, {
         ...data,
         workType: "remote",
@@ -116,19 +125,53 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
         // owning this email when one exists. Until the invitee signs up, the
         // directory resolves them by email instead.
         userId: "",
-        status: (data.status || "active") as any,
+        status: (data.status || "active") as EmployeeStatus,
         joiningDate: new Date(data.joiningDate || new Date().toISOString()),
-        inviteToken,
-        invitedAt: new Date().toISOString(),
-      } as any);
+      } as unknown as Omit<import("../types/people.types").Employee, 'id'>);
 
-      toast.success(isAr ? "تم إضافة الموظف وتفعيل حسابه مباشرة! 🎉" : "Employee added and activated successfully! 🎉");
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.people.employees(companyId) });
 
+      const email = data.email.trim().toLowerCase();
+      const { hasAccount } = await PeopleService.checkEmployeeEmail(companyId, email);
+
+      // An existing platform account already owns this email: the hire flow just
+      // linked the directory record to it. There is nothing to invite — the person
+      // signs in with their own account and their employee record resolves by
+      // email (see attendance syncWithDb claim-by-email).
+      if (hasAccount) {
+        toast.success(
+          isAr
+            ? "تمت إضافة الموظف وربطه بالحساب الحالي على المنصة"
+            : "Employee added and linked to the existing account"
+        );
+        handleClose();
+        return;
+      }
+
+      // Otherwise provision a real invitation: an `invites/{token}` document that
+      // the /invite/:token accept page can resolve. This is the single supported
+      // provisioning path — a hand-built query URL without a backing invite record
+      // would leave the new hire unable to reach their company (empty dashboard,
+      // permission-denied timer) after sign-up.
+      const { inviteUrl, token, emailMode } = await resolveInviteUrl(email, data.role as UserRole);
+
+      // Report the truth about delivery: the invitation record always exists, but
+      // only say the email went out when the provider actually accepted it.
+      toast.success(
+        emailMode === "sent"
+          ? isAr
+            ? "تم إضافة الموظف وإرسال رسالة الدعوة! 🎉"
+            : "Employee added and invitation emailed! 🎉"
+          : isAr
+            ? "تم إضافة الموظف وإنشاء رابط الدعوة (لم يتم إرسال البريد تلقائياً)" 
+            : "Employee added and invitation created (email was not auto-sent)"
+      );
       setCreatedInvite({
         name: `${data.firstName} ${data.lastName}`,
-        email: data.email,
+        email,
         inviteUrl,
+        token,
+        emailMode,
       });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
@@ -138,6 +181,81 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
         return;
       }
       toast.error(isAr ? "حدث خطأ أثناء إرسال الدعوة" : "Failed to invite employee");
+    }
+  };
+
+  /**
+   * Returns a working `/invite/{token}` URL for `email`, creating a fresh invite
+   * when none is pending, along with the ACTUAL delivery outcome. If a pending
+   * invite already exists (INVITE_EXISTS), its token is reused so the admin gets
+   * a usable link without creating a duplicate invitation.
+   *
+   * `emailMode` reflects reality: "sent" only when the provider accepted the
+   * email, "logged" when it was not delivered (provider failed OR unconfigured).
+   * The caller must never present "logged" as if an email went out.
+   */
+  const resolveInviteUrl = async (
+    email: string,
+    role: UserRole
+  ): Promise<{ inviteUrl: string; token: string; emailMode: "sent" | "logged" }> => {
+    if (!user) throw new Error("NO_ACTOR");
+    try {
+      const { invite, inviteUrl, emailMode } = await InvitesService.createInvite(user.role, {
+        email,
+        role,
+        companyId: companyId!,
+        companyName: user.companyName || companyId!,
+        invitedBy: user.id,
+        invitedByName: user.name,
+      });
+      return { inviteUrl, token: invite.token, emailMode };
+    } catch (err) {
+      if (err instanceof Error && err.message === "INVITE_EXISTS") {
+        const pending = await InvitesService.listPending(companyId!);
+        const existing = pending.find((inv) => inv.email.toLowerCase() === email);
+        if (existing) {
+          const origin = typeof window !== "undefined" ? window.location.origin : "";
+          // Reused invite: we did not re-send it here, so report link-only and
+          // offer resend rather than claiming a fresh email was delivered.
+          return {
+            inviteUrl: `${origin}/invite/${existing.token}`,
+            token: existing.token,
+            emailMode: "logged",
+          };
+        }
+      }
+      throw err;
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (!createdInvite) return;
+    setResending(true);
+    try {
+      const mode = await InvitesService.resendInviteEmail(createdInvite.token);
+      setCreatedInvite({ ...createdInvite, emailMode: mode });
+      if (mode === "sent") {
+        toast.success(isAr ? `تم إرسال الدعوة إلى ${createdInvite.email}` : `Invitation emailed to ${createdInvite.email}`);
+      } else {
+        toast.warning(
+          isAr
+            ? "تعذّر إرسال البريد، لكن الرابط أسفله لا يزال صالحاً للمشاركة اليدوية"
+            : "Email still could not be sent — the link below remains valid to share manually"
+        );
+      }
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      const message =
+        code === "INVITE_EXPIRED"
+          ? isAr
+            ? "انتهت صلاحية هذه الدعوة. أنشئ دعوة جديدة للموظف."
+            : "This invitation has expired. Create a new invite for the employee."
+          : isAr
+            ? "تعذّر إعادة إرسال البريد"
+            : "Could not resend the email";
+      toast.error(message);
+    } finally {
+      setResending(false);
     }
   };
 
@@ -162,6 +280,7 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
   const handleClose = () => {
     setCreatedInvite(null);
     setCopiedLink(false);
+    setResending(false);
     reset();
     onOpenChange(false);
   };
@@ -179,14 +298,43 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
 
               <div>
                 <h3 className="text-2xl font-black text-foreground">
-                  {isAr ? "تم إرسال دعوة التعيين بنجاح! 🚀" : "Invitation Created Successfully!"}
+                  {createdInvite.emailMode === "sent"
+                    ? (isAr ? "تم إرسال دعوة التعيين بنجاح! 🚀" : "Invitation Sent Successfully!")
+                    : (isAr ? "تم إنشاء الدعوة بنجاح" : "Invitation Created")}
                 </h3>
                 <p className="text-sm text-default-500 mt-1 max-w-md mx-auto">
-                  {isAr 
-                    ? `تم إضافة الموظف "${createdInvite.name}" وإرسال إشعار الدعوة على البريد الإلكتروني ${createdInvite.email}`
-                    : `Added ${createdInvite.name} and sent invitation notice to ${createdInvite.email}`}
+                  {createdInvite.emailMode === "sent"
+                    ? (isAr
+                        ? `تم إضافة الموظف "${createdInvite.name}" وإرسال إشعار الدعوة على البريد الإلكتروني ${createdInvite.email}`
+                        : `Added ${createdInvite.name} and emailed the invitation to ${createdInvite.email}`)
+                    : (isAr
+                        ? `تم إضافة الموظف "${createdInvite.name}" وحفظ الدعوة. لم يتم إرسال البريد تلقائياً — استخدم الرابط أدناه أو أعد المحاولة.`
+                        : `Added ${createdInvite.name} and saved the invitation. The email was NOT sent automatically — use the link below or resend it.`)}
                 </p>
               </div>
+
+              {createdInvite.emailMode !== "sent" && (
+                <div className="mx-auto flex max-w-md items-start gap-2 rounded-2xl border border-warning/30 bg-warning/10 p-3 text-start">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" />
+                  <div className="space-y-2">
+                    <p className="text-xs text-default-600">
+                      {isAr
+                        ? "الدعوة محفوظة ورابطها صالح لمدة 7 أيام. يمكنك مشاركة الرابط يدوياً أو إعادة محاولة إرسال البريد."
+                        : "The invitation is saved and its link stays valid for 7 days. Share the link manually or retry sending the email."}
+                    </p>
+                    <Button
+                      size="sm"
+                      color="warning"
+                      variant="flat"
+                      isLoading={resending}
+                      onPress={handleResendEmail}
+                      className="font-bold rounded-xl"
+                    >
+                      {isAr ? "إعادة إرسال البريد" : "Resend email"}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <div className="p-4 rounded-2xl bg-default-50 dark:bg-default-50/20 border border-default-200/60 dark:border-default-100/40 text-start space-y-3">
                 <span className="text-xs font-bold text-default-400 block uppercase">

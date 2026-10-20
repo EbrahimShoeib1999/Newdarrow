@@ -110,7 +110,10 @@ export function CrmDashboardPage() {
           </CardHeader>
           <CardBody className="h-[300px]">
             {leadsSourceData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              // initialDimension seeds a positive first-render size so recharts
+              // does not log its width(-1)/height(-1) warning before the
+              // ResizeObserver measurement lands; the seed is corrected immediately.
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 260 }}>
                 <PieChart>
                   <Pie
                     data={leadsSourceData}
@@ -142,7 +145,7 @@ export function CrmDashboardPage() {
           </CardHeader>
           <CardBody className="h-[300px]">
             {dealsStageData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 260 }}>
                 <BarChart data={dealsStageData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                   <defs>
                     <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
@@ -171,7 +174,7 @@ export function CrmDashboardPage() {
             {revenueData.length === 0 ? (
               <p className="text-sm text-default-500 flex h-full items-center justify-center">{t("dashboard.charts.noData")}</p>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 260 }}>
                 <LineChart data={revenueData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                   <defs>
                     <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">

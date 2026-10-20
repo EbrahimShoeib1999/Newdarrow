@@ -170,10 +170,17 @@ service cloud.firestore {
 
       // Conversations & Chat channels: protect private channels and DMs
       match /conversations/{conversationId} {
+        // Every branch reads `type`/`visibility`/`memberIds` through
+        // `.get(key, default)` so one legacy/malformed doc (or the emulator's
+        // empty-collection LIST-gate evaluation with no document) evaluates to
+        // false instead of ERRORING out the whole subscription query. Access
+        // semantics are unchanged: public channels are open to the company,
+        // non-public channels require public visibility, DMs to their members,
+        // and admins see everything.
         allow read: if belongsToCompany(companyId) && (
-          resource.data.type == 'public'
-          || (resource.data.type == 'channel' && resource.data.get('visibility', 'public') == 'public')
-          || ('memberIds' in resource.data && resource.data.memberIds is list && request.auth.uid in resource.data.memberIds)
+          resource.data.get('type', '') == 'public'
+          || (resource.data.get('type', '') == 'channel' && resource.data.get('visibility', 'public') == 'public')
+          || (resource.data.get('memberIds', []) is list && request.auth.uid in resource.data.get('memberIds', []))
           || isCompanyAdmin(companyId)
         );
         allow create: if belongsToCompany(companyId);

@@ -530,7 +530,12 @@ export default function PeopleDashboardPage() {
           </CardHeader>
           <CardBody className="h-[280px] p-4">
             {departmentData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              // initialDimension seeds a positive first-render size. Without it
+              // recharts starts from its documented {-1,-1} default and logs
+              // "The width(-1) and height(-1) of chart should be greater than 0"
+              // before the ResizeObserver measurement lands. The seed is transient:
+              // the observer immediately corrects it, so responsiveness is intact.
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}>
                 <PieChart>
                   <Pie
                     data={departmentData}
@@ -569,7 +574,7 @@ export default function PeopleDashboardPage() {
           </CardHeader>
           <CardBody className="h-[280px] p-4">
             {statusData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}>
                 <BarChart
                   data={statusData}
                   margin={{ top: 12, right: 12, left: 0, bottom: 4 }}

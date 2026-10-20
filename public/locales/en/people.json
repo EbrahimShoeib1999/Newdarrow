@@ -340,7 +340,10 @@
     "resume_work": "Resume Work",
     "take_break": "Take a break",
     "must_be_on_duty": "Must be on duty to take a break",
-    "productivity_mode": "High Productivity Mode"
+    "productivity_mode": "High Productivity Mode",
+    "sync_error_permission": "You don't have permission to load your attendance for this company.",
+    "sync_error_generic": "Couldn't load your attendance session. Check your connection and retry.",
+    "sync_retry": "Retry"
   },
   "departments": {
     "Engineering": "Engineering",
@@ -424,6 +427,9 @@
     "checkin_failed": "Failed to check in.",
     "break_failed": "Failed to start break",
     "checkout_failed": "Failed to check out",
+    "session_expired": "Your session has expired. Please sign in again, then retry the timer.",
+    "action_forbidden": "You are not allowed to record attendance. Contact your administrator.",
+    "network_unavailable": "Cannot reach the server. Check your connection, then retry.",
     "gps_denied": "Location permission is required to check in. Allow GPS and try again.",
     "gps_unavailable": "Could not read your GPS location. Try again near the workplace.",
     "location_not_assigned": "No attendance location is assigned to you. Ask your manager to set it.",

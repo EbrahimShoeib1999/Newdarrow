@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { PeopleService } from "@/features/people/api/people.service";
+import type { Attendance } from "@/features/people/types/people.types";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import {
@@ -17,28 +18,33 @@ import {
 import { useAuthStore } from "./auth.store";
 import { AttendanceNotificationService } from "@/features/people/api/attendance-notifications.service";
 import { captureAttendanceGeo } from "@/features/people/utils/attendance-geo-check";
-import { AttendanceGeoError } from "@/features/people/utils/geo";
+import { AttendanceGeoError, classifyAttendanceError } from "@/features/people/utils/geo";
 import i18n from "@/lib/i18n";
 
 const at = (key: string, opts?: Record<string, unknown>) =>
   i18n.t(key, { ns: "people", ...opts });
 
 function geoErrorToast(error: unknown, fallbackKey: "checkin_failed" | "checkout_failed"): string {
-  if (error instanceof AttendanceGeoError) {
-    if (error.code === "permission_denied") return at("attendance_toast.gps_denied");
-    if (error.code === "unavailable" || error.code === "timeout") {
-      return at("attendance_toast.gps_unavailable");
-    }
-    if (error.code === "not_assigned") return at("attendance_toast.location_not_assigned");
-    if (error.code === "outside") {
-      return at("attendance_toast.outside_location", {
-        name: error.extra?.locationName ?? "",
-        distance: error.extra?.distanceMeters ?? "—",
-        radius: error.extra?.radiusMeters ?? "—",
-      });
-    }
+  if (error instanceof AttendanceGeoError && error.code === "outside") {
+    return at("attendance_toast.outside_location", {
+      name: error.extra?.locationName ?? "",
+      distance: error.extra?.distanceMeters ?? "—",
+      radius: error.extra?.radiusMeters ?? "—",
+    });
   }
-  return at(`attendance_toast.${fallbackKey}`);
+  // Auth faults, authorization faults and payload/write failures each get their
+  // own message so a check-in problem is never misread as a login problem.
+  const keyByClass: Record<ReturnType<typeof classifyAttendanceError>, string> = {
+    gps_denied: "gps_denied",
+    gps_unavailable: "gps_unavailable",
+    location_not_assigned: "location_not_assigned",
+    outside: "outside_location",
+    session_expired: "session_expired",
+    action_forbidden: "action_forbidden",
+    network_unavailable: "network_unavailable",
+    write_failed: fallbackKey,
+  };
+  return at(`attendance_toast.${keyByClass[classifyAttendanceError(error)]}`);
 }
 
 interface AttendanceState {
@@ -46,18 +52,24 @@ interface AttendanceState {
   accumulatedSeconds: number;
   isOnBreak: boolean;
   isShiftLoading: boolean;
-  todayAttendance: any | null;
-  intervalId: any | null;
+  todayAttendance: Attendance | null;
+  intervalId: number | null;
   employeeId: string | null;
   isInitialized: boolean;
   startTime: number | null; // For precise drift-free calculation
   isReportModalOpen: boolean;
   lateCheckInAlert: { minutes: number; deducted: boolean } | null;
+  // A genuine initialization failure (permission-denied, transient network, or
+  // an under-provisioned account) is surfaced here so the timer can offer a
+  // recoverable retry instead of silently rendering "off-duty" forever.
+  syncError: string | null;
+  lastSync: { companyId: string; userId: string } | null;
   
   setReportModalOpen: (open: boolean) => void;
   dismissLateCheckInAlert: () => void;
   startTimer: () => void;
   stopTimer: () => void;
+  retrySync: () => Promise<void>;
   
   checkIn: (companyId: string, employeeId: string, userId: string) => Promise<void>;
   takeBreak: (companyId: string, attendanceId: string, employeeId: string, userId: string) => Promise<void>;
@@ -77,9 +89,18 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   startTime: null,
   isReportModalOpen: false,
   lateCheckInAlert: null,
+  syncError: null,
+  lastSync: null,
 
   setReportModalOpen: (open: boolean) => set({ isReportModalOpen: open }),
   dismissLateCheckInAlert: () => set({ lateCheckInAlert: null }),
+
+  retrySync: async () => {
+    const last = get().lastSync;
+    if (!last) return;
+    set({ syncError: null });
+    await get().syncWithDb(last.companyId, last.userId);
+  },
 
   startTimer: () => {
     if (get().intervalId) return;
@@ -90,7 +111,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       
       const checkInTime = todayAttendance.checkIn instanceof Date 
         ? todayAttendance.checkIn 
-        : new Date(todayAttendance.checkIn as any);
+        : new Date(todayAttendance.checkIn as string);
       
       const now = new Date().getTime();
       const elapsed = Math.floor((now - checkInTime.getTime()) / 1000);
@@ -107,8 +128,9 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   stopTimer: () => {
-    if (get().intervalId) {
-      clearInterval(get().intervalId);
+    const id = get().intervalId;
+    if (id) {
+      clearInterval(id);
       set({ intervalId: null });
     }
   },
@@ -118,7 +140,15 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     if (!companyId || !finalEmployeeId) {
       await get().syncWithDb(companyId, userId);
       finalEmployeeId = get().employeeId;
-      if (!finalEmployeeId) return;
+      if (!finalEmployeeId) {
+        // Never fail silently: a click that cannot be honored (session still
+        // restoring, or the sync itself failed) must surface as an explicit
+        // error, not a no-op that looks like a broken button.
+        console.error("[AttendanceStore] Check-in aborted: no employee record resolved", { companyId, userId });
+        toast.error(at("attendance_toast.checkin_failed"));
+        set({ isInitialized: true, syncError: get().syncError ?? "sync-failed" });
+        return;
+      }
     }
     
     set({ isShiftLoading: true });
@@ -166,7 +196,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       get().stopTimer();
       await get().syncWithDb(companyId, userId);
       toast.success(at("attendance_toast.break_started"));
-    } catch (error) {
+    } catch {
       toast.error(at("attendance_toast.break_failed"));
     } finally {
       set({ isShiftLoading: false });
@@ -203,7 +233,14 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   syncWithDb: async (companyId, userId) => {
-    if (!companyId || !userId) return;
+    if (!companyId || !userId) {
+      // Nothing to sync against (signed out). Resolve loading so the UI never
+      // hangs on a spinner; the timer simply shows an idle, non-actionable state.
+      set({ isInitialized: true, syncError: null });
+      return;
+    }
+    // Remember the arguments so a failed sync stays retryable from the widget.
+    set({ lastSync: { companyId, userId }, syncError: null });
     try {
       const employeesRef = collection(db, "companies", companyId, "employees");
       const authUser = useAuthStore.getState().user;
@@ -271,11 +308,11 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const isGlobalOnBreak = employeeData.shiftStatus === "on-break";
       set({ isOnBreak: isGlobalOnBreak });
 
-      const finishedToday = res.data.filter((a: any) => a.date === today && a.checkOut);
-      const totalAccumulated = finishedToday.reduce((acc: number, curr: any) => acc + (curr.totalHours || 0), 0);
+      const finishedToday = res.data.filter((a) => a.date === today && a.checkOut);
+      const totalAccumulated = finishedToday.reduce((acc: number, curr) => acc + (curr.totalHours || 0), 0);
       set({ accumulatedSeconds: Math.floor(totalAccumulated * 3600) });
 
-      const activeRecord = res.data.find((a: any) => a.date === today && !a.checkOut);
+      const activeRecord = res.data.find((a) => a.date === today && !a.checkOut);
       if (activeRecord && !isGlobalOnBreak) {
         set({ todayAttendance: activeRecord });
         get().startTimer();
@@ -285,6 +322,16 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       }
     } catch (error) {
       console.error("[AttendanceStore] Sync Error:", error);
+      // Distinguish a failed load from a legitimately empty shift: mark
+      // initialization complete (so the spinner ends) and expose a recoverable
+      // error rather than leaving the timer silently stuck "off-duty".
+      const isPermissionDenied =
+        error && typeof error === "object" && "code" in error &&
+        (error as { code?: string }).code === "permission-denied";
+      set({
+        isInitialized: true,
+        syncError: isPermissionDenied ? "permission-denied" : "sync-failed",
+      });
     }
   }
 }));

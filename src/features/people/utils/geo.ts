@@ -1,4 +1,4 @@
-import type { Employee, WorkLocation } from "../types/people.types";
+import type { AttendanceGeoPayload, Employee, WorkLocation } from "../types/people.types";
 import { initialsFromName, localizedName, nameFromEmail } from "@/lib/localized-name";
 
 export type AttendanceGeoCode =
@@ -173,4 +173,92 @@ export async function searchNominatim(query: string): Promise<
     lat: Number(item.lat),
     lng: Number(item.lon),
   }));
+}
+
+/**
+ * Firestore rejects explicit `undefined` values in a write payload
+ * ("Unsupported field value: undefined"). Optional geo facts simply do not
+ * exist when they could not be resolved — e.g. a flexible check-in with
+ * working GPS in a company that has no work locations configured yet. Those
+ * fields are omitted entirely rather than written with placeholder data.
+ */
+export function pruneUndefinedFields<T extends Record<string, unknown>>(obj: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out as T;
+}
+
+/** Firestore check-in fields derived from a captured geo payload (empty when GPS was skipped). */
+export function buildCheckInGeoFields(geo?: AttendanceGeoPayload): Record<string, unknown> {
+  if (!geo) return {};
+  return pruneUndefinedFields({
+    checkInLat: geo.lat,
+    checkInLng: geo.lng,
+    // Legacy display field: only meaningful when a named location matched.
+    location: geo.locationName,
+    checkInLocationId: geo.locationId,
+    checkInLocationName: geo.locationName,
+    checkInDistanceMeters: geo.distanceMeters,
+  });
+}
+
+/** Firestore check-out fields derived from a captured geo payload (empty when GPS was skipped). */
+export function buildCheckOutGeoFields(geo?: AttendanceGeoPayload): Record<string, unknown> {
+  if (!geo) return {};
+  return pruneUndefinedFields({
+    checkOutLat: geo.lat,
+    checkOutLng: geo.lng,
+    checkOutLocationId: geo.locationId,
+    checkOutLocationName: geo.locationName,
+    checkOutDistanceMeters: geo.distanceMeters,
+  });
+}
+
+/**
+ * A day's attendance record is an open session when it carries no checkOut.
+ * Used to make retries idempotent so a failed-then-repeated check-in can never
+ * leave two active shifts for the same employee on the same day.
+ */
+export function isOpenSessionForDay(
+  record: { date?: string; checkOut?: unknown } | undefined | null,
+  today: string
+): boolean {
+  return !!record && record.date === today && !record.checkOut;
+}
+
+/**
+ * Coarse class of a timer failure, resolved from the error's own stable
+ * identifiers — never from the message string. Keeping the auth/authorization
+ * distinction here prevents a Firestore write fault from being presented as a
+ * login problem (and vice versa).
+ */
+export type AttendanceErrorClass =
+  | "gps_denied"
+  | "gps_unavailable"
+  | "location_not_assigned"
+  | "outside"
+  | "session_expired"
+  | "action_forbidden"
+  | "network_unavailable"
+  | "write_failed";
+
+export function classifyAttendanceError(error: unknown): AttendanceErrorClass {
+  if (error instanceof AttendanceGeoError) {
+    if (error.code === "permission_denied") return "gps_denied";
+    if (error.code === "unavailable" || error.code === "timeout") return "gps_unavailable";
+    if (error.code === "not_assigned") return "location_not_assigned";
+    if (error.code === "outside") return "outside";
+    return "write_failed";
+  }
+  // Firestore and Auth errors carry a stable `code` field.
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
+  if (code === "unauthenticated") return "session_expired";
+  if (code === "permission-denied") return "action_forbidden";
+  if (code === "unavailable") return "network_unavailable";
+  return "write_failed";
 }

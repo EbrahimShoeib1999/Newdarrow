@@ -328,8 +328,11 @@ export default function BillingDashboardPage() {
 
         <DashboardCard title={t("dashboard.status_chart")} className="lg:col-span-2">
           {invoiceStatusData.length > 0 ? (
-            <div className="min-h-[240px] flex-1">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[240px] w-full">
+              {/* initialDimension seeds a positive first-render size so recharts
+                  does not log its width(-1)/height(-1) warning before the
+                  ResizeObserver measurement lands; the seed is corrected immediately. */}
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}>
                 <PieChart>
                   <Pie
                     data={invoiceStatusData}
@@ -363,8 +366,8 @@ export default function BillingDashboardPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DashboardCard title={t("dashboard.revenue_chart")}>
-          <div className="min-h-[280px] flex-1">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 280 }}>
               <BarChart data={revenueData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid
                   strokeDasharray="3 3"
