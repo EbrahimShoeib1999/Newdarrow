@@ -341,11 +341,14 @@ try {
   // ---------- Step 2: admin logs in through the UI ----------
   await step("2. Admin login via UI form", async () => {
     await goto(`http://localhost:${VITE_PORT}/login`);
-    await waitUntil(() => evalJs(`!!document.querySelector('input[name="email"]')`), 25000, "login form");
+    // First page load hits Vite's cold transform cache; with react-compiler
+    // active a single route graph can take tens of seconds — absorb it here
+    // once instead of paying it on every later step.
+    await waitUntil(() => evalJs(`!!document.querySelector('input[name="email"]')`), 120000, "login form");
     await evalJs(setFieldExpr('input[name="email"]', ADMIN_EMAIL));
     await evalJs(setFieldExpr('input[type="password"]', ADMIN_PASS));
     await evalJs(`document.querySelector('button[type="submit"]').click()`);
-    await waitUntil(async () => !(await currentUrl()).includes("/login"), 25000, "post-login redirect");
+    await waitUntil(async () => !(await currentUrl()).includes("/login"), 60000, "post-login redirect");
     await shot("01-admin-logged-in");
     return `url=${await currentUrl()}`;
   });
@@ -385,7 +388,7 @@ try {
       log(`   [diag] console (${c.length}):\n     ${c.join("\n     ") || "(none)"}`);
       throw new Error("hire button never appeared on /people");
     }
-    await waitUntil(() => evalJs(`!!document.querySelector('input[name="email"]')`), 15000, "hire modal inputs");
+    await waitUntil(() => evalJs(`!!document.querySelector('input[name="email"]')`), 45000, "hire modal inputs");
     await evalJs(setFieldExpr('input[name="firstName"]', "Rania"));
     await evalJs(setFieldExpr('input[name="lastName"]', "Haddad"));
     await evalJs(setFieldExpr('input[name="jobTitle"]', "Software Engineer"));
@@ -496,7 +499,7 @@ try {
   await step("5. Accept invite via /invite/:token (set password)", async () => {
     await send("Network.clearBrowserCookies");
     await goto(capturedInviteUrl);
-    await waitUntil(() => evalJs(`!!document.querySelector('input[type="password"]')`), 25000, "accept form");
+    await waitUntil(() => evalJs(`!!document.querySelector('input[type="password"]')`), 60000, "accept form");
     const pwCount = await evalJs(`document.querySelectorAll('input[type="password"]').length`);
     if (pwCount < 2) throw new Error(`expected password + confirm inputs, got ${pwCount}`);
     await evalJs(`(() => {
@@ -507,7 +510,7 @@ try {
     })()`);
     await shot("04-accept-invite-filled");
     await evalJs(`document.querySelector('button[type="submit"]').click()`);
-    await waitUntil(async () => !(await currentUrl()).includes("/invite/"), 25000, "accept redirect");
+    await waitUntil(async () => !(await currentUrl()).includes("/invite/"), 45000, "accept redirect");
     await shot("05-after-accept");
     return `url=${await currentUrl()}`;
   });

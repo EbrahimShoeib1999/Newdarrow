@@ -143,6 +143,7 @@ export function AcceptInvitePage() {
       brandDescription={t("invite.brandDescription")}
       features={INVITE_FEATURES}
       featureLabel={(key) => t(`invite.brandFeatures.${key}`)}
+      appearance="light"
     >
       {statusError ? (
         <div className="space-y-4">
@@ -166,6 +167,7 @@ export function AcceptInvitePage() {
           <Input
             label={t("invite.email")}
             labelPlacement="outside"
+            name="email"
             value={invite?.email ?? ""}
             isReadOnly
             variant="bordered"
@@ -178,6 +180,7 @@ export function AcceptInvitePage() {
             type={showPassword ? "text" : "password"}
             label={t("invite.password")}
             labelPlacement="outside"
+            name="password"
             placeholder={t("invite.passwordPlaceholder")}
             value={password}
             onValueChange={setPassword}
@@ -203,6 +206,7 @@ export function AcceptInvitePage() {
             type={showPassword ? "text" : "password"}
             label={t("invite.confirmPassword")}
             labelPlacement="outside"
+            name="confirmPassword"
             placeholder={t("invite.passwordPlaceholder")}
             value={confirm}
             onValueChange={setConfirm}

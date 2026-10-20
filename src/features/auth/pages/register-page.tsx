@@ -45,6 +45,7 @@ export function RegisterPage() {
       features={REGISTER_FEATURES}
       featureLabel={(key) => t(`register.brandFeatures.${key}`)}
       maxWidthClass="max-w-[520px]"
+      appearance="light"
     >
       <RegisterForm />
     </AuthBrandLayout>

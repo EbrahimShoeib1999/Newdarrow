@@ -50,6 +50,30 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
     </div>
   ) : null;
 
+  // In the navbar the banner must never stack a full-width block into the
+  // header row — the pill itself morphs into an error chip of the same
+  // footprint (same role="alert" + Retry affordance, just inline).
+  const syncErrorChip = syncError ? (
+    <div
+      role="alert"
+      className="flex items-center gap-2 rounded-full border border-danger/30 bg-danger/10 px-3 py-2 text-danger shadow-lg"
+    >
+      <AlertTriangle size={14} className="shrink-0" />
+      <span className="text-[11px] sm:text-xs font-bold whitespace-nowrap">
+        {t(syncError === "permission-denied" ? "time_tracker.sync_error_permission" : "time_tracker.sync_error_generic")}
+      </span>
+      <Button
+        size="sm"
+        variant="flat"
+        color="danger"
+        className="h-6 min-h-6 px-2 text-[10px] font-bold shrink-0"
+        onPress={() => void retrySync()}
+      >
+        {t("time_tracker.sync_retry")}
+      </Button>
+    </div>
+  ) : null;
+
   if (variant === "full") {
     return (
       <div className="space-y-3">
@@ -174,7 +198,9 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
       className="space-y-2"
     >
-      {syncErrorBanner}
+      {syncError ? (
+        syncErrorChip
+      ) : (
       <Card
         className={`relative border shadow-2xl transition-all duration-700 ease-in-out ${
           isCheckedIn 
@@ -182,7 +208,7 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
             : "border-default-200/50 bg-background/60 backdrop-blur-xl shadow-black/5"
         }`}
       >
-        <CardBody className="p-0.5 px-1.5 sm:p-1 sm:px-4 flex flex-row items-center gap-1.5 sm:gap-6 overflow-hidden">
+        <CardBody className="p-0.5 px-1.5 sm:py-1.5 sm:px-4 flex flex-row items-center gap-1.5 sm:gap-6 overflow-hidden">
           {/* Animated Background Pulse */}
           <AnimatePresence>
             {isCheckedIn && (
@@ -215,13 +241,13 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
             </div>
             
             <div className="flex items-baseline gap-0.5">
-              <span className={`text-xs sm:text-2xl font-mono font-black tabular-nums tracking-tighter ${isCheckedIn ? 'text-primary drop-shadow-[0_0_8px_rgba(var(--heroui-primary-rgb),0.5)]' : 'text-foreground/80'}`}>
+              <span className={`text-xs sm:text-lg font-mono font-black tabular-nums tracking-tighter ${isCheckedIn ? 'text-primary drop-shadow-[0_0_8px_rgba(var(--heroui-primary-rgb),0.5)]' : 'text-foreground/80'}`}>
                 {formatLiveTime(totalDisplaySeconds)}
               </span>
             </div>
           </div>
 
-          <div className="h-5 sm:h-10 w-[1px] bg-gradient-to-b from-transparent via-default-200 to-transparent relative z-10" />
+          <div className="h-5 sm:h-8 w-[1px] bg-gradient-to-b from-transparent via-default-200 to-transparent relative z-10" />
 
           <div className="flex items-center gap-1.5 sm:gap-4 relative z-10">
             <div className="relative group">
@@ -238,11 +264,11 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
                         isIconOnly 
                         color="primary" 
                         variant="shadow" 
-                        className="min-w-unit-6 w-6 h-6 sm:h-11 sm:w-11 rounded sm:rounded-2xl shadow-lg shadow-primary/30 hover:scale-110 active:scale-95 transition-all"
+                        className="min-w-unit-6 w-6 h-6 sm:h-9 sm:w-9 rounded sm:rounded-xl shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-all"
                         onPress={handleCheckIn}
                         isLoading={isShiftLoading}
                       >
-                        <Play fill="currentColor" className="ml-0.5 w-3 h-3 sm:w-[22px] sm:h-[22px]" />
+                        <Play fill="currentColor" className="ml-0.5 w-3 h-3 sm:w-4 sm:h-4" />
                       </Button>
                     </Tooltip>
                   </motion.div>
@@ -258,11 +284,11 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
                         isIconOnly 
                         color="danger" 
                         variant="shadow" 
-                        className="min-w-unit-6 w-6 h-6 sm:h-11 sm:w-11 rounded sm:rounded-2xl shadow-lg shadow-danger/20 hover:scale-110 active:scale-95 transition-all bg-gradient-to-br from-danger to-rose-600"
+                        className="min-w-unit-6 w-6 h-6 sm:h-9 sm:w-9 rounded sm:rounded-xl shadow-lg shadow-danger/20 hover:scale-105 active:scale-95 transition-all bg-gradient-to-br from-danger to-rose-600"
                         onPress={handleCheckOut}
                         isLoading={isShiftLoading}
                       >
-                        <Square fill="currentColor" className="w-2.5 h-2.5 sm:w-5 sm:h-5" />
+                        <Square fill="currentColor" className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5" />
                       </Button>
                     </Tooltip>
                   </motion.div>
@@ -292,22 +318,23 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
                     isIconOnly 
                     size="sm" 
                     variant={isOnBreak ? "shadow" : "light"} 
-                    className={`min-w-unit-5 w-5 h-5 sm:min-w-unit-8 sm:w-8 sm:h-8 rounded sm:rounded-lg transition-all ${isCheckedIn ? 'text-warning hover:bg-warning/10' : isOnBreak ? 'bg-warning text-warning-foreground' : 'text-default-300 opacity-50'}`}
+                    className={`min-w-unit-5 w-5 h-5 sm:min-w-unit-7 sm:w-7 sm:h-7 rounded sm:rounded-lg transition-all ${isCheckedIn ? 'text-warning hover:bg-warning/10' : isOnBreak ? 'bg-warning text-warning-foreground' : 'text-default-300 opacity-50'}`}
                     onPress={isOnBreak ? handleCheckIn : handleTakeBreak}
                     disabled={!isCheckedIn && !isOnBreak}
                   >
-                    <Coffee className="w-2.5 h-2.5 sm:w-4 sm:h-4" fill={isOnBreak ? "currentColor" : "none"} />
+                    <Coffee className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5" fill={isOnBreak ? "currentColor" : "none"} />
                   </Button>
                </Tooltip>
                <Tooltip content={t("time_tracker.productivity_mode")}>
-                  <Button isIconOnly size="sm" variant="light" className={`min-w-unit-5 w-5 h-5 sm:min-w-unit-8 sm:w-8 sm:h-8 rounded sm:rounded-lg ${isCheckedIn ? 'text-warning animate-pulse' : 'text-default-300'}`}>
-                    <Zap className="w-2.5 h-2.5 sm:w-4 sm:h-4" fill={isCheckedIn ? "currentColor" : "none"} />
+                  <Button isIconOnly size="sm" variant="light" className={`min-w-unit-5 w-5 h-5 sm:min-w-unit-7 sm:w-7 sm:h-7 rounded sm:rounded-lg ${isCheckedIn ? 'text-warning animate-pulse' : 'text-default-300'}`}>
+                    <Zap className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5" fill={isCheckedIn ? "currentColor" : "none"} />
                   </Button>
                </Tooltip>
             </div>
           </div>
         </CardBody>
       </Card>
+      )}
 
       <DailyReportModal
         isOpen={isReportModalOpen}

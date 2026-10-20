@@ -1,0 +1,32 @@
+﻿diff --git a/package-lock.json b/package-lock.json
+index 8900a33..9153761 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -54,7 +54,6 @@
+       },
+       "devDependencies": {
+         "@eslint/js": "^9.39.4",
+-        "@firebase/rules-unit-testing": "^6.0.0",
+         "@types/node": "^24.12.2",
+         "@types/react": "^19.2.14",
+         "@types/react-dom": "^19.2.3",
+@@ -1599,19 +1598,6 @@
+       "integrity": "sha512-cX/1LT6KQwkXzck2eSzeKnuvXZCyr8qaPpDcikoJs7jmI+oBOXixpDLeDtWj1U6GNMkIoXrEDNoyT2Ypcyp5/A==",
+       "license": "Apache-2.0"
+     },
+-    "node_modules/@firebase/rules-unit-testing": {
+-      "version": "6.0.0",
+-      "resolved": "https://registry.npmjs.org/@firebase/rules-unit-testing/-/rules-unit-testing-6.0.0.tgz",
+-      "integrity": "sha512-BsBqAoClN55cj9rVIruzA1vHzxl2WyS2+G/r93hjp7wM0UatlVHblvp5SPLCKylWBFMHWL4/JdFnFnYwrLdJjg==",
+-      "dev": true,
+-      "license": "Apache-2.0",
+-      "engines": {
+-        "node": ">=24.12.0"
+-      },
+-      "peerDependencies": {
+-        "firebase": "^13.0.0"
+-      }
+-    },
+     "node_modules/@firebase/storage": {
+       "version": "0.14.3",
+       "resolved": "https://registry.npmjs.org/@firebase/storage/-/storage-0.14.3.tgz",

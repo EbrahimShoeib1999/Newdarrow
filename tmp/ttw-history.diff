@@ -1,0 +1,68 @@
+﻿diff --git a/src/features/people/components/TimeTrackerWidget.tsx b/src/features/people/components/TimeTrackerWidget.tsx
+index 0b7df5c..eef10d1 100644
+--- a/src/features/people/components/TimeTrackerWidget.tsx
++++ b/src/features/people/components/TimeTrackerWidget.tsx
+@@ -1,5 +1,5 @@
+ import { Button, Card, CardBody, Tooltip } from "@heroui/react";
+-import { Play, Square, Clock, Coffee, Zap } from "lucide-react";
++import { Play, Square, Clock, Coffee, Zap, AlertTriangle } from "lucide-react";
+ import { motion, AnimatePresence } from "framer-motion";
+ import { useAttendanceTimer } from "../hooks/use-attendance-timer";
+ import { useTranslation } from "react-i18next";
+@@ -19,6 +19,8 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
+     isShiftLoading,
+     isReportModalOpen,
+     setReportModalOpen,
++    syncError,
++    retrySync,
+     handleCheckIn,
+     handleTakeBreak,
+     handleCheckOut,
+@@ -29,8 +31,29 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
+   const isCheckedIn = !!todayAttendance && !todayAttendance.checkOut && !isOnBreak;
+   const totalDisplaySeconds = accumulatedSeconds + liveSeconds;
+ 
++  // A failed initialization is an explicit, recoverable error ΓÇö not a silent
++  // "off-duty" state. This keeps a permission/tenant/network fault from being
++  // mistaken for "no shift today" while offering a retry that never bypasses
++  // authentication or authorization.
++  const syncErrorBanner = syncError ? (
++    <div
++      role="alert"
++      className="flex items-center justify-between gap-3 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger"
++    >
++      <span className="flex items-center gap-2 font-semibold">
++        <AlertTriangle size={16} className="shrink-0" />
++        {t(syncError === "permission-denied" ? "time_tracker.sync_error_permission" : "time_tracker.sync_error_generic")}
++      </span>
++      <Button size="sm" variant="flat" color="danger" className="font-bold shrink-0" onPress={() => void retrySync()}>
++        {t("time_tracker.sync_retry")}
++      </Button>
++    </div>
++  ) : null;
++
+   if (variant === "full") {
+     return (
++      <div className="space-y-3">
++        {syncErrorBanner}
+       <div className="bg-primary/5 p-6 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6 md:gap-10 rounded-3xl">
+         {/* Timer Section */}
+         <div className="flex items-center gap-6">
+@@ -140,6 +163,7 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
+           </div>
+         </div>
+       </div>
++      </div>
+     );
+   }
+ 
+@@ -148,7 +172,9 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
+       layout
+       initial={false}
+       transition={{ type: "spring", stiffness: 300, damping: 30 }}
++      className="space-y-2"
+     >
++      {syncErrorBanner}
+       <Card
+         className={`relative border shadow-2xl transition-all duration-700 ease-in-out ${
+           isCheckedIn 
