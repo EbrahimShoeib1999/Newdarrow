@@ -29,6 +29,7 @@ import {
   Clock,
   ExternalLink,
   ReceiptText,
+  FolderKanban,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -38,6 +39,8 @@ import { useCompanyProfile } from "@/features/companies/hooks/use-company-profil
 import { useCompany } from "@/features/companies/context/company-context";
 import { useAuthStore } from "@/stores/auth.store";
 import { TaskService } from "@/features/tasks/api/tasks.service";
+import { useAllUsers } from "@/features/users/hooks/use-users";
+import { localizedName } from "@/lib/localized-name";
 import { useContactsQuery } from "../hooks/use-contacts";
 import { contactDisplayName } from "../utils/contacts-list.utils";
 import { generateQuotationPdf } from "../utils/generate-quotation-pdf";
@@ -69,6 +72,8 @@ import {
   isDocumentApproved,
   pendingApprovalFields,
 } from "@/lib/permissions/document-approval";
+import { useCreateProjectFromContractMutation } from "@/features/projects/hooks/use-projects";
+import { useProjectT } from "@/features/projects/hooks/use-project-terminology";
 
 function uid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -295,8 +300,11 @@ function SimplePartyFields({
 }
 
 export function ContractBuilderForm() {
-  const { t } = useTranslation("crm");
+  const { t, i18n } = useTranslation("crm");
   const { t: tCommon } = useTranslation("common");
+  // Terminology-aware labels for the contract → project conversion action.
+  const { t: tProjects } = useProjectT();
+  const createProjectFromContract = useCreateProjectFromContractMutation();
   const { data: profile } = useCompanyProfile();
   const company = useMemo(() => buildCompanyInfo(profile), [profile]);
   const { data: contactsRes } = useContactsQuery();
@@ -306,6 +314,7 @@ export function ContractBuilderForm() {
   const navigate = useNavigate();
   const { companyId } = useCompany();
   const { user } = useAuthStore();
+  const { data: assigneeOptions = [] } = useAllUsers();
   const [convertingTasks, setConvertingTasks] = useState(false);
 
   const [form, setForm] = useState<ContractFormDraft>(() =>
@@ -530,6 +539,22 @@ export function ContractBuilderForm() {
     }));
   };
 
+  const setServiceResponsible = (serviceId: string, userId?: string) => {
+    setForm((prev) => ({
+      ...prev,
+      services: (prev.services || []).map((s) =>
+        s.id === serviceId ? { ...s, responsibleUserId: userId } : s
+      ),
+    }));
+  };
+
+  // Display only — tasks always store the canonical user id, never names.
+  const responsibleName = (id?: string) => {
+    if (!id) return null;
+    const u = assigneeOptions.find((x) => x.id === id);
+    return u ? localizedName(i18n.language, u) || u.name : id;
+  };
+
   const persistContract = async (customForm?: ContractFormDraft): Promise<string> => {
     const targetForm = customForm || form;
     if (!targetForm.client.name.trim()) {
@@ -613,6 +638,10 @@ export function ContractBuilderForm() {
 
     try {
       for (const service of pendingServices) {
+        // Single accountability: the chosen responsible person becomes the
+        // canonical assignee on the main task (subtasks inherit it). No
+        // silent fallback to the logged-in user — unset stays unassigned.
+        const responsibleId = service.responsibleUserId?.trim() || undefined;
         // 1. Create main department task
         const mainTitle = `${service.name} — ${form.client.name || form.title}`;
         const mainDesc = [
@@ -620,6 +649,7 @@ export function ContractBuilderForm() {
           `معرف العقد: ${targetContractId}`,
           `العميل: ${form.client.name || "غير محدد"}`,
           `القسم المختص: ${service.department}`,
+          `المسؤول عن التنفيذ: ${responsibleName(responsibleId) ?? "غير مُسند بعد"}`,
           service.description ? `التفاصيل: ${service.description}` : "",
           `المدة المقدرة: ${service.durationDays || 7} أيام (${service.estimatedHours || 0} ساعة)`,
         ]
@@ -640,6 +670,7 @@ export function ContractBuilderForm() {
             dealId: form.dealId || undefined,
             serviceItemId: service.id,
             contactId: form.contactId || undefined,
+            assigneeId: responsibleId,
           },
           actor
         );
@@ -671,6 +702,7 @@ export function ContractBuilderForm() {
               dealId: form.dealId || undefined,
               serviceItemId: service.id,
               contactId: form.contactId || undefined,
+              assigneeId: responsibleId,
             },
             actor
           );
@@ -938,6 +970,37 @@ export function ContractBuilderForm() {
                 }}
               >
                 إصدار فاتورة مرحلية
+              </Button>
+            )}
+            {activeSaved?.id && actionsUnlocked && (
+              <Button
+                variant="flat"
+                color="primary"
+                className="font-bold rounded-2xl"
+                startContent={<FolderKanban className="h-4 w-4" />}
+                isLoading={createProjectFromContract.isPending}
+                onPress={async () => {
+                  try {
+                    // Idempotent: a retry navigates to the existing project instead of duplicating.
+                    const res = await createProjectFromContract.mutateAsync({
+                      contract: activeSaved,
+                    });
+                    const created = res as typeof res & { alreadyExisted?: boolean };
+                    if (created?.id) {
+                      toast.success(
+                        created.alreadyExisted
+                          ? tProjects("toast.alreadyConverted")
+                          : tProjects("toast.converted")
+                      );
+                      navigate(`/projects/${created.id}`);
+                    }
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : "";
+                    toast.error(msg.includes("contract_not_approved") ? tProjects("transition.invalid") : msg || tProjects("toast.createFailed"));
+                  }
+                }}
+              >
+                {tProjects("add")}
               </Button>
             )}
             <Button
@@ -1406,6 +1469,17 @@ export function ContractBuilderForm() {
                                 تم الترحيل لمهام
                               </Chip>
                             )}
+                            {service.responsibleUserId && (
+                              <Chip
+                                size="sm"
+                                variant="flat"
+                                color="secondary"
+                                className="text-[10px] font-semibold"
+                                startContent={<UserRound className="h-3 w-3" />}
+                              >
+                                {responsibleName(service.responsibleUserId)}
+                              </Chip>
+                            )}
                             {service.estimatedHours && (
                               <Chip
                                 size="sm"
@@ -1445,6 +1519,41 @@ export function ContractBuilderForm() {
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
+
+                    {/* Responsible person — feeds the canonical assigneeId
+                        when this item is converted into tasks. */}
+                    {service.selected && (
+                      <div className="mt-3 flex items-center gap-2 ps-1">
+                        <Select
+                          {...selectFieldProps()}
+                          size="sm"
+                          className="max-w-[280px]"
+                          aria-label={t("contract.responsible")}
+                          placeholder={t("contract.responsible")}
+                          selectedKeys={
+                            service.responsibleUserId
+                              ? new Set([service.responsibleUserId])
+                              : new Set()
+                          }
+                          onSelectionChange={(keys) => {
+                            const id = Array.from(keys)[0] as string | undefined;
+                            setServiceResponsible(service.id, id || undefined);
+                          }}
+                          startContent={<UserRound className="h-4 w-4 text-default-400" />}
+                        >
+                          {assigneeOptions.map((u) => (
+                            <SelectItem key={u.id} textValue={localizedName(i18n.language, u) || u.name}>
+                              {localizedName(i18n.language, u) || u.name}
+                            </SelectItem>
+                          ))}
+                        </Select>
+                        {!service.responsibleUserId && (
+                          <span className="text-[10px] text-warning font-semibold">
+                            {t("contract.unassignedHint")}
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Sequential subtasks timeline */}
                     {service.subtasks && service.subtasks.length > 0 && (

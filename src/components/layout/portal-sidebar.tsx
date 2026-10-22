@@ -36,6 +36,7 @@ import {
 } from "@/lib/portal-nav";
 import { useAccessiblePortals } from "@/features/portals/hooks/use-portals";
 import { ChatInboxBadge } from "@/features/chat/components/ChatInboxBadge";
+import { useProjectT } from "@/features/projects/hooks/use-project-terminology";
 import {
   DragDropContext,
   Droppable,
@@ -130,7 +131,8 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
   const { t: tCrm } = useTranslation("crm");
   const { t: tBilling } = useTranslation("billing");
   const { t: tChat } = useTranslation("chat");
-  const { t: tProjects } = useTranslation("projects");
+  // Terminology-aware: projects labels carry the tenant's configured display names.
+  const { t: tProjects, terms: projectTerms } = useProjectT();
   const { sidebarCollapsed, toggleSidebar, setPortalPickerOpen } = useLayoutStore();
   const location = useLocation();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -360,6 +362,7 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
   };
 
   const getGroupLabel = (group: PortalNavTreeGroup) => {
+    if (group.namespace === "projects") return tProjects(group.labelKey);
     return (i18n.dir() === "rtl" ? GROUP_TITLES_AR : GROUP_TITLES_EN)[group.id] ?? t(group.labelKey);
   };
 
@@ -367,6 +370,18 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
   const portals = useAccessiblePortals();
   const portalDetails = PORTAL_DETAILS[portal];
   const PortalIcon = portalDetails.icon;
+  // The projects app name follows the tenant's configured terminology everywhere.
+  // When no custom term is set, the default Arabic label (إدارة المشاريع) is kept
+  // for parity with the sibling portals, and English falls back to the term itself.
+  const isProjectsPortal = portal === "projects";
+  const portalTitleLabel = isProjectsPortal
+    ? projectTerms.isCustom || !isRtl
+      ? projectTerms.plural
+      : portalDetails.titleAr
+    : isRtl
+      ? portalDetails.titleAr
+      : t(portalDetails.titleKey);
+  const portalTooltipLabel = isProjectsPortal ? portalTitleLabel : portalDetails.titleAr;
 
   const CollapseIcon = sidebarCollapsed
     ? isRtl
@@ -437,7 +452,7 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
         {sidebarCollapsed ? (
           <div className="flex items-center justify-center gap-1">
             <Tooltip
-              content={portalDetails.titleAr}
+              content={portalTooltipLabel}
               placement={isRtl ? "left" : "right"}
             >
               <Logo
@@ -477,14 +492,14 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
                   className="h-9 w-9 shrink-0 [&_img]:h-9"
                 />
                 <Tooltip
-                  content={portalDetails.titleAr}
+                  content={portalTooltipLabel}
                   placement={isRtl ? "bottom-start" : "bottom-end"}
                   delay={300}
                 >
                   <div className="flex items-center gap-2 min-w-0 flex-1 px-1 py-1 transition-all cursor-default">
                     <PortalIcon className={cn("h-5 w-5 shrink-0", portalDetails.iconColor)} />
                     <span className="min-w-0 truncate text-sm font-extrabold text-foreground leading-snug">
-                      {isRtl ? portalDetails.titleAr : t(portalDetails.titleKey)}
+                      {portalTitleLabel}
                     </span>
                   </div>
                 </Tooltip>

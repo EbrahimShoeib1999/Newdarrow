@@ -70,11 +70,11 @@
       "denied": "You do not have access to the Chat portal."
     },
     "projects": {
-      "title": "Projects",
-      "short": "Projects",
-      "description": "Plan, track, and deliver projects with team members, timelines, and status progress",
-      "stat": "{{count}} active projects",
-      "denied": "You do not have access to the Projects portal."
+      "title": "{{plural}}",
+      "short": "{{plural}}",
+      "description": "Plan, track, and deliver {{plural}} with team members, timelines, and status progress",
+      "stat": "{{count}} active {{plural}}",
+      "denied": "You do not have access to the {{plural}} portal."
     },
     "noPortals": "No portals are assigned to your account. Contact your super admin."
   },

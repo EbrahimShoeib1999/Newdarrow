@@ -59,6 +59,9 @@ export function useCreateBillMutation() {
           ? data.billNumber || `BILL-${Date.now()}`
           : data.billNumber || "DRAFT",
         amountPaid: data.amountPaid ?? 0,
+        // Every newly recorded bill starts its review life as PENDING — a
+        // recorded cost is not an approved actual until an accountant acts.
+        approvalStatus: data.approvalStatus ?? "pending",
       };
 
       const res = await BillingService.bills.create(companyId!, payload);

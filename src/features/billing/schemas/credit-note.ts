@@ -21,6 +21,8 @@ export const creditNoteSchema = z.object({
   invoiceNumber: z.string().optional(),
   billId: z.string().optional(),
   billNumber: z.string().optional(),
+  /** Project reference preserved from the parent document for consistent roll-ups. */
+  projectId: z.string().optional(),
   reason: z.string().optional(),
   items: z.array(creditNoteItemSchema).min(1, "يجب إضافة بند واحد على الأقل"),
   subTotal: z.number().min(0),

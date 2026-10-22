@@ -18,11 +18,13 @@ import type { Activity } from "../types/activities.types";
 import type { Task } from "@/features/tasks/types/task.types";
 import type { Invoice } from "@/features/billing/schemas/invoice";
 import type { Payment } from "@/features/billing/schemas/payment";
+import type { Project } from "@/features/projects/types/projects.types";
 
 export type TimelineCategory =
   | "customer"
   | "deal"
   | "contract"
+  | "project"
   | "task"
   | "invoice"
   | "payment"
@@ -32,6 +34,7 @@ export type TimelineEntityType =
   | "contact"
   | "deal"
   | "contract"
+  | "project"
   | "task"
   | "invoice"
   | "payment"
@@ -84,6 +87,8 @@ export interface CustomerRecordSet {
   contacts: Contact[];
   deals: Deal[];
   contracts: SavedContract[];
+  /** Optional — projects arrive from the Projects module sources. */
+  projects?: Project[];
   tasks: Task[];
   invoices: Invoice[];
   payments: Payment[];
@@ -94,6 +99,7 @@ export interface ScopedCustomerRecords {
   contact?: Contact;
   deals: Deal[];
   contracts: SavedContract[];
+  projects: Project[];
   tasks: Task[];
   invoices: Invoice[];
   /** Only payments whose parent invoice is present in `invoices` (drops orphan/deleted). */
@@ -130,6 +136,14 @@ export function scopeCustomerRecords(
       (t.dealId && dealIds.has(t.dealId))
   );
 
+  // Projects link via the canonical customer or one of this customer's deals/contracts.
+  const projects = (set.projects ?? []).filter(
+    (p) =>
+      p.contactId === contactId ||
+      (p.contractId && contractIds.has(p.contractId)) ||
+      (p.dealId && dealIds.has(p.dealId))
+  );
+
   const invoices = set.invoices.filter((inv) => inv.customerId === contactId);
   const invoiceIds = new Set(invoices.map((inv) => inv.id).filter((x): x is string => !!x));
 
@@ -143,7 +157,7 @@ export function scopeCustomerRecords(
       (a.entityType === "deal" && dealIds.has(a.entityId))
   );
 
-  return { contact, deals, contracts, tasks, invoices, payments, activities };
+  return { contact, deals, contracts, projects, tasks, invoices, payments, activities };
 }
 
 function eventId(
@@ -233,6 +247,67 @@ export function buildCustomerTimeline(scoped: ScopedCustomerRecords): TimelineEv
         labelKey: "contract_approved",
         params: { title: c.title },
         route: `/crm/contracts?contractId=${c.id}`,
+      });
+    }
+  }
+
+  // --- Projects (execution events; financial amounts stay on their own records) ---
+  for (const p of scoped.projects) {
+    const created = toIso(p.createdAt);
+    if (created) {
+      push({
+        category: "project",
+        kind: "created",
+        entityType: "project",
+        entityId: p.id,
+        timestamp: created,
+        actorUserId: p.createdBy ?? undefined,
+        labelKey: "project_created",
+        params: { title: p.name },
+        route: `/projects/${p.id}`,
+      });
+    }
+    // Genuine audited status transitions retained on the project document.
+    for (const h of p.statusHistory ?? []) {
+      const ts = toIso(h.at);
+      if (!ts) continue;
+      push({
+        category: "project",
+        kind: "status_changed",
+        entityType: "project",
+        entityId: p.id,
+        timestamp: ts,
+        actorUserId: h.by || undefined,
+        labelKey: "project_status_changed",
+        params: { from: h.from, to: h.to, title: p.name },
+        route: `/projects/${p.id}`,
+      });
+    }
+    const submitted = toIso(p.delivery?.submittedAt);
+    if (submitted) {
+      push({
+        category: "project",
+        kind: "delivery_submitted",
+        entityType: "project",
+        entityId: p.id,
+        timestamp: submitted,
+        labelKey: "project_delivery_submitted",
+        params: { title: p.name },
+        route: `/projects/${p.id}`,
+      });
+    }
+    const accepted = toIso(p.delivery?.acceptedAt);
+    if (accepted) {
+      push({
+        category: "project",
+        kind: "delivery_accepted",
+        entityType: "project",
+        entityId: p.id,
+        timestamp: accepted,
+        actorUserId: p.delivery?.acceptedBy ?? undefined,
+        labelKey: "project_delivery_accepted",
+        params: { title: p.name },
+        route: `/projects/${p.id}`,
       });
     }
   }
@@ -395,6 +470,7 @@ export const TIMELINE_FILTERS: TimelineCategory[] = [
   "customer",
   "deal",
   "contract",
+  "project",
   "task",
   "invoice",
   "payment",

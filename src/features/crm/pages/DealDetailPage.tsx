@@ -31,13 +31,18 @@ import {
   MessageSquare,
   Plus,
   ReceiptText,
+  FolderKanban,
 } from "lucide-react";
+import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { FieldBox } from "@/components/shared/field-box";
 import { useDealQuery, useUpdateDealMutation } from "../hooks/use-deals";
 import { useContactQuery } from "../hooks/use-contacts";
 import { useContractsQuery } from "../hooks/use-contracts";
 import { useCrmPermissions } from "../hooks/use-crm-permissions";
+import { useCreateProjectFromContractMutation, useProjects } from "@/features/projects/hooks/use-projects";
+import { useAppPermissions } from "@/features/companies/hooks/use-app-permissions";
+import { useProjectT } from "@/features/projects/hooks/use-project-terminology";
 import {
   useCrmEntityActivities,
   useCrmEntityAttachments,
@@ -99,6 +104,8 @@ export function DealDetailPage() {
 
   // Contracts linked to this deal
   const { data: contractsRes } = useContractsQuery();
+  const createProjectFromContract = useCreateProjectFromContractMutation();
+  const { t: tProjects } = useProjectT();
   const dealContracts = useMemo(
     () =>
       (contractsRes?.data ?? []).filter(
@@ -110,6 +117,15 @@ export function DealDetailPage() {
   const dealContractIds = useMemo(
     () => new Set(dealContracts.map((c) => c.id)),
     [dealContracts]
+  );
+
+  // Projects created from this deal (reverse reference — permission-gated).
+  const { can: canApp } = useAppPermissions();
+  const canViewProjects = canApp("projects.view");
+  const { data: allProjects = [] } = useProjects();
+  const dealProjects = useMemo(
+    () => allProjects.filter((p) => p.dealId === dealId),
+    [allProjects, dealId]
   );
 
   // Operational Delivery Tasks linked to this deal or its contracts
@@ -141,6 +157,22 @@ export function DealDetailPage() {
   const handleOpenSmartAssignment = (task: Task) => {
     setSelectedTaskForAssignment(task);
     setAssignmentModalOpen(true);
+  };
+
+  // Won-deal workflow: promote the stage, then initiate contract creation
+  // automatically — the event is journaled on the deal's activity timeline.
+  // Drafting itself stays one intentional click (no fabricated contract).
+  const handleStageChange = (s: DealStage) => {
+    updateDeal.mutate({ id: deal.id, data: { stage: s } });
+    if (s === "won" && deal.stage !== "won") {
+      createActivity.mutate({
+        type: "note",
+        subject: isAr ? "الصفقة مغلقة-ناجحة" : "Deal won",
+        description: isAr
+          ? "تم رصد نجاح الصفقة — يجب الآن الشروع في إعداد العقد لربط الصفقة بالعقد."
+          : "Won stage recorded — initiate the contract workflow to link this deal to its contract.",
+      });
+    }
   };
 
   return (
@@ -206,6 +238,35 @@ export function DealDetailPage() {
                     {isAr ? "إصدار فاتورة" : "Create Invoice"}
                   </Button>
                 )}
+                {deal.stage === "won" && dealContracts.some((c) => c.approvalStatus === "approved") && (
+                  <Button
+                    color="primary"
+                    variant="bordered"
+                    startContent={<FolderKanban className="h-4 w-4" />}
+                    className="rounded-full font-bold"
+                    isLoading={createProjectFromContract.isPending}
+                    onPress={async () => {
+                      // Lifecycle: project is created only from an approved contract of this deal.
+                      const approved = dealContracts.find((c) => c.approvalStatus === "approved")!;
+                      try {
+                        const res = await createProjectFromContract.mutateAsync({ contract: approved });
+                        const created = res as typeof res & { alreadyExisted?: boolean };
+                        if (created?.id) {
+                          toast.success(
+                            created.alreadyExisted
+                              ? tProjects("toast.alreadyConverted")
+                              : tProjects("toast.converted")
+                          );
+                          navigate(`/projects/${created.id}`);
+                        }
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : tProjects("toast.createFailed"));
+                      }
+                    }}
+                  >
+                    {tProjects("add")}
+                  </Button>
+                )}
                 {canManageDeals && (
                   <Button
                     color="default"
@@ -226,9 +287,7 @@ export function DealDetailPage() {
                   current={deal.stage}
                   terminalStages={["won", "lost"]}
                   labelKey={(s) => t(`deals.stage.${s}`)}
-                  onStageClick={(s: DealStage) =>
-                    updateDeal.mutate({ id: deal.id, data: { stage: s } })
-                  }
+                  onStageClick={handleStageChange}
                 />
               ) : undefined
             }
@@ -367,6 +426,44 @@ export function DealDetailPage() {
                 }
               >
                 <div className="space-y-4 pt-4">
+                  {/* Won-but-no-contract prompt — the deal→contract workflow
+                      stays obvious and idempotent: it disappears the moment
+                      a contract is linked to this deal. */}
+                  {deal.stage === "won" && dealContracts.length === 0 && (
+                    <Card className="border-warning/40 bg-warning/5 rounded-2xl">
+                      <CardBody className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4">
+                        <div className="flex items-start gap-3">
+                          <FileSignature className="h-5 w-5 text-warning mt-0.5" />
+                          <div>
+                            <p className="text-sm font-bold text-default-800">
+                              {isAr ? "الصفقة ناجحة — لم يتم ربط أي عقد بعد" : "Deal won — no contract linked yet"}
+                            </p>
+                            <p className="text-xs text-default-500 mt-0.5">
+                              {isAr
+                                ? "ابدأ الآن بإعداد العقد المتضمن لنطاق العمل والتكلفة؛ ستظهر المهام والمراحل بعد اعتماده وتحويله لمشروع."
+                                : "Draft the contract now to capture scope and value — tasks and milestones follow once it is approved and converted."}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          color="warning"
+                          variant="solid"
+                          className="rounded-full font-bold shrink-0"
+                          startContent={<FileSignature className="h-4 w-4" />}
+                          onPress={() =>
+                            navigate(
+                              `/crm/contracts?dealId=${deal.id}&contactId=${deal.contactId || ""}&amount=${
+                                deal.amount
+                              }&title=${encodeURIComponent(deal.title)}`
+                            )
+                          }
+                        >
+                          {isAr ? "إعداد العقد الآن" : "Draft contract now"}
+                        </Button>
+                      </CardBody>
+                    </Card>
+                  )}
                   {/* Customer 360 Card */}
                   {contact ? (
                     <Card className="border border-default-200/80 shadow-sm rounded-3xl bg-gradient-to-br from-default-50/50 to-background">
@@ -639,6 +736,72 @@ export function DealDetailPage() {
                   )}
                 </div>
               </Tab>
+
+              {canViewProjects && (
+                <Tab
+                  key="projects"
+                  title={
+                    <span className="flex items-center gap-2">
+                      <FolderKanban className="h-4 w-4" />
+                      {tProjects("title")} ({dealProjects.length})
+                    </span>
+                  }
+                >
+                  <div className="space-y-4 pt-4">
+                    {dealProjects.length === 0 ? (
+                      <div className="p-8 text-center bg-content1 border border-dashed border-default-200 rounded-3xl space-y-3">
+                        <FolderKanban className="h-10 w-10 text-default-300 mx-auto" />
+                        <p className="text-sm font-bold text-default-700">
+                          {isAr
+                            ? "لا يوجد " + tProjects("plural").toLowerCase() + " مرتبط بهذه الصفقة حتى الآن"
+                            : `No ${tProjects("plural").toLowerCase()} linked to this deal yet`}
+                        </p>
+                        <p className="text-xs text-default-500 max-w-md mx-auto">
+                          {isAr
+                            ? "يُنشأ المشروع من العقد المعتمد بعد تحويل الصفقة إلى عقد"
+                            : "Projects are created from the approved contract of this deal"}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {dealProjects.map((p) => (
+                          <div
+                            key={p.id}
+                            className="p-5 bg-content1 rounded-3xl border border-default-200 hover:border-primary/50 shadow-sm transition-all flex flex-col justify-between"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between gap-2 mb-3">
+                                <span className="font-mono text-xs font-bold text-primary px-2.5 py-1 rounded-xl bg-primary/10 border border-primary/20">
+                                  {p.code || p.id.slice(0, 8)}
+                                </span>
+                                <Chip size="sm" variant="flat" className="font-bold text-[10px]">
+                                  {tProjects(`status.${p.status}`)}
+                                </Chip>
+                              </div>
+                              <h4 className="font-bold text-base text-foreground line-clamp-1">{p.name}</h4>
+                              <p className="text-xs text-default-400 mt-1">
+                                {isAr ? "التسليم المتوقع:" : "Planned end:"} {p.endDate || "—"}
+                              </p>
+                            </div>
+                            <div className="mt-5 pt-3.5 border-t border-default-100 flex justify-end">
+                              <Button
+                                size="sm"
+                                variant="light"
+                                color="primary"
+                                className="font-bold text-xs rounded-xl"
+                                as={Link}
+                                to={`/projects/${p.id}`}
+                              >
+                                {isAr ? "فتح المشروع ←" : `Open ${tProjects("singular")} →`}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </Tab>
+              )}
 
               {/* Tab 3: Delivery Tasks & Department Distribution */}
               <Tab

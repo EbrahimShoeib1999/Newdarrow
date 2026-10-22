@@ -654,6 +654,7 @@
       "customer": "العميل",
       "deal": "الصفقة",
       "contract": "العقد",
+      "project": "المشروع",
       "task": "المهمة",
       "invoice": "الفاتورة",
       "payment": "الدفعة",
@@ -665,6 +666,10 @@
       "deal_stage_changed": "تغيّرت مرحلة الصفقة ({{transition}})",
       "contract_created": "تم إنشاء العقد: {{title}}",
       "contract_approved": "تمت الموافقة على العقد: {{title}}",
+      "project_created": "تم إنشاء المشروع: {{title}}",
+      "project_status_changed": "حالة المشروع: {{from}} ← {{to}} ({{title}})",
+      "project_delivery_submitted": "تم تقديم التسليم: {{title}}",
+      "project_delivery_accepted": "تم قبول التسليم: {{title}}",
       "task_created": "تم إنشاء المهمة: {{title}}",
       "task_claimed": "تم تولّي المهمة: {{title}}",
       "task_completed": "تم إنجاز المهمة: {{title}}",
@@ -901,6 +906,8 @@
     "department": "القسم المختص",
     "subtasksCount": "مهام فرعية متسلسلة",
     "estimatedHours": "ساعة تقديرية",
-    "durationDays": "يوم عمل"
+    "durationDays": "يوم عمل",
+    "responsible": "المسؤول عن التنفيذ",
+    "unassignedHint": "سيتم ترحيل البند دون مسؤول"
   }
 }

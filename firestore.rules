@@ -39,6 +39,23 @@ service cloud.firestore {
         : [];
     }
 
+    // Effective Billing sub-role; empty string means "fall back to the global role".
+    function billingSubRole() {
+      return userDoc().get('portalSubRoles', {}) is map
+        ? userDoc().get('portalSubRoles', {}).get('billing', '')
+        : '';
+    }
+
+    // Mirrors canApproveDocuments() plus the accounting-specific Billing
+    // sub-role, so the client review gate is enforced on the server too.
+    function canReviewDocuments(companyId) {
+      return belongsToCompany(companyId) && (
+        userDoc().role in ['super_admin', 'admin', 'manager']
+        || billingSubRole() in ['admin', 'manager', 'accountant']
+        || 'billing.review_documents' in customPermissions()
+      );
+    }
+
     // Mirrors the `people.view_all_reports` permission in src/lib/permissions.
     // Everyone can always read their own reports; this covers reading everyone's.
     function canViewAllReports(companyId) {
@@ -236,6 +253,27 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Vendor bills are the canonical expense records. Any company member may
+      // RECORD/edit a bill (a recorded cost is not yet an approved actual), but
+      // only a document reviewer may set the accountant review outcome
+      // (approvalStatus -> approved/rejected). Without this, the client
+      // canApproveDocuments gate could be bypassed by writing the field directly.
+      match /bills/{billId} {
+        allow read: if belongsToCompany(companyId);
+        allow create: if belongsToCompany(companyId) && (
+          canReviewDocuments(companyId)
+          || (
+            request.resource.data.get('approvalStatus', 'pending') != 'approved'
+            && request.resource.data.get('approvalStatus', 'pending') != 'rejected'
+          )
+        );
+        allow update: if belongsToCompany(companyId) && (
+          canReviewDocuments(companyId)
+          || request.resource.data.get('approvalStatus', '') == resource.data.get('approvalStatus', '')
+        );
+        allow delete: if isCompanyAdmin(companyId);
+      }
+
       // Every other company subcollection stays open to company members.
       // Rules are additive, so explicit collections are excluded by name here.
       match /{collection}/{docId} {
@@ -243,7 +281,8 @@ service cloud.firestore {
           && collection != 'daily_reports'
           && collection != 'conversations'
           && collection != 'journals'
-          && collection != 'payments';
+          && collection != 'payments'
+          && collection != 'bills';
 
         // Nested data such as tasks/{id}/comments
         match /{nested=**} {
@@ -251,7 +290,8 @@ service cloud.firestore {
             && collection != 'daily_reports'
             && collection != 'conversations'
             && collection != 'journals'
-            && collection != 'payments';
+            && collection != 'payments'
+            && collection != 'bills';
         }
       }
     }

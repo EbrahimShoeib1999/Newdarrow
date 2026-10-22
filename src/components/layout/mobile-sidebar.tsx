@@ -15,6 +15,7 @@ import {
 } from "@/lib/portal-nav";
 import { useAccessiblePortals } from "@/features/portals/hooks/use-portals";
 import { ChatInboxBadge } from "@/features/chat/components/ChatInboxBadge";
+import { useProjectT } from "@/features/projects/hooks/use-project-terminology";
 
 const GROUP_TITLES_AR: Record<string, string> = {
   general: "الرئيسية",
@@ -63,7 +64,8 @@ export function MobileSidebar() {
   const { t: tCrm } = useTranslation("crm");
   const { t: tBilling } = useTranslation("billing");
   const { t: tChat } = useTranslation("chat");
-  const { t: tProjects } = useTranslation("projects");
+  // Terminology-aware: projects labels carry the tenant's configured display names.
+  const { t: tProjects, terms: projectTerms } = useProjectT();
   const { setMobileSidebarOpen, setPortalPickerOpen } = useLayoutStore();
   const location = useLocation();
   const portals = useAccessiblePortals();
@@ -97,12 +99,22 @@ export function MobileSidebar() {
   };
 
   const getGroupLabel = (group: PortalNavTreeGroup) => {
+    if (group.namespace === "projects") return tProjects(group.labelKey);
     return (i18n.dir() === "rtl" ? GROUP_TITLES_AR : GROUP_TITLES_EN)[group.id] ?? t(group.labelKey);
   };
 
-  const portalTitle = i18n.dir() === "rtl" && portal && PORTAL_TITLES_AR[portal]
-    ? PORTAL_TITLES_AR[portal]
-    : t(`portals.${activePortalId}.short`, t("appName"));
+  // Projects honors the tenant's configured term (both languages); other portals
+  // keep their existing labels. `portals.projects.short` carries a {{plural}} token.
+  const portalTitle =
+    activePortalId === "projects" && projectTerms.isCustom
+      ? projectTerms.plural
+      : i18n.dir() === "rtl" && portal && PORTAL_TITLES_AR[portal]
+        ? PORTAL_TITLES_AR[portal]
+        : t(`portals.${activePortalId}.short`, {
+            plural: projectTerms.plural,
+            singular: projectTerms.singular,
+            defaultValue: t("appName"),
+          });
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-x-hidden bg-sidebar text-foreground">

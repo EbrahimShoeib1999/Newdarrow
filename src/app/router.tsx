@@ -61,6 +61,8 @@ import { HomePage } from "@/features/marketing/pages/home-page";
 import { PortalPickerPage } from "@/features/portals/pages/PortalPickerPage";
 import { ProjectsLayout } from "@/features/projects/components/ProjectsLayout";
 import { ProjectsListPage } from "@/features/projects/pages/ProjectsListPage";
+import { ProjectDetailPage } from "@/features/projects/pages/ProjectDetailPage";
+import { ProjectSettingsPage } from "@/features/projects/pages/ProjectSettingsPage";
 
 // Billing Imports
 import { BillingLayout } from "@/features/billing/components/BillingLayout";
@@ -263,6 +265,9 @@ export const router = createBrowserRouter([
               { index: true, element: <ProjectsListPage scope="all" /> },
               { path: "mine", element: <ProjectsListPage scope="mine" /> },
               { path: "completed", element: <ProjectsListPage scope="completed" /> },
+              // Stable route ids — the configured display name never changes them.
+              { path: "settings", element: <ProjectSettingsPage /> },
+              { path: ":projectId", element: <ProjectDetailPage /> },
             ],
           },
           {

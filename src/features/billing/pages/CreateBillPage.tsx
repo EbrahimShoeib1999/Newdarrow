@@ -15,7 +15,7 @@ import {
 } from "@heroui/react";
 import { Plus, Trash2, Save, Send, ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -65,6 +65,8 @@ export default function CreateBillPage() {
   );
 
   const { data: existingBill, isLoading: isLoadingExisting } = useBill(id);
+  const [searchParams] = useSearchParams();
+  const projectIdParam = searchParams.get("projectId") ?? undefined;
   const createBill = useCreateBillMutation();
   const updateBill = useUpdateBillMutation();
   const { data: billingSettings } = useBillingSettings();
@@ -131,6 +133,11 @@ export default function CreateBillPage() {
       setValue("currency", getDefaultBillingCurrency(billingSettings));
     }
   }, [billingSettings, isEditing, setValue]);
+
+  // Pre-filled from the project screen: the bill keeps a pure project reference.
+  useEffect(() => {
+    if (!isEditing && projectIdParam) setValue("projectId", projectIdParam);
+  }, [isEditing, projectIdParam, setValue]);
 
   useEffect(() => {
     if (isEditing || !defaultTax) return;

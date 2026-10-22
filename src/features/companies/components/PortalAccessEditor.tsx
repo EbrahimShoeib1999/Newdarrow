@@ -14,6 +14,7 @@ import { SlidersHorizontal } from "lucide-react";
 import type { User } from "@/features/auth/types/auth.types";
 import type { PortalId } from "@/lib/portal-permissions";
 import { PORTAL_META } from "@/features/portals/constants/portal-meta";
+import { useProjectTerms } from "@/features/projects/hooks/use-project-terminology";
 import {
   getAssignablePortalsForUser,
   resolveUserPortals,
@@ -79,6 +80,7 @@ function pruneSubRoles(
 
 export function PortalAccessEditor({ member }: PortalAccessEditorProps) {
   const { t, i18n } = useTranslation(["settings", "common"]);
+  const projectTerms = useProjectTerms();
   const isAr = i18n.language === "ar";
   const updatePortals = useUpdateUserPortalAccessMutation();
   const [isOpen, setIsOpen] = useState(false);
@@ -90,7 +92,11 @@ export function PortalAccessEditor({ member }: PortalAccessEditorProps) {
   );
 
   const portalTitle = (portal: PortalId) =>
-    t(PORTAL_META[portal].titleKey, { ns: "common" });
+    t(PORTAL_META[portal].titleKey, {
+      ns: "common",
+      plural: projectTerms.plural,
+      singular: projectTerms.singular,
+    });
 
   const subRoleLabel = (subRole: PortalSubRole) =>
     t(`team.subRoles.${subRole}`, { ns: "settings" });

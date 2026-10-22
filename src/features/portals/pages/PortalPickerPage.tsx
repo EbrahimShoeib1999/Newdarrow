@@ -11,6 +11,7 @@ import {
 import { PORTAL_PATHS, type PortalId } from "@/lib/portal-permissions";
 import { PORTAL_META } from "../constants/portal-meta";
 import { usePortalStat } from "../hooks/use-portal-stats";
+import { usePortalT } from "../hooks/use-portal-terminology";
 
 const PORTAL_ICON_GRADIENTS: Record<PortalId, string> = {
   tasks: "from-violet-500 to-indigo-600",
@@ -22,7 +23,8 @@ const PORTAL_ICON_GRADIENTS: Record<PortalId, string> = {
 };
 
 function PortalCard({ portal }: { portal: PortalId }) {
-  const { t } = useTranslation();
+  // Terminology-aware so the projects app name follows the tenant's configured term.
+  const { t } = usePortalT();
   const navigate = useNavigate();
   const meta = PORTAL_META[portal];
   const Icon = meta.icon;

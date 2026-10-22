@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 import {
   Modal,
   ModalContent,
@@ -16,20 +15,36 @@ import {
 import { Plus, Trash2, Sliders, Globe } from "lucide-react";
 import { useAllUsers } from "@/features/users/hooks/use-users";
 import { useAuthStore } from "@/stores/auth.store";
+import { useCompany } from "@/features/companies/context/company-context";
 import { selectFieldProps } from "@/components/shared/select-field";
+import { useContactsQuery } from "@/features/crm/hooks/use-contacts";
+import { useDealsQuery } from "@/features/crm/hooks/use-deals";
+import { useContractsQuery } from "@/features/crm/hooks/use-contracts";
+import { contactDisplayName } from "@/features/crm/utils/contacts-list.utils";
 import {
   useCreateProjectMutation,
   useUpdateProjectMutation,
 } from "../hooks/use-projects";
-import type { Project, ProjectPriority, ProjectStatus } from "../types/projects.types";
+import { useProjectT } from "../hooks/use-project-terminology";
+import { ACTIVITY_PRESETS, getActivityPreset } from "../constants/activity-presets";
+import { MilestoneService } from "../api/projects.service";
+import type {
+  Project,
+  ProjectActivityType,
+  ProjectPriority,
+  ProjectStatus,
+} from "../types/projects.types";
 
 const PROJECT_STATUSES: ProjectStatus[] = [
+  "planning",
   "active",
   "on_hold",
   "completed",
   "cancelled",
   "archived",
 ];
+
+const CURRENCIES = ["SAR", "AED", "EGP", "USD", "EUR"];
 
 const PROJECT_PRIORITIES: ProjectPriority[] = [
   "low",
@@ -58,8 +73,16 @@ export function ProjectFormModal({
   onOpenChange,
   project,
 }: ProjectFormModalProps) {
-  const { t } = useTranslation("projects");
+  // Terminology-aware labels for every field title.
+  const { t, i18n } = useProjectT();
+  const { companyId } = useCompany();
   const { data: users } = useAllUsers();
+  const { data: contactsRes } = useContactsQuery();
+  const { data: dealsRes } = useDealsQuery();
+  const { data: contractsRes } = useContractsQuery();
+  const contacts = contactsRes?.data ?? [];
+  const deals = dealsRes?.data ?? [];
+  const contracts = contractsRes?.data ?? [];
   const userId = useAuthStore((s) => s.user?.id);
   const createProject = useCreateProjectMutation();
   const updateProject = useUpdateProjectMutation();
@@ -69,7 +92,7 @@ export function ProjectFormModal({
   const [slug, setSlug] = useState("");
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<ProjectStatus>("active");
+  const [status, setStatus] = useState<ProjectStatus>("planning");
   const [priority, setPriority] = useState<ProjectPriority>("medium");
   const [category, setCategory] = useState("");
   const [tagsInput, setTagsInput] = useState("");
@@ -77,6 +100,13 @@ export function ProjectFormModal({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>([]);
+  const [contactId, setContactId] = useState("");
+  const [dealId, setDealId] = useState("");
+  const [contractId, setContractId] = useState("");
+  const [ownerId, setOwnerId] = useState("");
+  const [activityType, setActivityType] = useState<ProjectActivityType | "">("");
+  const [budget, setBudget] = useState("");
+  const [currency, setCurrency] = useState("SAR");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -92,6 +122,15 @@ export function ProjectFormModal({
       setMembers(project.members ?? []);
       setStartDate(project.startDate ?? "");
       setEndDate(project.endDate ?? "");
+      setContactId(project.contactId ?? "");
+      setDealId(project.dealId ?? "");
+      setContractId(project.contractId ?? "");
+      setOwnerId(project.ownerId ?? "");
+      setActivityType(
+        project.activityType ? (project.activityType as ProjectActivityType) : ""
+      );
+      setBudget(project.budget != null ? String(project.budget) : "");
+      setCurrency(project.currency || "SAR");
       const cfEntries = Object.entries(project.customFields ?? {}).map(([k, v]) => ({
         key: k,
         value: String(v),
@@ -102,7 +141,7 @@ export function ProjectFormModal({
       setSlug("");
       setSlugManuallyEdited(false);
       setDescription("");
-      setStatus("active");
+      setStatus("planning");
       setPriority("medium");
       setCategory("");
       setTagsInput("");
@@ -110,6 +149,13 @@ export function ProjectFormModal({
       setStartDate("");
       setEndDate("");
       setCustomFields([]);
+      setContactId("");
+      setDealId("");
+      setContractId("");
+      setOwnerId(userId ?? "");
+      setActivityType("");
+      setBudget("");
+      setCurrency("SAR");
     }
   }, [isOpen, project, userId]);
 
@@ -167,12 +213,34 @@ export function ProjectFormModal({
       createdBy: project?.createdBy ?? userId ?? "",
       startDate: startDate || null,
       endDate: endDate || null,
+      contactId: contactId || null,
+      dealId: dealId || null,
+      contractId: contractId || null,
+      ownerId: ownerId || null,
+      activityType: activityType || null,
+      budget: budget.trim() ? Number(budget) : null,
+      currency,
     };
 
     if (isEdit && project) {
       await updateProject.mutateAsync({ id: project.id, data: payload });
     } else {
-      await createProject.mutateAsync(payload);
+      const created = await createProject.mutateAsync(payload);
+      // Activity presets only seed default milestones — all remain editable.
+      const preset = getActivityPreset(activityType);
+      const lang = i18n.language?.startsWith("ar") ? "ar" : "en";
+      if (created?.id && preset && preset.milestones[lang].length > 0) {
+        await Promise.all(
+          preset.milestones[lang].map((title, idx) =>
+            MilestoneService.create(
+              companyId!,
+              created.id,
+              { title, status: "planned", sequenceOrder: idx },
+              `preset_${activityType}_${idx}`
+            )
+          )
+        );
+      }
     }
     onOpenChange(false);
   };
@@ -255,6 +323,151 @@ export function ProjectFormModal({
                   value={category}
                   onValueChange={setCategory}
                 />
+              </div>
+
+              {/* Commercial linkage — pure references to the authoritative CRM records */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Select
+                  {...selectFieldProps()}
+                  label={t("form.customer")}
+                  placeholder={t("form.customerPlaceholder")}
+                  selectedKeys={contactId ? [contactId] : []}
+                  onSelectionChange={(keys) => {
+                    const v = Array.from(keys)[0] as string | undefined;
+                    setContactId(v ?? "");
+                    // Keep references consistent when the customer changes.
+                    if (!v) {
+                      setDealId("");
+                      setContractId("");
+                    }
+                  }}
+                >
+                  {[
+                    { id: "", label: t("form.noCustomer") },
+                    ...contacts.map((c) => ({ id: c.id, label: contactDisplayName(c) })),
+                  ].map((o) => (
+                    <SelectItem key={o.id} textValue={o.label}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </Select>
+
+                <Select
+                  {...selectFieldProps()}
+                  label={t("form.deal")}
+                  placeholder={t("form.none")}
+                  selectedKeys={dealId ? [dealId] : []}
+                  onSelectionChange={(keys) => {
+                    const v = Array.from(keys)[0] as string | undefined;
+                    setDealId(v ?? "");
+                  }}
+                >
+                  {[
+                    { id: "", label: t("form.none") },
+                    ...deals
+                      .filter((d) => !contactId || d.contactId === contactId)
+                      .map((d) => ({ id: d.id, label: d.title })),
+                  ].map((o) => (
+                    <SelectItem key={o.id} textValue={o.label}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </Select>
+
+                <Select
+                  {...selectFieldProps()}
+                  label={t("form.contract")}
+                  placeholder={t("form.none")}
+                  selectedKeys={contractId ? [contractId] : []}
+                  onSelectionChange={(keys) => {
+                    const v = Array.from(keys)[0] as string | undefined;
+                    setContractId(v ?? "");
+                  }}
+                >
+                  {[
+                    { id: "", label: t("form.none") },
+                    ...contracts
+                      .filter((c) => !contactId || c.contactId === contactId)
+                      .map((c) => ({ id: c.id, label: c.title })),
+                  ].map((o) => (
+                    <SelectItem key={o.id} textValue={o.label}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Select
+                  {...selectFieldProps()}
+                  label={t("form.owner")}
+                  placeholder={t("form.membersPlaceholder")}
+                  selectedKeys={ownerId ? [ownerId] : []}
+                  onSelectionChange={(keys) => {
+                    const v = Array.from(keys)[0] as string | undefined;
+                    setOwnerId(v ?? "");
+                  }}
+                >
+                  {(users ?? []).map((u) => (
+                    <SelectItem key={u.id} textValue={u.name ?? u.id}>
+                      {u.name}
+                    </SelectItem>
+                  ))}
+                </Select>
+
+                <Select
+                  {...selectFieldProps()}
+                  label={t("form.activityType")}
+                  placeholder={t("form.none")}
+                  selectedKeys={activityType ? [activityType] : []}
+                  onSelectionChange={(keys) => {
+                    const v = Array.from(keys)[0] as ProjectActivityType | undefined;
+                    setActivityType(v ?? "");
+                  }}
+                >
+                  {[
+                    { id: "", label: t("form.none") },
+                    ...ACTIVITY_PRESETS.map((p) => ({
+                      id: p.key as string,
+                      label: i18n.language?.startsWith("ar") ? p.labels.ar : p.labels.en,
+                    })),
+                  ].map((o) => (
+                    <SelectItem key={o.id} textValue={o.label}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </Select>
+
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  label={t("form.budget")}
+                  value={budget}
+                  onValueChange={setBudget}
+                  description={t("form.budgetHint")}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Select
+                  {...selectFieldProps()}
+                  label={t("form.currency")}
+                  selectedKeys={[currency]}
+                  onSelectionChange={(keys) => {
+                    const v = Array.from(keys)[0] as string | undefined;
+                    if (v) setCurrency(v);
+                  }}
+                >
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c}>{c}</SelectItem>
+                  ))}
+                </Select>
+                {activityType && (
+                  <p className="sm:col-span-2 self-end text-[11px] text-default-400 pb-1">
+                    {t("form.activityPresetHint")}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

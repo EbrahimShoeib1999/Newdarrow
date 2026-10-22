@@ -19,6 +19,7 @@ import {
 } from "@/features/portals/hooks/use-portals";
 import { PORTAL_META } from "@/features/portals/constants/portal-meta";
 import { usePortalStat } from "@/features/portals/hooks/use-portal-stats";
+import { usePortalT } from "@/features/portals/hooks/use-portal-terminology";
 import { useLocation } from "react-router-dom";
 
 interface PortalPickerDrawerProps {
@@ -35,7 +36,8 @@ function PortalDrawerItem({
   isActive: boolean;
   onSelect: () => void;
 }) {
-  const { t } = useTranslation();
+  // Terminology-aware so the projects app name follows the tenant's configured term.
+  const { t } = usePortalT();
   const meta = PORTAL_META[portal];
   const Icon = meta.icon;
   const stat = usePortalStat(portal);

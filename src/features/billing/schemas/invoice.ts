@@ -37,6 +37,8 @@ export const invoiceSchema = z
     quotationId: z.string().optional(),
     contractId: z.string().optional(),
     dealId: z.string().optional(),
+    /** Delivery project this invoice belongs to — a pure reference, never an amount copy. */
+    projectId: z.string().optional(),
     milestoneId: z.string().optional(),
     journalEntryId: z.string().optional(),
     reversalJournalEntryId: z.string().optional(),

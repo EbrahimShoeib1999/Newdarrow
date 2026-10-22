@@ -65,6 +65,12 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
     role: "employee",
     customPermissions: ["people.view_all_reports"],
   });
+  // Accounting-specific reviewer: global employee, but Billing sub-role accountant.
+  await setDoc(doc(db, "users", "acct"), {
+    companyId: COMPANY,
+    role: "employee",
+    portalSubRoles: { billing: "accountant" },
+  });
   await setDoc(doc(db, "users", "outsider"), { companyId: "other-co", role: "manager" });
   await setDoc(doc(db, "users", "admin"), { companyId: COMPANY, role: "admin" });
 
@@ -109,6 +115,14 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
     name: "Alpha Project",
     slug: "alpha-project",
     priority: "high",
+  });
+  // A recorded-but-unreviewed vendor bill for the review-gate assertions.
+  await setDoc(doc(db, "companies", COMPANY, "bills", "bill1"), {
+    billNumber: "B-1",
+    vendorName: "Acme",
+    status: "open",
+    approvalStatus: "pending",
+    grandTotal: 100,
   });
 });
 
@@ -487,6 +501,70 @@ await check("outsider CANNOT read or write payments in another company", () =>
       currency: "SAR",
     })
   )
+);
+
+// --- Bill accountant-review enforcement (server mirror of canApproveDocuments) ---
+await check("employee CAN record a pending bill (recorded cost)", () =>
+  assertSucceeds(
+    setDoc(doc(asUser("emp1"), "companies", COMPANY, "bills", "bill_emp"), {
+      billNumber: "B-EMP",
+      vendorName: "Vendor",
+      status: "open",
+      approvalStatus: "pending",
+      grandTotal: 50,
+    })
+  )
+);
+
+await check("employee CANNOT self-approve a bill on create", () =>
+  assertFails(
+    setDoc(doc(asUser("emp1"), "companies", COMPANY, "bills", "bill_selfapp"), {
+      billNumber: "B-SELF",
+      vendorName: "Vendor",
+      status: "open",
+      approvalStatus: "approved",
+      grandTotal: 50,
+    })
+  )
+);
+
+await check("employee CANNOT change an existing bill's review outcome to approved", () =>
+  assertFails(
+    updateDoc(doc(asUser("emp1"), "companies", COMPANY, "bills", "bill1"), {
+      approvalStatus: "approved",
+      approvedBy: "emp1",
+    })
+  )
+);
+
+await check("employee CAN edit a bill's non-review fields (approvalStatus unchanged)", () =>
+  assertSucceeds(
+    updateDoc(doc(asUser("emp1"), "companies", COMPANY, "bills", "bill1"), {
+      notes: "corrected vendor address",
+    })
+  )
+);
+
+await check("manager CAN approve a bill", () =>
+  assertSucceeds(
+    updateDoc(doc(asUser("mgr"), "companies", COMPANY, "bills", "bill1"), {
+      approvalStatus: "approved",
+      approvedBy: "mgr",
+    })
+  )
+);
+
+await check("billing accountant sub-role (employee) CAN reject a bill", () =>
+  assertSucceeds(
+    updateDoc(doc(asUser("acct"), "companies", COMPANY, "bills", "bill1"), {
+      approvalStatus: "rejected",
+      reviewNote: "not project-related",
+    })
+  )
+);
+
+await check("outsider CANNOT read company bills", () =>
+  assertFails(getDoc(doc(asUser("outsider"), "companies", COMPANY, "bills", "bill1")))
 );
 
 await testEnv.cleanup();

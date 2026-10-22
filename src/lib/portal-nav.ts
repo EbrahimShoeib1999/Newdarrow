@@ -294,6 +294,13 @@ export const PROJECTS_NAV_TREE: PortalNavTreeGroup[] = [
         namespace: "projects",
         permission: "projects.view",
       },
+      {
+        labelKey: "nav.project_settings",
+        path: "/projects/settings",
+        icon: Settings,
+        namespace: "projects",
+        permission: "projects.manage",
+      },
     ],
   },
 ];

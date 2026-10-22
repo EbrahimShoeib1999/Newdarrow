@@ -47,6 +47,13 @@ export interface ContractServiceItem {
   estimatedHours?: number;
   durationDays?: number;
   selected: boolean;
+  /**
+   * Responsible person (users collection id). Stamped as the canonical
+   * `assigneeId` on the task created from this item — display names are
+   * never stored as ids, and leaving it unset keeps the task deliberately
+   * unassigned (visible in the Unassigned filter).
+   */
+  responsibleUserId?: string;
   subtasks?: ContractServiceSubtask[];
   convertedTaskId?: string;
   isConverted?: boolean;

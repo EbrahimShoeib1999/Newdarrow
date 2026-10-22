@@ -7,6 +7,7 @@ import { useContractsQuery } from "./use-contracts";
 import { useAllTasksQuery } from "@/features/tasks/hooks/use-tasks";
 import { useInvoices } from "@/features/billing/hooks/use-invoices";
 import { usePayments } from "@/features/billing/hooks/use-payments";
+import { useProjects } from "@/features/projects/hooks/use-projects";
 import {
   buildCustomerTimeline,
   scopeCustomerRecords,
@@ -28,6 +29,7 @@ export function useCustomerTimeline(contactId: string) {
   const { data: tasksRes } = useAllTasksQuery();
   const { data: invoicesData } = useInvoices();
   const { data: paymentsData } = usePayments();
+  const { data: projectsData } = useProjects();
 
   const { data: activitiesRes } = useQuery({
     queryKey: ["crm", "activities", companyId],
@@ -44,6 +46,7 @@ export function useCustomerTimeline(contactId: string) {
         contacts: contactsRes?.data ?? [],
         deals: dealsRes?.data ?? [],
         contracts: contractsRes?.data ?? [],
+        projects: projectsData ?? [],
         tasks: tasksRes?.data ?? [],
         invoices: invoicesData ?? [],
         payments: paymentsData ?? [],

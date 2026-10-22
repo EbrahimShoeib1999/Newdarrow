@@ -81,6 +81,8 @@ export default function CreateInvoicePage() {
     customerName?: string;
     dealId?: string;
     milestoneId?: string;
+    /** Delivery project reference carried through for roll-ups (never an amount). */
+    projectId?: string;
     title?: string;
     currency?: string;
     amount?: number;
@@ -100,6 +102,7 @@ export default function CreateInvoicePage() {
     amount?: number;
     currency?: string;
     title?: string;
+    projectId?: string;
   } })?.fromDeal;
 
   const { data: contactsRes } = useContactsQuery();
@@ -229,6 +232,7 @@ export default function CreateInvoicePage() {
         contractId: fromContract.contractId,
         dealId: fromContract.dealId,
         milestoneId: fromContract.milestoneId,
+        projectId: fromContract.projectId,
         currency: fromContract.currency || DEFAULT_BILLING_CURRENCY,
         issueDate: new Date(),
         dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
@@ -272,6 +276,7 @@ export default function CreateInvoicePage() {
         customerId: fromDeal.contactId || "",
         customerName,
         dealId: fromDeal.dealId,
+        projectId: fromDeal.projectId,
         currency: fromDeal.currency || DEFAULT_BILLING_CURRENCY,
         issueDate: new Date(),
         dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),

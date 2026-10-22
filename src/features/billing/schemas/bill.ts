@@ -22,6 +22,8 @@ export const billSchema = z
     vendorName: z.string().optional(),
     status: z.enum(["draft", "open", "paid", "overdue", "cancelled"]).default("draft"),
     costCenterId: z.string().optional(),
+    /** Delivery project this expense belongs to — a pure reference, never an amount copy. */
+    projectId: z.string().optional(),
 
     issueDate: z.date(),
     dueDate: z.date(),
@@ -34,6 +36,17 @@ export const billSchema = z
     amountPaid: z.number().min(0).optional(),
     notes: z.string().optional(),
     currency: z.string().default("SAR"),
+    /**
+     * Accountant review dimension — deliberately separate from `status`
+     * (settlement lifecycle). A bill is a RECORDED cost as soon as it exists;
+     * it only becomes an APPROVED ACTUAL COST once an authorized accountant
+     * reviews it (accounting policy). Unset = never reviewed (legacy or
+     * freshly entered), so old data is never silently counted as approved.
+     */
+    approvalStatus: z.enum(["pending", "approved", "rejected"]).optional(),
+    approvedBy: z.string().nullable().optional(),
+    approvedAt: z.string().nullable().optional(),
+    reviewNote: z.string().optional(),
     createdAt: z.date().optional(),
     updatedAt: z.date().optional(),
   })

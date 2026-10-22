@@ -1,9 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ProjectService } from "../api/projects.service";
+import { ProjectService, MilestoneService } from "../api/projects.service";
 import { useCompany } from "@/features/companies/context/company-context";
+import { useAuthStore } from "@/stores/auth.store";
+import type { SavedContract } from "@/features/crm/types/contract.types";
 import type {
   CreateProjectDTO,
   UpdateProjectDTO,
+  ProjectStatus,
+  ProjectMilestone,
 } from "../types/projects.types";
 
 const QUERY_KEY = ["projects"] as const;
@@ -20,13 +24,25 @@ export function useProjects() {
   });
 }
 
+export function useProject(projectId?: string | null) {
+  const { companyId } = useCompany();
+  return useQuery({
+    queryKey: [...QUERY_KEY, "detail", companyId, projectId],
+    queryFn: async () => {
+      const res = await ProjectService.getProject(companyId!, projectId!);
+      return res.data;
+    },
+    enabled: !!companyId && !!projectId,
+  });
+}
+
 export function useCreateProjectMutation() {
   const queryClient = useQueryClient();
   const { companyId } = useCompany();
 
   return useMutation({
     mutationFn: async (data: CreateProjectDTO) => {
-      const res = await ProjectService.createProject(companyId!, data);
+      const res = await ProjectService.createProjectWithCode(companyId!, data);
       return res.data;
     },
     onSuccess: () => {
@@ -50,6 +66,80 @@ export function useUpdateProjectMutation() {
   });
 }
 
+/** Validated lifecycle transition with an optional auditable reason. */
+export function useTransitionProjectMutation() {
+  const queryClient = useQueryClient();
+  const { companyId } = useCompany();
+  const userId = useAuthStore((s) => s.user?.id);
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      to,
+      reason,
+    }: {
+      id: string;
+      to: ProjectStatus;
+      reason?: string;
+    }) => {
+      const res = await ProjectService.transitionStatus(companyId!, id, to, userId ?? "", reason);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    },
+  });
+}
+
+/**
+ * Contract → project conversion. Idempotent: retrying returns the existing
+ * project (alreadyExisted=true) instead of creating a duplicate.
+ */
+export function useCreateProjectFromContractMutation() {
+  const queryClient = useQueryClient();
+  const { companyId } = useCompany();
+  const userId = useAuthStore((s) => s.user?.id);
+
+  return useMutation({
+    mutationFn: async ({
+      contract,
+      overrides,
+    }: {
+      contract: SavedContract;
+      overrides?: Partial<CreateProjectDTO>;
+    }) => {
+      const res = await ProjectService.createProjectFromContract(
+        companyId!,
+        contract,
+        userId ?? ""
+        , overrides
+      );
+      // Lifecycle chain deal → contract → project → tasks/milestones: a
+      // freshly converted project immediately inherits the contract's
+      // delivery scope — converted tasks and one milestone per contracted
+      // service item. Reused conversions skip this; the link is idempotent
+      // anyway, and a hiccup here must never lose the converted project.
+      if (res.data && !res.data.alreadyExisted) {
+        try {
+          await ProjectService.linkContractScopeToProject(
+            companyId!,
+            res.data.id,
+            contract
+          );
+        } catch (linkErr) {
+          console.warn("Contract scope linking failed:", linkErr);
+        }
+      }
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      // Converted tasks may carry a new projectId after backfill.
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
 export function useDeleteProjectMutation() {
   const queryClient = useQueryClient();
   const { companyId } = useCompany();
@@ -60,6 +150,72 @@ export function useDeleteProjectMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Milestones                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export function useMilestones(projectId?: string | null) {
+  const { companyId } = useCompany();
+  return useQuery({
+    queryKey: [...QUERY_KEY, "milestones", companyId, projectId],
+    queryFn: async () => {
+      const res = await MilestoneService.list(companyId!, projectId!);
+      return res.data;
+    },
+    enabled: !!companyId && !!projectId,
+  });
+}
+
+export function useCreateMilestoneMutation(projectId: string) {
+  const queryClient = useQueryClient();
+  const { companyId } = useCompany();
+
+  return useMutation({
+    mutationFn: async (data: Omit<ProjectMilestone, "id" | "createdAt" | "updatedAt">) => {
+      const res = await MilestoneService.create(companyId!, projectId, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...QUERY_KEY, "milestones", companyId, projectId] });
+    },
+  });
+}
+
+export function useUpdateMilestoneMutation(projectId: string) {
+  const queryClient = useQueryClient();
+  const { companyId } = useCompany();
+
+  return useMutation({
+    mutationFn: async ({
+      milestoneId,
+      data,
+    }: {
+      milestoneId: string;
+      data: Partial<ProjectMilestone>;
+    }) => {
+      const res = await MilestoneService.update(companyId!, projectId, milestoneId, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...QUERY_KEY, "milestones", companyId, projectId] });
+    },
+  });
+}
+
+export function useDeleteMilestoneMutation(projectId: string) {
+  const queryClient = useQueryClient();
+  const { companyId } = useCompany();
+
+  return useMutation({
+    mutationFn: async (milestoneId: string) => {
+      await MilestoneService.remove(companyId!, projectId, milestoneId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...QUERY_KEY, "milestones", companyId, projectId] });
     },
   });
 }

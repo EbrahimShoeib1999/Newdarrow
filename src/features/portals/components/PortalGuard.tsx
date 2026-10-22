@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { usePortalT } from "../hooks/use-portal-terminology";
 import { Card, CardBody } from "@heroui/react";
 import { ShieldAlert } from "lucide-react";
 import type { PortalId } from "@/lib/portal-permissions";
@@ -20,7 +20,8 @@ export function PortalGuard({
   portal: PortalId;
   children: React.ReactNode;
 }) {
-  const { t } = useTranslation();
+  // Terminology-aware: the denied message names the portal using the tenant's term.
+  const { t } = usePortalT();
   const allowed = useCanAccessPortal(portal);
 
   if (!allowed) {

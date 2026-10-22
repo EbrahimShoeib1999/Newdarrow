@@ -12,6 +12,7 @@ import {
   HandCoins,
   MessageSquare,
   ArrowRight,
+  FolderKanban,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useAllUsers } from "@/features/users/hooks/use-users";
@@ -26,6 +27,7 @@ const CATEGORY_ICON: Record<TimelineCategory, typeof User> = {
   customer: User,
   deal: Briefcase,
   contract: FileText,
+  project: FolderKanban,
   task: CheckSquare,
   invoice: Receipt,
   payment: HandCoins,
@@ -36,6 +38,7 @@ const CATEGORY_COLOR: Record<TimelineCategory, string> = {
   customer: "default",
   deal: "warning",
   contract: "primary",
+  project: "secondary",
   task: "secondary",
   invoice: "danger",
   payment: "success",

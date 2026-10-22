@@ -660,6 +660,7 @@
       "customer": "Customer",
       "deal": "Deal",
       "contract": "Contract",
+      "project": "Project",
       "task": "Task",
       "invoice": "Invoice",
       "payment": "Payment",
@@ -671,6 +672,10 @@
       "deal_stage_changed": "Deal stage changed ({{transition}})",
       "contract_created": "Contract created: {{title}}",
       "contract_approved": "Contract approved: {{title}}",
+      "project_created": "Project created: {{title}}",
+      "project_status_changed": "Project status: {{from}} → {{to}} ({{title}})",
+      "project_delivery_submitted": "Delivery submitted: {{title}}",
+      "project_delivery_accepted": "Delivery accepted: {{title}}",
       "task_created": "Task created: {{title}}",
       "task_claimed": "Task claimed: {{title}}",
       "task_completed": "Task completed: {{title}}",
@@ -907,6 +912,8 @@
     "department": "Department",
     "subtasksCount": "Sequential subtasks",
     "estimatedHours": "Estimated hours",
-    "durationDays": "Work days"
+    "durationDays": "Work days",
+    "responsible": "Responsible person",
+    "unassignedHint": "Will convert as unassigned"
   }
 }

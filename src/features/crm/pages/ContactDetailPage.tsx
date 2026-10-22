@@ -21,6 +21,7 @@ import {
   ArrowLeft,
   Building2,
   Briefcase,
+  FolderKanban,
   Mail,
   Phone,
   Pencil,
@@ -51,6 +52,9 @@ import { useDealsQuery } from "../hooks/use-deals";
 import { useCrmPermissions } from "../hooks/use-crm-permissions";
 import { useContactClassifications } from "../hooks/use-contact-classifications";
 import { useClientReportsQuery } from "../hooks/use-client-reports";
+import { useProjects } from "@/features/projects/hooks/use-projects";
+import { useProjectT } from "@/features/projects/hooks/use-project-terminology";
+import { useAppPermissions } from "@/features/companies/hooks/use-app-permissions";
 import { ClientReportEditorModal } from "../components/ClientReportEditorModal";
 import { ClientReportDetailModal } from "../components/ClientReportDetailModal";
 import type { ClientReport } from "../types/client-reports.types";
@@ -125,6 +129,12 @@ export function ContactDetailPage() {
     [contractsRes?.data, contactId]
   );
 
+  // Projects scoped to this customer (terminology-aware labels, permission-gated).
+  const { can: canApp } = useAppPermissions();
+  const canViewProjects = canApp("projects.view");
+  const { t: tProjects } = useProjectT();
+  const { data: allProjects = [] } = useProjects();
+
   const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<Task | null>(null);
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
 
@@ -135,6 +145,16 @@ export function ContactDetailPage() {
   const contactDealIds = useMemo(
     () => new Set(contactDeals.map((d) => d.id)),
     [contactDeals]
+  );
+  const contactProjects = useMemo(
+    () =>
+      allProjects.filter(
+        (p) =>
+          p.contactId === contactId ||
+          (p.contractId && contactContractIds.has(p.contractId)) ||
+          (p.dealId && contactDealIds.has(p.dealId))
+      ),
+    [allProjects, contactId, contactContractIds, contactDealIds]
   );
 
   const { data: allTasksData, isLoading: deliveryTasksLoading } = useAllTasksQuery();
@@ -834,6 +854,53 @@ export function ContactDetailPage() {
             )}
           </div>
         </Tab>
+
+        {canViewProjects && (
+          <Tab
+            key="projects"
+            title={
+              <span className="flex items-center gap-1.5">
+                <FolderKanban className="h-4 w-4" />
+                {tProjects("title")} ({contactProjects.length})
+              </span>
+            }
+          >
+            <div className="pt-4">
+              {contactProjects.length === 0 ? (
+                <p className="text-default-500 text-sm">{tProjects("empty")}</p>
+              ) : (
+                <Table aria-label={tProjects("title")} removeWrapper>
+                  <TableHeader>
+                    <TableColumn>{tProjects("columns.name")}</TableColumn>
+                    <TableColumn>{tProjects("columns.code")}</TableColumn>
+                    <TableColumn>{tProjects("columns.status")}</TableColumn>
+                    <TableColumn>{tProjects("columns.actions")}</TableColumn>
+                  </TableHeader>
+                  <TableBody>
+                    {contactProjects.map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell>{p.name}</TableCell>
+                        <TableCell className="font-mono text-xs">{p.code ?? "—"}</TableCell>
+                        <TableCell>{tProjects(`status.${p.status}`)}</TableCell>
+                        <TableCell>
+                          <Button
+                            as={Link}
+                            to={`/projects/${p.id}`}
+                            size="sm"
+                            variant="light"
+                            color="primary"
+                          >
+                            {t("contacts.details")}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </Tab>
+        )}
 
         <Tab
           key="tasks"

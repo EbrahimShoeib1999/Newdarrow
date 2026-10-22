@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
@@ -34,9 +33,12 @@ import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
 import { useAppPermissions } from "@/features/companies/hooks/use-app-permissions";
 import { useAllTasksQuery } from "@/features/tasks/hooks/use-tasks";
+import { useContactsQuery } from "@/features/crm/hooks/use-contacts";
+import { contactDisplayName } from "@/features/crm/utils/contacts-list.utils";
+import { useProjectT } from "../hooks/use-project-terminology";
 import {
   useDeleteProjectMutation,
-  useUpdateProjectMutation,
+  useTransitionProjectMutation,
   useProjects,
 } from "../hooks/use-projects";
 import { ProjectFormModal } from "../components/ProjectFormModal";
@@ -45,6 +47,7 @@ import type { Project, ProjectStatus } from "../types/projects.types";
 type StatusFilter = "all" | ProjectStatus;
 
 const STATUS_STYLES: Record<ProjectStatus, string> = {
+  planning: "bg-primary/5 text-primary/80",
   active: "bg-success/10 text-success",
   completed: "bg-primary/10 text-primary",
   on_hold: "bg-warning/10 text-warning",
@@ -64,7 +67,9 @@ export function ProjectsListPage({
 }: {
   scope?: "all" | "mine" | "completed";
 }) {
-  const { t } = useTranslation("projects");
+  // Terminology-aware translator: every label receives {{singular}}/{{plural}}.
+  const { t } = useProjectT();
+  const navigate = useNavigate();
   const userId = useAuthStore((s) => s.user?.id);
   const { can } = useAppPermissions();
   const canManage = can("projects.manage");
@@ -72,8 +77,15 @@ export function ProjectsListPage({
   const { data: projects = [], isLoading } = useProjects();
   const { data: allTasksRes } = useAllTasksQuery();
   const allTasks = allTasksRes?.data || [];
+  const { data: contactsRes } = useContactsQuery();
+  const customerNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of contactsRes?.data ?? []) map[c.id] = contactDisplayName(c);
+    return map;
+  }, [contactsRes]);
   const deleteProject = useDeleteProjectMutation();
-  const updateProject = useUpdateProjectMutation();
+  // Archive/restore goes through the validated transition edge so it is audited.
+  const transitionProject = useTransitionProjectMutation();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
@@ -97,6 +109,7 @@ export function ProjectsListPage({
       const customStr = Object.values(p.customFields ?? {}).join(" ").toLowerCase();
       return (
         p.name.toLowerCase().includes(q) ||
+        (p.code ?? "").toLowerCase().includes(q) ||
         slugStr.includes(q) ||
         catStr.includes(q) ||
         tagsStr.includes(q) ||
@@ -118,10 +131,7 @@ export function ProjectsListPage({
 
   const handleToggleArchive = async (project: Project) => {
     const nextStatus: ProjectStatus = project.status === "archived" ? "active" : "archived";
-    await updateProject.mutateAsync({
-      id: project.id,
-      data: { status: nextStatus },
-    });
+    await transitionProject.mutateAsync({ id: project.id, to: nextStatus });
   };
 
   const handleDelete = async (id: string) => {
@@ -135,6 +145,7 @@ export function ProjectsListPage({
 
   const statusChips: { key: StatusFilter; label: string }[] = [
     { key: "all", label: t("filters.all") },
+    { key: "planning", label: t("filters.planning") },
     { key: "active", label: t("filters.active") },
     { key: "on_hold", label: t("filters.on_hold") },
     { key: "completed", label: t("filters.completed") },
@@ -249,8 +260,28 @@ export function ProjectsListPage({
               project.customFields && Object.keys(project.customFields).length > 0;
 
             return (
-              <Card
+              <div
                 key={project.id}
+                // Whole-card click opens the detail workspace; the project-name link
+                // stays the keyboard/AT affordance. HeroUI's <Card> only forwards a
+                // click handler to the DOM when isPressable is set (otherwise the
+                // onClick is destructured away and silently dropped) — so navigation
+                // lives on this plain wrapper, whose native onClick always reaches
+                // the DOM. Interactive controls (edit, archive, delete, view-tasks)
+                // must not trigger the card navigation.
+                onClick={(e) => {
+                  const el = e.target as HTMLElement | null;
+                  if (
+                    el?.closest(
+                      'button, a, input, textarea, select, [role="button"], [role="combobox"], [role="switch"]'
+                    )
+                  )
+                    return;
+                  navigate(`/projects/${project.id}`);
+                }}
+                className="cursor-pointer"
+              >
+              <Card
                 className={cn(
                   "border border-default-100 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg",
                   project.status === "archived" && "opacity-75 bg-default-50/50"
@@ -264,10 +295,23 @@ export function ProjectsListPage({
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="truncate font-bold text-default-900">
+                          <Link
+                            to={`/projects/${project.id}`}
+                            className="truncate font-bold text-default-900 hover:text-primary transition-colors"
+                          >
                             {project.name}
-                          </h3>
+                          </Link>
+                          {project.code && (
+                            <span className="shrink-0 rounded-md bg-default-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-default-500">
+                              {project.code}
+                            </span>
+                          )}
                         </div>
+                        {project.contactId && customerNames[project.contactId] && (
+                          <p className="mt-0.5 truncate text-[11px] font-semibold text-default-500">
+                            {t("detail.customer")}: {customerNames[project.contactId]}
+                          </p>
+                        )}
                         {project.slug && (
                           <p className="text-[11px] font-mono text-default-400 truncate">
                             /{project.slug}
@@ -436,8 +480,8 @@ export function ProjectsListPage({
                           <span className="inline-flex items-center gap-1">
                             <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
                             {projTasks.length > 0
-                              ? `${doneTasks.length}/${projTasks.length} مهام منجزة`
-                              : "لا توجد مهام حالياً"}
+                              ? t("tasksTab.completed", { done: doneTasks.length, total: projTasks.length })
+                              : t("tasksTab.empty")}
                           </span>
                           {projTasks.length > 0 && <span className="font-bold text-primary">{pct}%</span>}
                         </div>
@@ -458,13 +502,14 @@ export function ProjectsListPage({
                           className="w-full font-semibold text-xs h-8 rounded-lg mt-0.5"
                           startContent={<ListTodo className="h-3.5 w-3.5" />}
                         >
-                          استعراض مهام المشروع ({projTasks.length})
+                          {t("detail.openTasks")} ({projTasks.length})
                         </Button>
                       </div>
                     );
                   })()}
                 </CardBody>
               </Card>
+              </div>
             );
           })}
         </div>

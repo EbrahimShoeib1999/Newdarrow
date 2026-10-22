@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { GripVertical, LayoutGrid } from "lucide-react";
 import { Tooltip } from "@heroui/react";
 import { cn } from "@/lib/utils";
@@ -9,6 +8,7 @@ import { useAccessiblePortals } from "@/features/portals/hooks/use-portals";
 import { getPortalFromPath, type PortalId } from "@/lib/portal-permissions";
 import { PORTAL_META } from "@/features/portals/constants/portal-meta";
 import { PortalPickerDrawer } from "@/features/portals/components/PortalPickerDrawer";
+import { usePortalT } from "@/features/portals/hooks/use-portal-terminology";
 import { useLayoutStore } from "@/stores/layout.store";
 
 const DRAG_THRESHOLD_PX = 8;
@@ -24,7 +24,8 @@ function clampFabPosition(x: number, y: number, width: number, height: number) {
 }
 
 export function PortalFloatingButton() {
-  const { t, i18n } = useTranslation();
+  // Terminology-aware so the active-portal label honors the configured project term.
+  const { t, i18n } = usePortalT();
   const location = useLocation();
   const portals = useAccessiblePortals();
   const current = getPortalFromPath(location.pathname);
