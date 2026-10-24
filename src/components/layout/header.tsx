@@ -26,10 +26,9 @@ import { initialsFromName, localizedName } from "@/lib/localized-name";
 import { avatarSrc } from "@/lib/image-utils";
 import { MobileSidebar } from "./mobile-sidebar";
 import { Logo } from "../shared/logo";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { TimeTrackerWidget } from "@/features/people/components/TimeTrackerWidget";
 import { useAttendanceTimer } from "@/features/people/hooks/use-attendance-timer";
-import { getPortalFromPath } from "@/lib/portal-permissions";
 
 export function Header({
   hasPortalSidebar = false,
@@ -43,17 +42,6 @@ export function Header({
   const { mobileSidebarOpen, setMobileSidebarOpen, setPortalPickerOpen } = useLayoutStore();
   const { mode, toggleMode } = useThemeStore();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const portal = getPortalFromPath(pathname);
-  const logoHomeTo =
-    portal === "tasks" ||
-    portal === "crm" ||
-    portal === "people" ||
-    portal === "billing" ||
-    portal === "chat" ||
-    portal === "settings"
-      ? "/"
-      : undefined;
 
   const { isCheckedIn, isOnBreak } = useAttendanceTimer();
   const displayName = localizedName(i18n.language, {
@@ -120,12 +108,9 @@ export function Header({
         <Logo
           size="sm"
           variant="icon"
-          to={logoHomeTo}
+          to="/"
           title={t("portals.allApps")}
-          className={cn(
-            "shrink-0",
-            hasPortalSidebar ? "flex md:hidden" : "flex"
-          )}
+          className="shrink-0"
         />
       </div>
 

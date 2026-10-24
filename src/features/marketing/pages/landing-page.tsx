@@ -33,12 +33,12 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
       className="sticky top-0 z-50"
     >
       <header className="border-b border-default-100 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 md:px-6">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-2 md:px-4 overflow-x-hidden">
           <Link to="/" className="shrink-0 transition-transform duration-300 hover:scale-105">
-            <Logo size="sm" className="h-9" />
+            <Logo size="md" className="h-11" />
           </Link>
 
-          <nav className="hidden items-center gap-8 text-sm font-medium text-default-600 md:flex">
+          <nav className="hidden items-center gap-5 text-sm font-medium text-default-600 md:flex flex-1 min-w-0 justify-center">
             {[
               { href: "#apps", label: t("nav.apps") },
               { href: "#features", label: t("nav.features") },
@@ -47,7 +47,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
               <a
                 key={item.href}
                 href={item.href}
-                className="group relative transition-colors hover:text-primary"
+                className="group relative transition-colors hover:text-primary shrink-0"
               >
                 {item.label}
                 <span className="absolute -bottom-1 start-0 h-0.5 w-0 bg-primary transition-all duration-300 group-hover:w-full" />
@@ -55,16 +55,16 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
-            <LanguageTogglePills className="hidden sm:inline-flex" />
-            <LanguageSwitcher compact className="sm:hidden" />
+          <div className="flex items-center gap-2 shrink-0 min-w-fit px-2">
+            <LanguageTogglePills className="hidden sm:inline-flex shrink-0" />
+            <LanguageSwitcher compact className="sm:hidden shrink-0" />
             {isAuthenticated ? (
               <Button
                 as={Link}
                 to="/apps"
                 color="primary"
                 size="sm"
-                className="font-semibold shadow-md shadow-primary/20 transition-transform duration-300 hover:scale-105"
+                className="font-semibold shadow-md shadow-primary/20 transition-transform duration-300 hover:scale-105 shrink-0 whitespace-nowrap"
                 startContent={<LayoutGrid className="h-4 w-4" />}
               >
                 {t("nav.workspace", "My Workspace")}
@@ -76,7 +76,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
                   to="/login"
                   variant="light"
                   size="sm"
-                  className="hidden font-semibold sm:inline-flex"
+                  className="hidden font-semibold sm:inline-flex shrink-0 whitespace-nowrap"
                 >
                   {t("nav.signIn")}
                 </Button>
@@ -85,7 +85,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
                   to="/register"
                   color="primary"
                   size="sm"
-                  className="font-semibold transition-transform duration-300 hover:scale-105"
+                  className="font-semibold transition-transform duration-300 hover:scale-105 shrink-0 whitespace-nowrap"
                 >
                   {t("nav.tryFree")}
                 </Button>
@@ -237,15 +237,17 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
               >
                 {isAuthenticated ? t("nav.workspace", "My Workspace") : t("hero.ctaPrimary")}
               </Button>
-              <Button
-                as={Link}
-                to="/login"
-                variant="bordered"
-                size="lg"
-                className="min-w-[170px] font-bold bg-background/80 backdrop-blur-md transition-transform duration-300 hover:-translate-y-0.5 rounded-2xl h-12 border-default-300"
-              >
-                {t("hero.ctaSecondary")}
-              </Button>
+              {!isAuthenticated && (
+                <Button
+                  as={Link}
+                  to="/login"
+                  variant="bordered"
+                  size="lg"
+                  className="min-w-[170px] font-bold bg-background/80 backdrop-blur-md transition-transform duration-300 hover:-translate-y-0.5 rounded-2xl h-12 border-default-300"
+                >
+                  {t("hero.ctaSecondary")}
+                </Button>
+              )}
             </AnimatedDiv>
 
             {/* KPI Metrics Ribbon (Western digits 0-9) */}
@@ -408,15 +410,17 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
                 >
                   {isAuthenticated ? t("nav.workspace", "My Workspace") : t("cta.button")}
                 </Button>
-                <Button
-                  as={Link}
-                  to="/login"
-                  variant="bordered"
-                  size="lg"
-                  className="min-w-[150px] border-white/60 text-white font-bold rounded-2xl h-12 hover:bg-white/10"
-                >
-                  {t("hero.ctaSecondary")}
-                </Button>
+                {!isAuthenticated && (
+                  <Button
+                    as={Link}
+                    to="/login"
+                    variant="bordered"
+                    size="lg"
+                    className="min-w-[150px] border-white/60 text-white font-bold rounded-2xl h-12 hover:bg-white/10"
+                  >
+                    {t("hero.ctaSecondary")}
+                  </Button>
+                )}
               </div>
             </div>
           </AnimatedDiv>
