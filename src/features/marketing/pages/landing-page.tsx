@@ -33,7 +33,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
       className="sticky top-0 z-50"
     >
       <header className="border-b border-default-100 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 md:px-6 overflow-x-hidden">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-2 md:px-4 overflow-x-hidden">
           <Link to="/" className="shrink-0 transition-transform duration-300 hover:scale-105">
             <Logo size="md" className="h-11" />
           </Link>
@@ -55,7 +55,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2 shrink-0 min-w-fit">
+          <div className="flex items-center gap-2 shrink-0 min-w-fit px-2">
             <LanguageTogglePills className="hidden sm:inline-flex shrink-0" />
             <LanguageSwitcher compact className="sm:hidden shrink-0" />
             {isAuthenticated ? (
