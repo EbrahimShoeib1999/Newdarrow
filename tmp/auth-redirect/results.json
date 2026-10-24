@@ -1,0 +1,49 @@
+{
+  "results": [
+    {
+      "name": "T1-login-lands-on-picker",
+      "ok": true,
+      "detail": "trace=[\"http://localhost:5179/login\",\"http://localhost:5179/apps\"] final=http://localhost:5179/apps"
+    },
+    {
+      "name": "T2-return-to-requested-protected-route",
+      "ok": true,
+      "detail": "final=http://localhost:5179/crm/leads trace=[\"http://localhost:5179/login\",\"http://localhost:5179/crm/leads\"]"
+    },
+    {
+      "name": "T3-refresh-keeps-protected-route",
+      "ok": true,
+      "detail": "final=http://localhost:5179/crm/leads"
+    },
+    {
+      "name": "T4-authenticated-can-still-open-marketing",
+      "ok": false,
+      "detail": "final=http://localhost:5179/ landing=false"
+    },
+    {
+      "name": "T5-authenticated-login-bounce-to-picker",
+      "ok": true,
+      "detail": "final=http://localhost:5179/apps trace=[\"http://localhost:5179/login\",\"http://localhost:5179/apps\"]"
+    },
+    {
+      "name": "T6-legacy-darrow-login-internal",
+      "ok": true,
+      "detail": "bounce=/login final=http://localhost:5179/apps"
+    },
+    {
+      "name": "T7-second-tenant-login",
+      "ok": true,
+      "detail": "trace=[\"http://localhost:5179/login\",\"http://localhost:5179/apps\"] final=http://localhost:5179/apps"
+    },
+    {
+      "name": "T8-missing-profile-login",
+      "ok": true,
+      "detail": "trace=[\"http://localhost:5179/login\",\"http://localhost:5179/apps\"] final=http://localhost:5179/apps"
+    }
+  ],
+  "hardErrors": [
+    "[error] [AttendanceStore] Sync Error: FirebaseError: \nevaluation error at L280:31 for 'list' @ L280, evaluation error at L289:33 for 'list' @ L289, false for 'list' @ L280, false for 'list' @ L289",
+    "[error] %c[1:06:21 PM] [CompanyService:getProfile] %cFailed after 107ms color: #ef4444; font-weight: bold; color: #6b7280; font-weight: normal; FirebaseError: \nevaluation error at L160:29 for 'get' @ L160, false for 'get' @ L160",
+    "[error] [2026-10-24T10:06:22.462Z]  @firebase/firestore: Firestore (12.13.0): Uncaught Error in snapshot listener: FirebaseError: [code=permission-denied]: \nevaluation error at L197:24 for 'list' @ L197, false for 'list' @ L280, false for 'list' @ L289, false for 'list' @ L197, false for 'list' @ L280, false for 'list' @ L289"
+  ]
+}

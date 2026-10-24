@@ -48,7 +48,7 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
 // convention: identitytoolkit signUp REST) and sign the global app in with it,
 // so EVERY service call below is evaluated against the real firestore.rules as
 // an authenticated, in-tenant admin — no rules bypass.
-const { ProjectService, MilestoneService } = await import(
+const { ProjectService, MilestoneService, UnitService } = await import(
   "../src/features/projects/api/projects.service"
 );
 const { ProjectSettingsService } = await import(
@@ -325,6 +325,103 @@ await test("deterministic-id create never duplicates or overwrites edits", async
 
   const list = await runUnrestricted(() => MilestoneService.list(CO, p.id));
   if (list.data.length !== 1) throw new Error(`duplicate milestone created (${list.data.length})`);
+});
+
+/* -------------------------------------------------------------------------- */
+/* 4b. Real-estate units — persisted inventory + guarded lifecycle             */
+/* -------------------------------------------------------------------------- */
+console.log("\n4b. Real-estate unit lifecycle against real documents:");
+
+const unitDTO = {
+  code: "A-101",
+  unitType: "apartment" as const,
+  area: 90,
+  price: 500000,
+  currency: "SAR",
+  status: "available" as const,
+  buyerContactId: null,
+};
+
+await test("create + list a unit under the project, persisted with projectId stamped", async () => {
+  const { data: p } = await runUnrestricted(() => ProjectService.createProject(CO, { ...baseDTO, activityType: "real_estate" }));
+  const created = await runUnrestricted(() => UnitService.create(CO, p.id, unitDTO));
+  if (created.data.code !== "A-101" || created.data.status !== "available") {
+    throw new Error("unit not created as submitted");
+  }
+  const snap = await getDoc(doc(db, "companies", CO, "projects", p.id, "units", created.data.id));
+  if (!snap.exists()) throw new Error("unit document not persisted");
+  if (snap.data()!.projectId !== p.id) throw new Error("projectId not stamped on the unit");
+  const list = await runUnrestricted(() => UnitService.list(CO, p.id));
+  if (list.data.length !== 1) throw new Error(`expected 1 unit, got ${list.data.length}`);
+});
+
+await test("reserve stamps the buyer, then sell converts the reservation; history audited", async () => {
+  const { data: p } = await runUnrestricted(() => ProjectService.createProject(CO, { ...baseDTO, activityType: "real_estate" }));
+  const { data: u } = await runUnrestricted(() => UnitService.create(CO, p.id, unitDTO));
+
+  const reserved = await runUnrestricted(() =>
+    UnitService.changeStatus(CO, p.id, u.id, "reserved", "admin_user", { buyerContactId: "ct_buyer_1" })
+  );
+  if (reserved.data.status !== "reserved" || reserved.data.buyerContactId !== "ct_buyer_1") {
+    throw new Error("reserve did not stamp buyer");
+  }
+  const sold = await runUnrestricted(() =>
+    UnitService.changeStatus(CO, p.id, u.id, "sold", "admin_user", { contractId: "cnt_sale" })
+  );
+  if (sold.data.status !== "sold" || sold.data.contractId !== "cnt_sale") {
+    throw new Error("sell did not carry the contract reference");
+  }
+  const finalSnap = await getDoc(doc(db, "companies", CO, "projects", p.id, "units", u.id));
+  const hist = finalSnap.data()!.statusHistory as any[];
+  const chain = hist.map((h) => `${h.from}->${h.to}`).join(",");
+  if (chain !== "available->reserved,reserved->sold") throw new Error(`unexpected unit audit chain: ${chain}`);
+});
+
+await test("a committed unit cannot be double-reserved; sold is terminal", async () => {
+  const { data: p } = await runUnrestricted(() => ProjectService.createProject(CO, { ...baseDTO, activityType: "real_estate" }));
+  const { data: u } = await runUnrestricted(() => UnitService.create(CO, p.id, unitDTO));
+  await runUnrestricted(() => UnitService.changeStatus(CO, p.id, u.id, "reserved", "admin_user", { buyerContactId: "ct_a" }));
+  // Second reservation on an already-reserved unit must be rejected server-side.
+  await expectError(
+    () => runUnrestricted(() => UnitService.changeStatus(CO, p.id, u.id, "reserved", "admin_user", { buyerContactId: "ct_b" })),
+    "invalid_transition:reserved->reserved"
+  );
+  await runUnrestricted(() => UnitService.changeStatus(CO, p.id, u.id, "sold", "admin_user"));
+  await expectError(
+    () => runUnrestricted(() => UnitService.changeStatus(CO, p.id, u.id, "available", "admin_user")),
+    "invalid_transition:sold->available"
+  );
+});
+
+await test("releasing a reservation back to available clears the buyer reference", async () => {
+  const { data: p } = await runUnrestricted(() => ProjectService.createProject(CO, { ...baseDTO, activityType: "real_estate" }));
+  const { data: u } = await runUnrestricted(() => UnitService.create(CO, p.id, unitDTO));
+  await runUnrestricted(() => UnitService.changeStatus(CO, p.id, u.id, "reserved", "admin_user", { buyerContactId: "ct_x" }));
+  const released = await runUnrestricted(() => UnitService.changeStatus(CO, p.id, u.id, "available", "admin_user", { note: "buyer walked" }));
+  if (released.data.buyerContactId !== null) throw new Error("release did not clear buyer");
+  const hist = released.data.statusHistory as any[];
+  if (hist[hist.length - 1].note !== "buyer walked") throw new Error("release note not audited");
+});
+
+await test("outsider tenant cannot read or write another company's units", async () => {
+  const outsiderDb = testEnv.authenticatedContext("outsider_user").firestore();
+  // Resolve a real unit path owned by CO.
+  const { data: p } = await runUnrestricted(() => ProjectService.createProject(CO, { ...baseDTO, activityType: "real_estate" }));
+  const { data: u } = await runUnrestricted(() => UnitService.create(CO, p.id, unitDTO));
+  let writeDenied = false;
+  try {
+    await setDoc(doc(outsiderDb, "companies", CO, "projects", p.id, "units", "hack"), { code: "X", status: "sold" });
+  } catch (err: any) {
+    writeDenied = String(err?.code || err?.message || "").includes("permission-denied");
+  }
+  if (!writeDenied) throw new Error("cross-tenant unit write was NOT denied");
+  let readDenied = false;
+  try {
+    await getDoc(doc(outsiderDb, "companies", CO, "projects", p.id, "units", u.id));
+  } catch (err: any) {
+    readDenied = String(err?.code || err?.message || "").includes("permission-denied");
+  }
+  if (!readDenied) throw new Error("cross-tenant unit read was NOT denied");
 });
 
 /* -------------------------------------------------------------------------- */

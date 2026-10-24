@@ -8,12 +8,20 @@ export type ProjectStatus =
 
 export type ProjectPriority = "low" | "medium" | "high" | "urgent";
 
-/** Machine keys of the built-in activity presets (see constants/activity-presets). */
+/**
+ * Machine keys of the built-in activity presets (see constants/activity-presets).
+ * This union IS the extensible project-type architecture: adding a key here +
+ * a matching preset entry introduces a new type without touching the shared
+ * Project storage shape. `real_estate` / `property_management` further unlock
+ * the integrated unit-inventory module (see types/unit.types.ts).
+ */
 export type ProjectActivityType =
   | "software"
   | "marketing"
   | "consulting"
   | "construction"
+  | "real_estate"
+  | "property_management"
   | "general";
 
 export type ProjectDeliveryStage =

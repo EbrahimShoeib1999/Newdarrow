@@ -40,6 +40,13 @@ import type { SavedContract } from "@/features/crm/types/contract.types";
  *   silently merged into cost totals.
  * - unpaidObligations: Σ (bill.grandTotal − bill.amountPaid) over recorded
  *   bills. Unpaid invoices are payable cash, NOT an expense recognition.
+ * - expenseByCategory: the recorded/approved/paid costs split by the expense
+ *   ACCOUNT each bill line is classified under (the tenant-configurable chart
+ *   of accounts — Phase 5: categories are data, not code). Each bill's
+ *   grandTotal is allocated across its lines proportionally to their totals,
+ *   so Σ recorded over categories equals expensesActual exactly; bills without
+ *   usable lines (legacy or missing accountId) land in the unclassified row —
+ *   never silently dropped.
  * - budgetVariance: project.budget − expensesActual (positive = under budget).
  * - forecastCost: expensesActual + unpaidObligations (committed + incurred).
  * - estimatedMargin: contractedValue − forecastCost — an OPERATIONAL estimate.
@@ -55,6 +62,17 @@ import type { SavedContract } from "@/features/crm/types/contract.types";
  * EXCLUDED from totals and counted in `foreignCurrencyExcluded` rather than
  * silently converted (no FX rate source exists in-app yet).
  */
+
+export interface ProjectExpenseCategoryRow {
+  /** "" = unclassified bucket (legacy bills without lines or an account tag). */
+  accountId: string;
+  /** Raw account name from the chart of accounts; "" for the unclassified bucket. */
+  label: string;
+  code?: string;
+  recorded: number;
+  approved: number;
+  paid: number;
+}
 
 export interface ProjectFinancials {
   currency: string;
@@ -120,6 +138,8 @@ export interface ProjectFinancials {
     approvedBy?: string | null;
     reviewNote?: string;
   }>;
+  /** Costs split by expense account (tenant-configurable categories). */
+  expenseByCategory: ProjectExpenseCategoryRow[];
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -174,10 +194,18 @@ export function computeProjectFinancials(params: {
   invoices: Invoice[];
   bills: Bill[];
   creditNotes: CreditNote[];
+  /** Chart-of-accounts snapshot used ONLY to label the category breakdown.
+   *  Absent accounts degrade to the raw id — totals never depend on them. */
+  accounts?: Array<{ id?: string; code?: string; name?: string }>;
   /** ISO string used as "today" — injectable for deterministic tests. */
   now?: string;
 }): ProjectFinancials {
   const { project, contracts, invoices, bills, creditNotes } = params;
+  const accountLabel = new Map(
+    (params.accounts ?? [])
+      .filter((a) => !!a.id)
+      .map((a) => [a.id as string, { name: a.name ?? "", code: a.code }])
+  );
   const now = params.now ? new Date(params.now) : new Date();
   const currency = project.currency || invoices[0]?.currency || "SAR";
 
@@ -254,6 +282,9 @@ export function computeProjectFinancials(params: {
   let pendingCount = 0;
   let rejectedSum = 0;
   let rejectedCount = 0;
+  // Category rollup: accountId ("" = unclassified) → unrounded tier sums.
+  const UNCLASSIFIED = "";
+  const catAgg = new Map<string, { recorded: number; approved: number; paid: number }>();
   const billRows: ProjectFinancials["billRows"] = [];
   for (const b of projBillsAll) {
     const isForeign = (b.currency || "SAR") !== currency;
@@ -290,6 +321,33 @@ export function computeProjectFinancials(params: {
     paidExp += paid;
     cashOut += paid;
     unpaid += b.grandTotal - paid;
+    // Split this bill's recognized cost across its lines' expense accounts,
+    // each line carrying its share of the grandTotal (Σ shares == grandTotal,
+    // so the rollup reconciles with expensesActual/costsApproved/paidCosts by
+    // construction — same currency/exclusion rules as every other tier).
+    const lineShares = new Map<string, number>();
+    let linesTotal = 0;
+    for (const li of b.items ?? []) {
+      const lt = Number(li.total) || 0;
+      if (lt <= 0) continue;
+      const key = li.accountId && accountLabel.has(li.accountId) ? li.accountId : UNCLASSIFIED;
+      lineShares.set(key, (lineShares.get(key) ?? 0) + lt);
+      linesTotal += lt;
+    }
+    if (linesTotal <= 0) {
+      // Legacy bill with no usable lines: the whole cost is one unclassified share.
+      lineShares.set(UNCLASSIFIED, 1);
+      linesTotal = 1;
+    }
+    const approvedBase = b.approvalStatus === "approved" ? b.grandTotal : 0;
+    for (const [key, share] of lineShares) {
+      const frac = share / linesTotal;
+      const agg = catAgg.get(key) ?? { recorded: 0, approved: 0, paid: 0 };
+      agg.recorded += b.grandTotal * frac;
+      agg.approved += approvedBase * frac;
+      agg.paid += paid * frac;
+      catAgg.set(key, agg);
+    }
     if (b.approvalStatus === "approved") {
       approved += b.grandTotal;
     } else {
@@ -299,6 +357,17 @@ export function computeProjectFinancials(params: {
     }
   }
   billRows.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"));
+
+  const expenseByCategory: ProjectExpenseCategoryRow[] = [...catAgg.entries()]
+    .map(([accountId, v]) => ({
+      accountId,
+      label: accountId ? accountLabel.get(accountId)?.name ?? accountId : "",
+      code: accountId ? accountLabel.get(accountId)?.code : undefined,
+      recorded: round2(v.recorded),
+      approved: round2(v.approved),
+      paid: round2(v.paid),
+    }))
+    .sort((a, b) => b.recorded - a.recorded || a.label.localeCompare(b.label));
 
   const budget = typeof project.budget === "number" ? project.budget : null;
 
@@ -337,6 +406,7 @@ export function computeProjectFinancials(params: {
     invoiceCount: schedule.length,
     billCount: projBills.filter((b) => (b.currency || "SAR") === currency).length,
     foreignCurrencyExcluded: foreign,
+    expenseByCategory,
     schedule: schedule.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999")),
     billRows,
   };

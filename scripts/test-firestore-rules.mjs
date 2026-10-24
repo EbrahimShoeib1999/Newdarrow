@@ -366,8 +366,12 @@ await check("employee CANNOT change own companyId to another company", () =>
 await check("employee CAN update own safe profile fields (e.g. name)", () =>
   assertSucceeds(updateDoc(doc(asUser("emp1"), "users", "emp1"), { name: "Updated Name" }))
 );
+// The admin-role-promotion check mutates the target's role, so it must use a
+// throwaway member (emp2) — NOT emp1, which is reused below as the plain
+// employee for the bill self-approval gate. Promoting emp1 here would turn the
+// later "employee CANNOT self-approve" assertions into false passes.
 await check("company admin CAN update employee role", () =>
-  assertSucceeds(updateDoc(doc(asUser("admin"), "users", "emp1"), { role: "manager" }))
+  assertSucceeds(updateDoc(doc(asUser("admin"), "users", "emp2"), { role: "manager" }))
 );
 await check("outsider CANNOT update user in another company", () =>
   assertFails(updateDoc(doc(asUser("outsider"), "users", "emp1"), { name: "Hacked" }))

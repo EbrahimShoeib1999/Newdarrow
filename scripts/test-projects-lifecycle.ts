@@ -16,7 +16,16 @@ import {
 import {
   ACTIVITY_PRESETS,
   getActivityPreset,
+  supportsUnitInventory,
 } from "../src/features/projects/constants/activity-presets";
+import {
+  canTransitionUnit,
+  isCommitmentAllowed,
+  computeUnitRollup,
+  UNIT_STATUS_TRANSITIONS,
+  type ProjectUnit,
+  type UnitStatus,
+} from "../src/features/projects/types/unit.types";
 import {
   projectTerminologySchema,
   DEFAULT_TERMINOLOGY,
@@ -25,6 +34,7 @@ import {
   computeProjectFinancials,
   contractValueOf,
   invoiceAttachedToProject,
+  type ProjectExpenseCategoryRow,
 } from "../src/features/projects/utils/project-financials";
 import type { Project, ProjectStatus } from "../src/features/projects/types/projects.types";
 import type { Invoice } from "../src/features/billing/schemas/invoice";
@@ -400,6 +410,164 @@ await test("legacy bills without a review field are recorded but NEVER counted a
   near(legacy.costsApproved, 0, "never reviewed => never approved (no silent inference)");
   near(legacy.costsPendingReview, 6900, "legacy bill surfaces in the pending-review slice");
   assert(legacy.pendingReviewCount === 1, "legacy bill counts toward the review queue");
+});
+
+/* -------------------------------------------------------------------------- */
+/* 5. Costs by configurable category (chart of accounts)                      */
+/* -------------------------------------------------------------------------- */
+console.log("\n5. Expense-category rollup (Phase 5: categories are tenant data):");
+
+const catAccounts = [
+  { id: "a5010", code: "5010", name: "Materials" },
+  { id: "a5100", code: "5100", name: "Labor" },
+];
+
+const cF = computeProjectFinancials({
+  project,
+  contracts: [contract],
+  invoices: [],
+  creditNotes: [],
+  accounts: catAccounts,
+  now: "2026-03-01T00:00:00Z",
+  bills: [
+    // Recorded, unreviewed — lines 5800 materials / 1150 labor = grandTotal 6950.
+    {
+      id: "cb1", billNumber: "CB-1", status: "open", projectId: "p1", currency: "SAR",
+      subTotal: 6050, totalTax: 900, grandTotal: 6950, amountPaid: 1390,
+      items: [
+        { description: "Cement", accountId: "a5010", quantity: 1, unitPrice: 5000, taxRate: 15, total: 5750 },
+        { description: "Steel", accountId: "a5010", quantity: 1, unitPrice: 500, taxRate: 10, total: 550 },
+        { description: "Crew", accountId: "a5100", quantity: 1, unitPrice: 550, taxRate: 10, total: 605 },
+        // No account tag → must land in the unclassified bucket, never vanish.
+        { description: "Misc", accountId: "", quantity: 1, unitPrice: 100, taxRate: 15, total: 115 },
+      ],
+    },
+    // Approved and paid in full — single category.
+    {
+      id: "cb2", billNumber: "CB-2", status: "paid", projectId: "p1", currency: "SAR",
+      subTotal: 2000, totalTax: 300, grandTotal: 2300, amountPaid: 2300,
+      approvalStatus: "approved", approvedBy: "u-acct",
+      items: [{ description: "Subcontract", accountId: "a5100", quantity: 1, unitPrice: 2000, taxRate: 15, total: 2300 }],
+    },
+    // Legacy bill without items at all → entirely unclassified.
+    { id: "cb3", billNumber: "CB-3", status: "open", projectId: "p1", currency: "SAR",
+      subTotal: 1000, totalTax: 150, grandTotal: 1150, amountPaid: 0 },
+    // Rejected bills must not contribute to any category.
+    { id: "cb4", billNumber: "CB-4", status: "open", projectId: "p1", currency: "SAR",
+      subTotal: 500, totalTax: 75, grandTotal: 575, amountPaid: 0, approvalStatus: "rejected",
+      items: [{ description: "Dup", accountId: "a5010", quantity: 1, unitPrice: 500, taxRate: 15, total: 575 }],
+    },
+  ] as unknown as Bill[],
+});
+
+const catRow = (id: string): ProjectExpenseCategoryRow =>
+  cF.expenseByCategory.find((r) => r.accountId === id)!;
+
+await test("category totals reconcile with the authoritative tiers exactly", () => {
+  const sum = (pick: (r: ProjectExpenseCategoryRow) => number) =>
+    cF.expenseByCategory.reduce((s, r) => s + pick(r), 0);
+  near(sum((r) => r.recorded), cF.expensesActual, "Σ categories = recorded cost");
+  near(sum((r) => r.approved), cF.costsApproved, "Σ categories = approved actual");
+  near(sum((r) => r.paid), cF.paidCosts, "Σ categories = paid cost");
+});
+
+await test("line shares allocate proportionally incl. VAT, per expense account", () => {
+  // Σ line totals = 7020 (post-tax); each account takes share/7020 of the
+  // bill's recognized grandTotal — an over-stated line sum rescales, nothing
+  // is dropped or invented.
+  const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+  near(catRow("a5010").recorded, r2((6300 / 7020) * 6950), "materials share");
+  near(catRow("a5100").recorded, r2((605 / 7020) * 6950) + 2300, "labor across both bills");
+  assert(catRow("a5010").code === "5010" && catRow("a5010").label === "Materials", "label & code resolved from the COA");
+  // Approved tier rides only on accountant-approved bills.
+  near(catRow("a5100").approved, 2300, "approved share follows bill approval");
+  near(catRow("a5010").approved, 0, "unreviewed bill contributes nothing approved");
+});
+
+await test("untagged lines and item-less legacy bills fall into one unclassified row", () => {
+  const unc = catRow("");
+  // 115/7020 of cb1 + the whole legacy cb3 (1150).
+  near(unc.recorded, Math.round((((115 / 7020) * 6950 + 1150) + Number.EPSILON) * 100) / 100, "unclassified keeps every riyal");
+  assert(unc.label === "", "unclassified row carries no fake account name");
+});
+
+await test("rejected bills never contribute to any category", () => {
+  // cb4 (rejected) shares the a5010 account — its total must exclude 575:
+  const materialsExpected = Math.round(((6300 / 7020) * 6950 + Number.EPSILON) * 100) / 100;
+  near(catRow("a5010").recorded, materialsExpected, "rejected bill added nothing to materials");
+});
+
+/* -------------------------------------------------------------------------- */
+/* 6. Real-estate units — status machine + inventory rollup + type gating       */
+/* -------------------------------------------------------------------------- */
+console.log("6. Real-estate unit module:");
+
+await test("real-estate & property-management unlock the units module; others do not", () => {
+  assert(supportsUnitInventory("real_estate"), "real_estate supports units");
+  assert(supportsUnitInventory("property_management"), "property_management supports units");
+  assert(!supportsUnitInventory("software"), "software does NOT support units");
+  assert(!supportsUnitInventory(null), "null activity does NOT support units");
+  assert(
+    !!getActivityPreset("real_estate") && !!getActivityPreset("property_management"),
+    "both new presets are registered"
+  );
+});
+
+await test("sold is terminal — no outgoing transition is allowed", () => {
+  assert(UNIT_STATUS_TRANSITIONS.sold.length === 0, "sold has no transitions");
+  for (const to of ["available", "reserved", "maintenance", "withdrawn"] as UnitStatus[]) {
+    assert(!canTransitionUnit("sold", to), `sold -> ${to} must be rejected`);
+  }
+});
+
+await test("illegal edges are rejected, legal ones accepted", () => {
+  assert(canTransitionUnit("available", "reserved"), "available -> reserved ok");
+  assert(canTransitionUnit("reserved", "sold"), "reserved -> sold ok");
+  assert(!canTransitionUnit("maintenance", "sold"), "maintenance -> sold illegal");
+  assert(!canTransitionUnit("withdrawn", "reserved"), "withdrawn -> reserved illegal");
+});
+
+await test("a committed unit can never be double-reserved or re-sold", () => {
+  // Reserve/sell only from an uncommitted state; reserved -> sold is the sole
+  // commit-to-commit edge (converting a reservation into the sale).
+  assert(!isCommitmentAllowed("reserved", "reserved"), "cannot reserve an already-reserved unit");
+  assert(!isCommitmentAllowed("sold", "reserved"), "cannot reserve a sold unit");
+  assert(!isCommitmentAllowed("maintenance", "sold"), "cannot sell from maintenance");
+  assert(isCommitmentAllowed("available", "sold"), "available -> sell ok");
+  assert(isCommitmentAllowed("reserved", "sold"), "reserve -> sell ok");
+});
+
+const mkUnit = (id: string, status: UnitStatus, price: number, area: number): ProjectUnit => ({
+  id,
+  projectId: "p1",
+  code: id,
+  unitType: "apartment",
+  price,
+  area,
+  currency: "SAR",
+  status,
+  createdAt: "",
+  updatedAt: "",
+});
+
+await test("rollup reconciles counts and asking-price value across statuses", () => {
+  const units: ProjectUnit[] = [
+    mkUnit("A-101", "available", 500000, 90),
+    mkUnit("A-102", "reserved", 620000, 110),
+    mkUnit("A-103", "sold", 750000, 120),
+    mkUnit("A-104", "maintenance", 480000, 80),
+    mkUnit("A-105", "withdrawn", 999999, 999),
+  ];
+  const r = computeUnitRollup(units);
+  assert(r.total === 5, "counts all units");
+  assert(r.available === 1 && r.reserved === 1 && r.sold === 1, "per-status counts");
+  assert(r.inventoryValue === 500000 + 620000 + 750000 + 480000 + 999999, "inventory value = every asking price");
+  assert(r.soldValue === 750000, "sold value only counts sold units");
+  // Marketable = available + maintenance (not reserved, not withdrawn, not sold).
+  assert(r.unsoldValue === 500000 + 480000, "marketable value excludes committed/withdrawn");
+  assert(r.reservedValue === 620000, "reserved value only counts reserved");
+  // A sold unit's asking price must NOT leak into the marketable bucket (no double count).
+  assert(r.unsoldValue + r.reservedValue + r.soldValue < r.inventoryValue, "buckets never exceed inventory total");
 });
 
 /* -------------------------------------------------------------------------- */

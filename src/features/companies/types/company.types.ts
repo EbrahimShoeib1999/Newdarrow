@@ -7,6 +7,12 @@ export interface CompanyProfile {
   legalName?: string;
   email?: string;
   phone?: string;
+  /**
+   * Tenant-configured WhatsApp support number (the assistant's support entry
+   * reads this; the number is never invented by the app). Digits and an optional
+   * leading + only.
+   */
+  whatsappSupportPhone?: string;
   address?: string;
   city?: string;
   country?: string;

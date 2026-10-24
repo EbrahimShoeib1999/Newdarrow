@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useCompany } from "@/features/companies/context/company-context";
 import { useTaskQuery, useSprintsQuery, useTasksQuery, useAllTasksQuery } from "../hooks/use-tasks";
+import { useProject } from "@/features/projects/hooks/use-projects";
 import { toast } from "sonner";
 import type { Task } from "../types/task.types";
 import { useAllUsers } from "@/features/users/hooks/use-users";
@@ -417,6 +418,8 @@ export function TaskDetailPage() {
   const { data, isLoading: isTaskLoading, refetch } = useTaskQuery(taskId!);
   const { data: allSprints } = useSprintsQuery();
   const { data: allTasksResponse } = useAllTasksQuery();
+  // Traceability (Phase 6E): resolve the linked project so the task can open it.
+  const { data: relatedProject } = useProject(data?.data?.projectId);
   const { companyId } = useCompany();
   const updateMutation = useUpdateTask();
   const deleteMutation = useDeleteTask();
@@ -771,6 +774,23 @@ export function TaskDetailPage() {
                   >
                     {parentTaskRecord.title}
                   </button>
+                </div>
+              )}
+
+              {task.projectId && (
+                <div className="rounded-lg border border-default-200 bg-content1 p-3 shadow-sm">
+                  <p className="mb-1.5 text-[11px] font-medium text-default-500">
+                    {t("detail.relatedProject")}
+                  </p>
+                  <Link
+                    to={`/projects/${task.projectId}`}
+                    className="flex items-center gap-1.5 truncate text-start text-sm font-semibold text-primary hover:underline"
+                  >
+                    <Layers className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate" dir="auto">
+                      {relatedProject?.name || task.projectId}
+                    </span>
+                  </Link>
                 </div>
               )}
 

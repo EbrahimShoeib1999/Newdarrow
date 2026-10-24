@@ -165,6 +165,7 @@ export function CompanyProfileForm({ readOnly }: CompanyProfileFormProps) {
       legalName: "",
       email: "",
       phone: "",
+      whatsappSupportPhone: "",
       address: "",
       city: "",
       country: "",
@@ -185,6 +186,7 @@ export function CompanyProfileForm({ readOnly }: CompanyProfileFormProps) {
         legalName: profile.legalName ?? "",
         email: profile.email ?? "",
         phone: profile.phone ?? "",
+        whatsappSupportPhone: profile.whatsappSupportPhone ?? "",
         address: profile.address ?? "",
         city: profile.city ?? "",
         country: profile.country ?? "",
@@ -332,6 +334,13 @@ export function CompanyProfileForm({ readOnly }: CompanyProfileFormProps) {
               variant="bordered"
               isReadOnly={!editable}
               {...register("phone")}
+            />
+            <Input
+              label={t("company.fields.whatsappSupportPhone")}
+              variant="bordered"
+              isReadOnly={!editable}
+              errorMessage={errors.whatsappSupportPhone?.message}
+              {...register("whatsappSupportPhone")}
             />
             <Input
               label={t("company.fields.address")}

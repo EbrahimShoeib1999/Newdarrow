@@ -97,9 +97,65 @@ export const ACTIVITY_PRESETS: ActivityPreset[] = [
     },
     suggestedTags: [],
   },
+  {
+    key: "real_estate",
+    labels: { en: "Real Estate Development", ar: "تطوير عقاري" },
+    milestones: {
+      en: [
+        "Land acquisition & permits",
+        "Masterplan & unit design",
+        "Construction",
+        "Sales & handover",
+        "Post-sale service",
+      ],
+      ar: [
+        "استملاك الأرض والتراخيص",
+        "المخطط العام وتصميم الوحدات",
+        "التنفيذ الإنشائي",
+        "البيع والتسليم",
+        "خدمة ما بعد البيع",
+      ],
+    },
+    suggestedTags: ["real-estate"],
+  },
+  {
+    key: "property_management",
+    labels: { en: "Property Management", ar: "إدارة عقارات" },
+    milestones: {
+      en: [
+        "Inventory onboarding",
+        "Tenant setup",
+        "Operations & maintenance",
+        "Renewals",
+        "Periodic reporting",
+      ],
+      ar: [
+        "تسجيل المحفظة",
+        "تجهيز المستأجرين",
+        "التشغيل والصيانة",
+        "التجديدات",
+        "التقرير الدوري",
+      ],
+    },
+    suggestedTags: ["property-management"],
+  },
 ];
 
 export function getActivityPreset(key?: string | null): ActivityPreset | undefined {
   if (!key) return undefined;
   return ACTIVITY_PRESETS.find((p) => p.key === key);
+}
+
+/**
+ * The project types whose model is unit-based: they unlock the integrated
+ * unit-inventory tab. Kept as data (not a scattered condition) so new
+ * unit-bearing types are added in one place.
+ */
+export const UNIT_BEARING_ACTIVITY: readonly ProjectActivityType[] = [
+  "real_estate",
+  "property_management",
+];
+
+export function supportsUnitInventory(activityType?: string | null): boolean {
+  return !!activityType && (UNIT_BEARING_ACTIVITY as readonly string[]).includes(activityType);
 }

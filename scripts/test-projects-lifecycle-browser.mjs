@@ -602,6 +602,19 @@ try {
       ["1,150", "rejected slice stays visible though excluded"],
     ];
     for (const [n, what] of needles) if (!txt.includes(n)) throw new Error(`${what} (${n}) missing before review`);
+    // Phase 5: costs-by-category card. The seeded lines point at an accountId
+    // absent from the chart of accounts, so every riyal must degrade into the
+    // single "Uncategorized" row — reconciling with the recorded tier — and the
+    // raw Firestore id must NEVER leak as a label. (Heading is CSS-uppercased:
+    // innerText reports it lowercase, hence the case-insensitive probes.)
+    const lower = txt.toLowerCase();
+    if (!lower.includes("costs by category")) throw new Error("costs-by-category card missing");
+    if (!lower.includes("uncategorized")) throw new Error("unclassified category row missing");
+    if (lower.includes("acct_x")) throw new Error("raw account id leaked into the category label");
+    // Frame the card for the evidence shot (it sits below the totals grid).
+    await js(`(() => { const h = Array.from(document.querySelectorAll('p')).find(p => /costs by category/i.test(p.innerText || '')); if (h) h.scrollIntoView({ block: 'start' }); return !!h; })()`);
+    await sleep(400);
+    await shot("09a-costs-by-category");
     await shot("09-cost-tiers-before-review");
     // Accountant approves E2E-B-001 from the project's review queue.
     if (!(await clickRowButton("E2E-B-001", ["Approve"]))) throw new Error("approve button not found on E2E-B-001 row");

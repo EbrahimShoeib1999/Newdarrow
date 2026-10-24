@@ -4,6 +4,7 @@ import { BillingService } from "../api/billing.service";
 import { useCompany } from "@/features/companies/context/company-context";
 import { convertTimestampsToDates } from "../utils/timestamp";
 import { buildBillJournalEntry } from "../utils/accounting-engine";
+import { onBillCreated, onBillApprovalChanged } from "@/features/automation/lib/event-automations";
 
 async function postBillIfNeeded(
   companyId: string,
@@ -69,10 +70,12 @@ export function useCreateBillMutation() {
       await postBillIfNeeded(companyId!, newBill, true);
       return newBill;
     },
-    onSuccess: () => {
+    onSuccess: (newBill) => {
       queryClient.invalidateQueries({ queryKey: ["billing", "bills"] });
       queryClient.invalidateQueries({ queryKey: ["billing", "journals"] });
       queryClient.invalidateQueries({ queryKey: ["billing", "accounts"] });
+      // Phase 9B: fire-and-forget automation (B4: notify accountants)
+      void onBillCreated(companyId!, newBill);
     },
   });
 }
@@ -92,15 +95,18 @@ export function useUpdateBillMutation() {
       const res = await BillingService.bills.update(companyId!, id, data);
       const updated = convertTimestampsToDates(res.data) as Bill;
       await postBillIfNeeded(companyId!, updated, isPosting);
-      return updated;
+      // Attach previous approval for event-automation comparison
+      return { updated, previousApproval: existing.approvalStatus };
     },
-    onSuccess: (_, variables) => {
+    onSuccess: ({ updated, previousApproval }) => {
       queryClient.invalidateQueries({ queryKey: ["billing", "bills"] });
       queryClient.invalidateQueries({
-        queryKey: ["billing", "bills", variables.id],
+        queryKey: ["billing", "bills", updated.id],
       });
       queryClient.invalidateQueries({ queryKey: ["billing", "journals"] });
       queryClient.invalidateQueries({ queryKey: ["billing", "accounts"] });
+      // Phase 9B: fire-and-forget automation (B5: notify on approval change)
+      void onBillApprovalChanged(companyId!, updated, previousApproval);
     },
   });
 }

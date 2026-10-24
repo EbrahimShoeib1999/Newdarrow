@@ -29,6 +29,7 @@
       "legalName": "الاسم القانوني",
       "email": "البريد التجاري",
       "phone": "هاتف الشركة",
+      "whatsappSupportPhone": "رقم دعم واتساب",
       "address": "العنوان",
       "city": "المدينة",
       "country": "الدولة",

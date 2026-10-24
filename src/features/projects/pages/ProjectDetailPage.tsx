@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import {
   Button,
@@ -13,6 +14,8 @@ import {
   ModalFooter,
   ModalHeader,
   Progress,
+  Select,
+  SelectItem,
   Spinner,
   Tab,
   Tabs,
@@ -21,6 +24,7 @@ import {
 import {
   ArrowLeft,
   Ban,
+  Building2,
   CheckCircle2,
   CircleSlash,
   Edit2,
@@ -41,11 +45,13 @@ import { useContactsQuery } from "@/features/crm/hooks/use-contacts";
 import { contactDisplayName } from "@/features/crm/utils/contacts-list.utils";
 import { useInvoices } from "@/features/billing/hooks/use-invoices";
 import { useBills, useUpdateBillMutation } from "@/features/billing/hooks/use-bills";
+import { useAccounts } from "@/features/billing/hooks/use-accounts";
 import { useCreditNotes } from "@/features/billing/hooks/use-credit-notes";
 import { useContractsQuery } from "@/features/crm/hooks/use-contracts";
 import { useDealsQuery } from "@/features/crm/hooks/use-deals";
 import { useAllUsers } from "@/features/users/hooks/use-users";
 import { localizedName } from "@/lib/localized-name";
+import { selectFieldProps } from "@/components/shared/select-field";
 import { useProjectT } from "../hooks/use-project-terminology";
 import {
   useMilestones,
@@ -55,8 +61,20 @@ import {
   useProject,
   useTransitionProjectMutation,
   useUpdateProjectMutation,
+  useUnits,
+  useDeleteUnitMutation,
+  useChangeUnitStatusMutation,
 } from "../hooks/use-projects";
 import { PROJECT_STATUS_TRANSITIONS, requiredReasonField } from "../constants/project-lifecycle";
+import { supportsUnitInventory } from "../constants/activity-presets";
+import {
+  computeUnitRollup,
+  canTransitionUnit,
+  UNIT_STATUS_TRANSITIONS,
+  type ProjectUnit,
+  type UnitStatus,
+} from "../types/unit.types";
+import { UnitFormModal } from "../components/UnitFormModal";
 import { computeProjectFinancials } from "../utils/project-financials";
 import { canApproveDocuments } from "@/lib/permissions/document-approval";
 import { ProjectFormModal } from "../components/ProjectFormModal";
@@ -306,6 +324,11 @@ export function ProjectDetailPage() {
         <Tab key="delivery" title={t("detail.delivery")}>
           <DeliveryTab project={project} canManage={canManage} />
         </Tab>
+        {supportsUnitInventory(project.activityType) && (
+          <Tab key="units" title={t("units.tabTitle")}>
+            <UnitsTab project={project} canManage={canManage} />
+          </Tab>
+        )}
       </Tabs>
 
       {/* Transition confirmation / reason modal */}
@@ -955,8 +978,10 @@ function MilestonesTab({ project, canManage }: { project: Project; canManage: bo
 
 function FinancialsTab({ project }: { project: Project }) {
   const { t } = useProjectT();
+  const { t: tb } = useTranslation("billing");
   const { data: invoicesRes } = useInvoices();
   const { data: bills = [] } = useBills();
+  const { data: accounts = [] } = useAccounts();
   const { data: creditNotes = [] } = useCreditNotes();
   const { data: contractsRes } = useContractsQuery();
   const updateBill = useUpdateBillMutation();
@@ -977,8 +1002,9 @@ function FinancialsTab({ project }: { project: Project }) {
         invoices: invoices as never,
         bills: bills as never,
         creditNotes: creditNotes as never,
+        accounts: accounts as never,
       }),
-    [project, contracts, invoices, bills, creditNotes]
+    [project, contracts, invoices, bills, creditNotes, accounts]
   );
 
   const row = (label: string, value: number, opts?: { accent?: string; hint?: string }) => (
@@ -1069,6 +1095,49 @@ function FinancialsTab({ project }: { project: Project }) {
           </CardBody>
         </Card>
       </div>
+
+      {/* Costs by category — the tenant's chart of accounts IS the configurable
+          category list (add/rename/deactivate in Billing → Chart of Accounts);
+          each bill line's recorded cost is allocated to its account here. */}
+      {fin.expenseByCategory.length > 0 && (
+        <Card className="border border-default-100">
+          <CardBody className="gap-2">
+            <p className="text-xs font-extrabold uppercase text-default-400">
+              {t("financials.byCategoryTitle")}
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-start text-default-400">
+                    <th className="py-1.5 text-start font-bold">{t("financials.byCategoryAccount")}</th>
+                    <th className="py-1.5 text-end font-bold">{t("financials.costRecorded")}</th>
+                    <th className="py-1.5 text-end font-bold">{t("financials.costApproved")}</th>
+                    <th className="py-1.5 text-end font-bold">{t("financials.costPaid")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fin.expenseByCategory.map((c) => (
+                    <tr key={c.accountId || "__unclassified__"} className="border-t border-default-100">
+                      <td className="py-1.5">
+                        <span className="font-semibold">
+                          {c.accountId
+                            ? tb(`accounts.names.${c.label}`, { defaultValue: c.label })
+                            : t("financials.uncategorized")}
+                        </span>
+                        {c.code && <span className="ms-1.5 text-default-400">({c.code})</span>}
+                      </td>
+                      <td className="py-1.5 text-end tabular-nums">{formatCurrency(c.recorded, fin.currency)}</td>
+                      <td className="py-1.5 text-end tabular-nums">{formatCurrency(c.approved, fin.currency)}</td>
+                      <td className="py-1.5 text-end tabular-nums">{formatCurrency(c.paid, fin.currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-default-400">{t("financials.byCategoryHint")}</p>
+          </CardBody>
+        </Card>
+      )}
 
       <Card className="border border-default-100">
         <CardBody className="gap-2">
@@ -1542,6 +1611,322 @@ function DeliveryTab({ project, canManage }: { project: Project; canManage: bool
           )}
         </CardBody>
       </Card>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Units — integrated real-estate inventory (only for unit-bearing types)      */
+/* -------------------------------------------------------------------------- */
+
+const UNIT_STATUS_STYLES: Record<UnitStatus, string> = {
+  available: "bg-success/10 text-success",
+  reserved: "bg-warning/10 text-warning",
+  sold: "bg-primary/10 text-primary",
+  maintenance: "bg-default-100 text-default-600",
+  withdrawn: "bg-danger/10 text-danger",
+};
+
+function UnitsTab({ project, canManage }: { project: Project; canManage: boolean }) {
+  const { t } = useProjectT();
+  const { data: units = [] } = useUnits(project.id);
+  const deleteUnit = useDeleteUnitMutation(project.id);
+  const changeStatus = useChangeUnitStatusMutation(project.id);
+  const { data: contactsRes } = useContactsQuery();
+  const contacts = contactsRes?.data ?? [];
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<ProjectUnit | null>(null);
+  // A commitment (reserve/sell) needs a buyer reference → collect it in a modal.
+  const [commitTarget, setCommitTarget] = useState<{ unit: ProjectUnit; to: UnitStatus } | null>(
+    null
+  );
+  const [commitBuyer, setCommitBuyer] = useState("");
+  const [commitNote, setCommitNote] = useState("");
+  const [commitError, setCommitError] = useState<string | null>(null);
+
+  const rollup = useMemo(() => computeUnitRollup(units), [units]);
+  const buyerName = (id?: string | null) => {
+    if (!id) return null;
+    const c = contacts.find((x) => x.id === id);
+    return c ? contactDisplayName(c) : id;
+  };
+
+  const nextStatuses = (u: ProjectUnit) =>
+    (UNIT_STATUS_TRANSITIONS[u.status] ?? []).filter((to) => canTransitionUnit(u.status, to));
+
+  const openCommit = (unit: ProjectUnit, to: UnitStatus) => {
+    setCommitTarget({ unit, to });
+    setCommitBuyer(unit.buyerContactId ?? "");
+    setCommitNote("");
+    setCommitError(null);
+  };
+
+  const applyTransition = async (u: ProjectUnit, to: UnitStatus) => {
+    setCommitError(null);
+    // Reserve / sell route through the commitment modal to capture the buyer.
+    if (to === "reserved" || to === "sold") {
+      openCommit(u, to);
+      return;
+    }
+    try {
+      await changeStatus.mutateAsync({ unitId: u.id, to });
+    } catch (e) {
+      setCommitError(e instanceof Error ? e.message : "error");
+    }
+  };
+
+  const submitCommit = async () => {
+    if (!commitTarget) return;
+    try {
+      await changeStatus.mutateAsync({
+        unitId: commitTarget.unit.id,
+        to: commitTarget.to,
+        buyerContactId: commitBuyer || null,
+        note: commitNote.trim() || undefined,
+      });
+      setCommitTarget(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      setCommitError(
+        msg.startsWith("unit_already_committed")
+          ? t("units.errAlreadyCommitted")
+          : msg.startsWith("invalid_transition")
+            ? t("units.errInvalidTransition")
+            : msg || t("units.errInvalidTransition")
+      );
+    }
+  };
+
+  return (
+    <div className="pt-4 space-y-4">
+      <p className="text-[11px] text-default-400">{t("units.note")}</p>
+
+      {/* Inventory rollup — asking-price valuation, distinct from collected revenue. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {(
+          [
+            { k: "available", v: rollup.available, tone: "text-success" },
+            { k: "reserved", v: rollup.reserved, tone: "text-warning" },
+            { k: "sold", v: rollup.sold, tone: "text-primary" },
+            { k: "total", v: rollup.total, tone: "" },
+          ] as const
+        ).map((s) => (
+          <Card key={s.k} className="border border-default-100">
+            <CardBody className="gap-0.5">
+              <p className="text-[11px] font-bold uppercase text-default-400">{t(`units.${s.k}`)}</p>
+              <p className={cn("text-2xl font-extrabold tabular-nums", s.tone)}>{s.v}</p>
+            </CardBody>
+          </Card>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card className="border border-default-100">
+          <CardBody className="gap-0.5">
+            <p className="text-[11px] font-bold uppercase text-default-400">{t("units.inventoryValue")}</p>
+            <p className="text-lg font-extrabold tabular-nums">{formatCurrency(rollup.inventoryValue, rollup.currency)}</p>
+          </CardBody>
+        </Card>
+        <Card className="border border-default-100">
+          <CardBody className="gap-0.5">
+            <p className="text-[11px] font-bold uppercase text-default-400">{t("units.soldValue")}</p>
+            <p className="text-lg font-extrabold tabular-nums">{formatCurrency(rollup.soldValue, rollup.currency)}</p>
+          </CardBody>
+        </Card>
+        <Card className="border border-default-100">
+          <CardBody className="gap-0.5">
+            <p className="text-[11px] font-bold uppercase text-default-400">{t("units.unsoldValue")}</p>
+            <p className="text-lg font-extrabold tabular-nums">{formatCurrency(rollup.unsoldValue, rollup.currency)}</p>
+          </CardBody>
+        </Card>
+      </div>
+
+      {canManage && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            color="primary"
+            variant="flat"
+            startContent={<Plus className="h-3.5 w-3.5" />}
+            onPress={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
+            {t("units.add")}
+          </Button>
+        </div>
+      )}
+
+      {units.length === 0 ? (
+        <Card className="border border-default-100">
+          <CardBody className="items-center gap-2 py-8 text-center">
+            <Building2 className="h-8 w-8 text-default-300" />
+            <p className="text-sm text-default-500">{t("units.empty")}</p>
+          </CardBody>
+        </Card>
+      ) : (
+        <Card className="border border-default-100">
+          <CardBody className="p-0 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-start text-[11px] text-default-400">
+                  <th className="px-4 py-2 text-start font-bold">{t("units.code")}</th>
+                  <th className="px-4 py-2 text-start font-bold">{t("units.unitType")}</th>
+                  <th className="px-4 py-2 text-end font-bold">{t("units.area")}</th>
+                  <th className="px-4 py-2 text-end font-bold">{t("units.price")}</th>
+                  <th className="px-4 py-2 text-start font-bold">{t("units.status")}</th>
+                  <th className="px-4 py-2 text-start font-bold">{t("units.buyer")}</th>
+                  {canManage && <th className="px-4 py-2 text-end font-bold">{t("units.actions")}</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {units.map((u) => (
+                  <tr key={u.id} className="border-t border-default-100">
+                    <td className="px-4 py-2">
+                      <span className="font-semibold">{u.code}</span>
+                      {(u.building || u.floor) && (
+                        <span className="block text-[11px] text-default-400">
+                          {[u.building, u.floor].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">{t(`units.types.${u.unitType}`)}</td>
+                    <td className="px-4 py-2 text-end tabular-nums">
+                      {u.area != null ? `${u.area} ${t("units.areaUnit")}` : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-end tabular-nums font-semibold">
+                      {formatCurrency(u.price, u.currency)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <Chip size="sm" variant="flat" className={cn("border-none font-bold text-[10px]", UNIT_STATUS_STYLES[u.status])}>
+                        {t(`units.statuses.${u.status}`)}
+                      </Chip>
+                    </td>
+                    <td className="px-4 py-2 text-xs text-default-500">{buyerName(u.buyerContactId) || "—"}</td>
+                    {canManage && (
+                      <td className="px-4 py-2">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          {nextStatuses(u).map((to) => (
+                            <Button
+                              key={to}
+                              size="sm"
+                              variant="light"
+                              color={to === "sold" ? "success" : to === "reserved" ? "warning" : to === "withdrawn" ? "danger" : "default"}
+                              isLoading={changeStatus.isPending}
+                              onPress={() => applyTransition(u, to)}
+                            >
+                              {t(`units.actions2.${to}`)}
+                            </Button>
+                          ))}
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="light"
+                            aria-label={t("units.edit")}
+                            onPress={() => {
+                              setEditing(u);
+                              setFormOpen(true);
+                            }}
+                          >
+                            <Edit2 className="h-3.5 w-3.5 text-default-400" />
+                          </Button>
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="light"
+                            aria-label={t("units.delete")}
+                            onPress={() => deleteUnit.mutateAsync(u.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-default-400" />
+                          </Button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardBody>
+        </Card>
+      )}
+
+      {commitError && !commitTarget && (
+        <p className="text-xs font-semibold text-danger">{commitError}</p>
+      )}
+
+      <UnitFormModal
+        isOpen={formOpen}
+        onOpenChange={setFormOpen}
+        projectId={project.id}
+        unit={editing}
+      />
+
+      {/* Commitment modal: record the buyer when reserving / selling a unit. */}
+      <Modal isOpen={!!commitTarget} onOpenChange={(o) => !o && setCommitTarget(null)}>
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader>
+                {commitTarget
+                  ? t(
+                      commitTarget.to === "sold"
+                        ? "units.commitSellTitle"
+                        : "units.commitReserveTitle"
+                    )
+                  : ""}
+              </ModalHeader>
+              <ModalBody className="gap-3">
+                {commitTarget && (
+                  <p className="text-sm text-default-500">
+                    {t("units.commitFor", { code: commitTarget.unit.code })}
+                  </p>
+                )}
+                <Select
+                  {...selectFieldProps()}
+                  label={t("units.buyer")}
+                  placeholder={t("units.noBuyer")}
+                  selectedKeys={commitBuyer ? [commitBuyer] : []}
+                  onSelectionChange={(keys) => {
+                    const v = Array.from(keys)[0] as string | undefined;
+                    setCommitBuyer(v ?? "");
+                  }}
+                >
+                  {[
+                    { id: "", label: t("units.noBuyer") },
+                    ...contacts.map((c) => ({ id: c.id, label: contactDisplayName(c) })),
+                  ].map((o) => (
+                    <SelectItem key={o.id} textValue={o.label}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </Select>
+                <Textarea
+                  label={t("units.commitNote")}
+                  value={commitNote}
+                  onValueChange={setCommitNote}
+                  minRows={2}
+                />
+                {commitError && (
+                  <p className="text-xs font-semibold text-danger">{commitError}</p>
+                )}
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" onPress={onClose}>
+                  {t("form.cancel")}
+                </Button>
+                <Button
+                  color={commitTarget?.to === "sold" ? "success" : "warning"}
+                  isLoading={changeStatus.isPending}
+                  onPress={submitCommit}
+                >
+                  {t("form.save")}
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

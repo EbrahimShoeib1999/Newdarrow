@@ -1,8 +1,9 @@
 import { Button } from "@heroui/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
+import { resolvePostLoginTarget } from "../utils/post-login";
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -37,6 +38,7 @@ export function GoogleSignInButton({
   const { t } = useTranslation("auth");
   const { loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -45,7 +47,8 @@ export function GoogleSignInButton({
     setLoading(true);
     try {
       await loginWithGoogle();
-      navigate("/", { replace: true, state: { choosePortal: true } });
+      const target = resolvePostLoginTarget(location);
+      navigate(target.to, { replace: true, state: target.state });
     } catch (err: unknown) {
       const code =
         err && typeof err === "object" && "code" in err

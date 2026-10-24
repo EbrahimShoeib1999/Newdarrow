@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Spinner } from "@heroui/react";
 import {
@@ -10,6 +10,7 @@ import {
 import { AuthBrandLayout } from "../components/auth-brand-layout";
 import { LoginForm } from "../components/login-form";
 import { useAuth } from "../context/auth-context";
+import { resolvePostLoginTarget } from "../utils/post-login";
 
 const LOGIN_FEATURES = [
   { key: "crm", icon: FileText },
@@ -21,6 +22,7 @@ const LOGIN_FEATURES = [
 export function LoginPage() {
   const { t } = useTranslation("auth");
   const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -31,7 +33,8 @@ export function LoginPage() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace state={{ choosePortal: true }} />;
+    const target = resolvePostLoginTarget(location);
+    return <Navigate to={target.to} replace state={target.state} />;
   }
 
   return (

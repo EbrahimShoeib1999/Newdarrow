@@ -3,6 +3,8 @@ import { Header } from "./header";
 import { PortalSidebar } from "./portal-sidebar";
 import { PortalPickerDrawer } from "@/features/portals/components/PortalPickerDrawer";
 import { LateCheckInAlertModal } from "@/features/people/components/LateCheckInAlertModal";
+import { AssistantLauncher } from "@/features/assistant/components/AssistantLauncher";
+import { useAutomationScanner } from "@/features/automation/hooks/use-automation-scanner";
 import { useSyncLastPortal } from "@/features/portals/hooks/use-sync-last-portal";
 import { useMeetingReminders } from "@/features/meetings/hooks/use-meeting-reminders";
 import { getPortalFromPath } from "@/lib/portal-permissions";
@@ -12,6 +14,7 @@ import { useLayoutStore } from "@/stores/layout.store";
 export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
   useSyncLastPortal();
   useMeetingReminders();
+  useAutomationScanner();
   const { pathname } = useLocation();
   const { sidebarCollapsed, portalPickerOpen, setPortalPickerOpen } =
     useLayoutStore();
@@ -54,6 +57,7 @@ export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
         onOpenChange={setPortalPickerOpen}
       />
       <LateCheckInAlertModal />
+      {!isPicker && <AssistantLauncher />}
     </div>
   );
 }

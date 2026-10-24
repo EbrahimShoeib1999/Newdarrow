@@ -31,6 +31,7 @@ function mapCompanyDoc(
     legalName: data.legalName as string | undefined,
     email: data.email as string | undefined,
     phone: data.phone as string | undefined,
+    whatsappSupportPhone: data.whatsappSupportPhone as string | undefined,
     address: data.address as string | undefined,
     city: data.city as string | undefined,
     country: data.country as string | undefined,

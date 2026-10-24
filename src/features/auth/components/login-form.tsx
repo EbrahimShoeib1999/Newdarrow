@@ -4,10 +4,11 @@ import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import * as z from "zod";
 import { cn } from "@/lib/utils";
 import { useAuth } from "../context/auth-context";
+import { resolvePostLoginTarget } from "../utils/post-login";
 import { GoogleSignInButton } from "./google-sign-in-button";
 
 const loginSchema = z.object({
@@ -33,6 +34,7 @@ export function LoginForm() {
   const { t } = useTranslation("auth");
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
@@ -55,7 +57,8 @@ export function LoginForm() {
 
     try {
       await login(data.email, data.password);
-      navigate("/", { replace: true, state: { choosePortal: true } });
+      const target = resolvePostLoginTarget(location);
+      navigate(target.to, { replace: true, state: target.state });
     } catch (err: any) {
       console.error("Login attempt error:", err);
       const code = err?.code || "";

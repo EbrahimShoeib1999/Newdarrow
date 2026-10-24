@@ -1,0 +1,40 @@
+{
+  "launcherAria": "Open assistant and support",
+  "title": "Assistant & Support",
+  "tabs": {
+    "help": "Help",
+    "assistant": "AI Assistant",
+    "support": "Support"
+  },
+  "help": {
+    "searchPlaceholder": "Search help articles...",
+    "empty": "No articles match your search.",
+    "open": "Open"
+  },
+  "assistant": {
+    "unavailableTitle": "Live AI is not available",
+    "unavailableBody": "The assistant only works through a trusted backend endpoint. No provider key is ever used in the browser. Configure VITE_ASSISTANT_ENDPOINT to enable it. Meanwhile, use the Help and Support tabs.",
+    "questionLabel": "Your question",
+    "questionPlaceholder": "Ask about a feature or a workflow...",
+    "ask": "Ask",
+    "thinking": "Thinking...",
+    "answer": "Answer",
+    "untrustedHint": "AI-generated content — verify before acting on it.",
+    "errors": {
+      "blocked": "Assistant is not connected to a trusted backend.",
+      "http": "The assistant service returned an error. Try again later.",
+      "network": "Could not reach the assistant service. Check your connection."
+    }
+  },
+  "support": {
+    "whatsapp": "WhatsApp support",
+    "openWhatsApp": "Open WhatsApp chat",
+    "notConfigured": "No support number is configured for this company yet. An administrator can set it in the company profile.",
+    "ticket": "Support ticket",
+    "subject": "Subject",
+    "details": "Details",
+    "submit": "Create ticket",
+    "ticketCreated": "Support ticket created as a tracked task. __notified__ admin(s) notified.",
+    "ticketFailed": "Could not create the ticket. Please try again."
+  }
+}

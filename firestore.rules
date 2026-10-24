@@ -16,12 +16,15 @@ service cloud.firestore {
     }
 
     function belongsToCompany(companyId) {
-      return signedIn() && hasUserDoc() && userDoc().companyId == companyId;
+      // `.get()` guard: a users doc missing `companyId` (partial profile)
+      // must evaluate to false, not ERROR out every dependent rule and turn
+      // a clean denial into an "evaluation error" permission-denied.
+      return signedIn() && hasUserDoc() && userDoc().get('companyId', '') == companyId;
     }
 
     function isCompanyAdmin(companyId) {
       return belongsToCompany(companyId)
-        && userDoc().role in ['super_admin', 'admin'];
+        && userDoc().get('role', '') in ['super_admin', 'admin'];
     }
 
     // Effective People sub-role; empty string means "fall back to the global role".
@@ -50,7 +53,7 @@ service cloud.firestore {
     // sub-role, so the client review gate is enforced on the server too.
     function canReviewDocuments(companyId) {
       return belongsToCompany(companyId) && (
-        userDoc().role in ['super_admin', 'admin', 'manager']
+        userDoc().get('role', '') in ['super_admin', 'admin', 'manager']
         || billingSubRole() in ['admin', 'manager', 'accountant']
         || 'billing.review_documents' in customPermissions()
       );
@@ -60,10 +63,10 @@ service cloud.firestore {
     // Everyone can always read their own reports; this covers reading everyone's.
     function canViewAllReports(companyId) {
       return belongsToCompany(companyId) && (
-        userDoc().role == 'super_admin'
+        userDoc().get('role', '') == 'super_admin'
         || 'people.view_all_reports' in customPermissions()
         || (
-          userDoc().role in ['admin', 'manager']
+          userDoc().get('role', '') in ['admin', 'manager']
           && (peopleSubRole() == '' || peopleSubRole() in ['admin', 'manager', 'hr'])
         )
       );
@@ -71,10 +74,18 @@ service cloud.firestore {
 
     // User profiles
     match /users/{userId} {
-      // Own profile, or teammates in the same company
+      // Own profile, or teammates in the same company. Every stored-field read
+      // uses `.get(key, default)` so a partial/malformed profile (a users doc
+      // that predates `companyId`, or was written by an interrupted signup)
+      // yields a clean FALSE instead of a hard "Property is undefined" rules
+      // ERROR, which would otherwise break the whole team-roster listener.
       allow read: if signedIn() && (
         request.auth.uid == userId
-        || (hasUserDoc() && resource.data.companyId == userDoc().companyId)
+        || (
+          hasUserDoc()
+          && resource.data.get('companyId', '') != ''
+          && resource.data.get('companyId', '') == userDoc().get('companyId', '')
+        )
       );
 
       // New account (register / invite accept / Google)
@@ -82,44 +93,48 @@ service cloud.firestore {
 
       // Self update (without privilege escalation), or company admin updating teammates
       allow update: if signedIn() && (
-        (hasUserDoc() && isCompanyAdmin(resource.data.companyId))
+        (hasUserDoc() && isCompanyAdmin(resource.data.get('companyId', '')))
         || (
           request.auth.uid == userId
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.companyId == resource.data.companyId
+          && request.resource.data.get('role', '') == resource.data.get('role', '')
+          && request.resource.data.get('companyId', '') == resource.data.get('companyId', '')
           && request.resource.data.get('customPermissions', []) == resource.data.get('customPermissions', [])
           && request.resource.data.get('portalSubRoles', {}) == resource.data.get('portalSubRoles', {})
         )
       );
 
-      allow delete: if hasUserDoc() && isCompanyAdmin(resource.data.companyId);
+      allow delete: if hasUserDoc() && isCompanyAdmin(resource.data.get('companyId', ''));
     }
 
     // Team invitations (token = document id)
     match /invites/{token} {
-      // Accept page loads a single pending invite by token (pre-auth)
-      allow get: if resource.data.status == 'pending'
-        || (signedIn() && isCompanyAdmin(resource.data.companyId));
+      // Accept page loads a single pending invite by token (pre-auth).
+      // `.get('status','')` so an invite doc missing the field is a clean false
+      // (denied) rather than a rules evaluation ERROR.
+      allow get: if resource.data.get('status', '') == 'pending'
+        || (signedIn() && isCompanyAdmin(resource.data.get('companyId', '')));
 
-      // Admins list pending invites for their company (query must filter companyId)
-      allow list: if signedIn() && isCompanyAdmin(resource.data.companyId);
+      // Admins list pending invites for their company (query must filter companyId).
+      // The LIST gate reads each candidate doc, so the per-doc companyId is taken
+      // through `.get()` to avoid an evaluation error on a malformed invite.
+      allow list: if signedIn() && isCompanyAdmin(resource.data.get('companyId', ''));
 
       allow create: if signedIn()
-        && isCompanyAdmin(request.resource.data.companyId)
-        && request.resource.data.status == 'pending'
-        && request.resource.data.email is string
-        && request.resource.data.token == token;
+        && isCompanyAdmin(request.resource.data.get('companyId', ''))
+        && request.resource.data.get('status', '') == 'pending'
+        && request.resource.data.get('email', 0) is string
+        && request.resource.data.get('token', '') == token;
 
       allow update: if signedIn() && (
-        isCompanyAdmin(resource.data.companyId)
+        isCompanyAdmin(resource.data.get('companyId', ''))
         || (
-          resource.data.status == 'pending'
-          && request.resource.data.status == 'accepted'
-          && request.auth.uid == request.resource.data.acceptedBy
+          resource.data.get('status', '') == 'pending'
+          && request.resource.data.get('status', '') == 'accepted'
+          && request.auth.uid == request.resource.data.get('acceptedBy', '')
         )
       );
 
-      allow delete: if signedIn() && isCompanyAdmin(resource.data.companyId);
+      allow delete: if signedIn() && isCompanyAdmin(resource.data.get('companyId', ''));
     }
 
     // OTP password-reset codes - secure against public enumeration and tampering.
@@ -169,17 +184,18 @@ service cloud.firestore {
       // Daily reports are private: authors see their own, managers/HR/admins see all.
       // A list query is only permitted when it is filtered to the caller, which is
       // exactly what DailyReportsService does for non-privileged users.
+      // `resource == null` passes only the empty-collection LIST gate probe; every
+      // returned document is still evaluated against the full condition.
       match /daily_reports/{reportId} {
         allow read: if belongsToCompany(companyId) && (
-          resource.data.employeeId == request.auth.uid
+          resource.data.get('employeeId', '') == request.auth.uid
           || canViewAllReports(companyId)
         );
         allow create: if belongsToCompany(companyId)
-          && request.resource.data.employeeId == request.auth.uid;
+          && request.resource.data.get('employeeId', '') == request.auth.uid;
         // Authors may amend their own report; managers add the review fields.
-        // `resource != null` keeps this from erroring while a create is evaluated.
-        allow update: if belongsToCompany(companyId) && resource != null && (
-          resource.data.employeeId == request.auth.uid
+        allow update: if belongsToCompany(companyId) && (
+          resource.data.get('employeeId', '') == request.auth.uid
           || canViewAllReports(companyId)
         );
         allow delete: if isCompanyAdmin(companyId);
@@ -188,9 +204,8 @@ service cloud.firestore {
       // Conversations & Chat channels: protect private channels and DMs
       match /conversations/{conversationId} {
         // Every branch reads `type`/`visibility`/`memberIds` through
-        // `.get(key, default)` so one legacy/malformed doc (or the emulator's
-        // empty-collection LIST-gate evaluation with no document) evaluates to
-        // false instead of ERRORING out the whole subscription query. Access
+        // `.get(key, default)` so one legacy/malformed doc evaluates to false
+        // instead of ERRORing out the whole chat subscription query. Access
         // semantics are unchanged: public channels are open to the company,
         // non-public channels require public visibility, DMs to their members,
         // and admins see everything.
@@ -214,9 +229,9 @@ service cloud.firestore {
 
           function canAccessParent() {
             return belongsToCompany(companyId) && (
-              parentConversation().type == 'public'
-              || (parentConversation().type == 'channel' && parentConversation().get('visibility', 'public') == 'public')
-              || ('memberIds' in parentConversation() && parentConversation().memberIds is list && request.auth.uid in parentConversation().memberIds)
+              parentConversation().get('type', '') == 'public'
+              || (parentConversation().get('type', '') == 'channel' && parentConversation().get('visibility', 'public') == 'public')
+              || (parentConversation().get('memberIds', []) is list && request.auth.uid in parentConversation().get('memberIds', []))
               || isCompanyAdmin(companyId)
             );
           }
@@ -225,11 +240,11 @@ service cloud.firestore {
           allow create: if canAccessParent()
             && request.resource.data.senderId == request.auth.uid;
           allow update: if canAccessParent() && (
-            resource.data.senderId == request.auth.uid
+            resource.data.get('senderId', '') == request.auth.uid
             || isCompanyAdmin(companyId)
           );
           allow delete: if canAccessParent() && (
-            resource.data.senderId == request.auth.uid
+            resource.data.get('senderId', '') == request.auth.uid
             || isCompanyAdmin(companyId)
           );
         }
@@ -267,7 +282,10 @@ service cloud.firestore {
             && request.resource.data.get('approvalStatus', 'pending') != 'rejected'
           )
         );
-        allow update: if belongsToCompany(companyId) && (
+        // `resource != null` keeps UPDATE semantics; without it the clause
+        // ERRORs while the emulator evaluates a create, silently denying the
+        // non-reviewer branch below.
+        allow update: if belongsToCompany(companyId) && resource != null && (
           canReviewDocuments(companyId)
           || request.resource.data.get('approvalStatus', '') == resource.data.get('approvalStatus', '')
         );

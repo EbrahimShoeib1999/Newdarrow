@@ -14,11 +14,11 @@ import {
 import { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import * as z from "zod";
 import { cn, containsControlCharacters } from "@/lib/utils";
-import { useAuthStore } from "@/stores/auth.store";
 import { AuthService } from "../api/auth.service";
+import { resolvePostLoginTarget } from "../utils/post-login";
 import { GoogleSignInButton } from "./google-sign-in-button";
 
 const inputClassNames = {
@@ -36,9 +36,9 @@ const inputClassNames = {
 export function RegisterForm() {
   const { t } = useTranslation("auth");
   const navigate = useNavigate();
+  const location = useLocation();
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const { initialize } = useAuthStore();
 
   const registerSchema = useMemo(
     () =>
@@ -83,8 +83,11 @@ export function RegisterForm() {
 
     try {
       await AuthService.register(data);
-      initialize();
-      navigate("/", { replace: true, state: { choosePortal: true } });
+      // The AuthProvider's onAuthStateChanged listener already promotes the
+      // new session into the store; re-subscribing here leaked a second
+      // listener and only raced the same result.
+      const target = resolvePostLoginTarget(location);
+      navigate(target.to, { replace: true, state: target.state });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : t("register.error");

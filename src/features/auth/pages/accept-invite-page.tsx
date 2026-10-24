@@ -7,6 +7,7 @@ import { AuthBrandLayout } from "../components/auth-brand-layout";
 import { AuthService } from "../api/auth.service";
 import { InvitesService } from "@/features/companies/api/invites.service";
 import { useAuthStore } from "@/stores/auth.store";
+import { PORTAL_PICKER_PATH } from "../utils/post-login";
 import type { TeamInvite } from "@/features/companies/types/invite.types";
 import { cn } from "@/lib/utils";
 
@@ -99,7 +100,7 @@ export function AcceptInvitePage() {
         isAuthenticated: true,
         isLoading: false,
       });
-      navigate("/", { replace: true, state: { choosePortal: true } });
+      navigate(PORTAL_PICKER_PATH, { replace: true, state: { choosePortal: true } });
     } catch (err: unknown) {
       const code =
         err && typeof err === "object" && "code" in err

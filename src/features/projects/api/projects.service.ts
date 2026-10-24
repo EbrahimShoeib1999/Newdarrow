@@ -29,6 +29,15 @@ import type {
   UpdateProjectDTO,
 } from "../types/projects.types";
 import {
+  canTransitionUnit,
+  isCommitmentAllowed,
+  type ProjectUnit,
+  type UnitStatus,
+  type UnitStatusChange,
+  type CreateUnitDTO,
+  type UpdateUnitDTO,
+} from "../types/unit.types";
+import {
   canTransitionProject,
   requiredReasonField,
 } from "../constants/project-lifecycle";
@@ -558,6 +567,153 @@ export const MilestoneService = {
     return withLogging("MilestoneService", "remove", (async () => {
       await deleteDoc(
         doc(db, "companies", companyId, "projects", projectId, "milestones", milestoneId)
+      );
+    })());
+  },
+};
+
+/* -------------------------------------------------------------------------- */
+/* Units — real-estate inventory under a unit-bearing project. Lifecycle +       */
+/* asking-price only; authoritative money stays in billing/CRM records.         */
+/* -------------------------------------------------------------------------- */
+
+function normalizeUnit(id: string, data: Record<string, any> | undefined): ProjectUnit {
+  const d = (data ?? {}) as Omit<ProjectUnit, "id" | "createdAt" | "updatedAt"> &
+    Record<string, any>;
+  const conv = (v: unknown): string | null => {
+    if (!v) return null;
+    if (v instanceof Timestamp) return v.toDate().toISOString();
+    if (v instanceof Date) return v.toISOString();
+    return String(v);
+  };
+  const history: UnitStatusChange[] = Array.isArray(d.statusHistory)
+    ? d.statusHistory.map((h: Record<string, any>) => ({
+        ...(h as Omit<UnitStatusChange, "at">),
+        at: conv(h.at) ?? "",
+      }))
+    : [];
+  return {
+    ...(d as Omit<ProjectUnit, "id" | "createdAt" | "updatedAt">),
+    id,
+    area: d.area == null ? null : Number(d.area),
+    price: Number(d.price) || 0,
+    statusHistory: history,
+    createdAt: conv(d.createdAt) ?? "",
+    updatedAt: conv(d.updatedAt) ?? "",
+  } as ProjectUnit;
+}
+
+export const UnitService = {
+  async list(companyId: string, projectId: string): Promise<ApiResponse<ProjectUnit[]>> {
+    return withLogging("UnitService", "list", (async () => {
+      const ref = collection(db, "companies", companyId, "projects", projectId, "units");
+      const snap = await getDocs(query(ref, orderBy("code", "asc")));
+      return {
+        data: snap.docs.map((d) => normalizeUnit(d.id, d.data())),
+        message: "Success",
+      };
+    })());
+  },
+
+  async create(
+    companyId: string,
+    projectId: string,
+    data: CreateUnitDTO
+  ): Promise<ApiResponse<ProjectUnit>> {
+    return withLogging("UnitService", "create", (async () => {
+      const clean = stripUndefined(data as unknown as Record<string, unknown>);
+      const ref = await addDoc(
+        collection(db, "companies", companyId, "projects", projectId, "units"),
+        {
+          ...clean,
+          projectId,
+          status: data.status ?? "available",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }
+      );
+      const snap = await getDoc(ref);
+      return { data: normalizeUnit(snap.id, snap.data()), message: "Unit created" };
+    })());
+  },
+
+  async update(
+    companyId: string,
+    projectId: string,
+    unitId: string,
+    data: UpdateUnitDTO
+  ): Promise<ApiResponse<ProjectUnit>> {
+    return withLogging("UnitService", "update", (async () => {
+      // The status field is transition-guarded via changeStatus; strip it here so
+      // an edit form can never bypass the machine by writing the field directly.
+      const { status: _ignored, ...rest } = data as Record<string, unknown>;
+      const clean = stripUndefined(rest);
+      const ref = doc(db, "companies", companyId, "projects", projectId, "units", unitId);
+      await updateDoc(ref, { ...clean, updatedAt: serverTimestamp() });
+      const snap = await getDoc(ref);
+      return { data: normalizeUnit(snap.id, snap.data()), message: "Unit updated" };
+    })());
+  },
+
+  /**
+   * Validated lifecycle transition in one transaction. Rejects illegal edges and
+   * — crucially — any attempt to reserve/sell a unit that is already committed,
+   * so two concurrent reservations can never both land on the same unit.
+   */
+  async changeStatus(
+    companyId: string,
+    projectId: string,
+    unitId: string,
+    to: UnitStatus,
+    actorId: string,
+    opts?: { buyerContactId?: string | null; contractId?: string | null; note?: string }
+  ): Promise<ApiResponse<ProjectUnit>> {
+    return withLogging("UnitService", "changeStatus", (async () => {
+      const ref = doc(db, "companies", companyId, "projects", projectId, "units", unitId);
+      const updated = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new Error("unit_not_found");
+        const data = snap.data() as Record<string, any>;
+        const from = data.status as UnitStatus;
+        if (!canTransitionUnit(from, to)) throw new Error(`invalid_transition:${from}->${to}`);
+        if (!isCommitmentAllowed(from, to)) throw new Error(`unit_already_committed:${from}`);
+
+        const entry: UnitStatusChange = {
+          from,
+          to,
+          at: isoNow(),
+          by: actorId,
+          ...(opts?.note?.trim() ? { note: opts.note.trim() } : {}),
+        };
+        const history: UnitStatusChange[] = Array.isArray(data.statusHistory)
+          ? data.statusHistory
+          : [];
+        const patch: Record<string, unknown> = {
+          status: to,
+          statusHistory: [...history, entry],
+          updatedAt: serverTimestamp(),
+        };
+        // A commitment carries the buyer / contract reference forward.
+        if (to === "reserved" || to === "sold") {
+          if (opts?.buyerContactId !== undefined) patch.buyerContactId = opts.buyerContactId;
+          if (opts?.contractId !== undefined) patch.contractId = opts.contractId;
+        }
+        // Releasing back to available clears the commitment references.
+        if (to === "available") {
+          patch.buyerContactId = null;
+          patch.contractId = null;
+        }
+        tx.update(ref, stripUndefined(patch));
+        return normalizeUnit(snap.id, { ...data, ...patch });
+      });
+      return { data: updated, message: "Unit status updated" };
+    })());
+  },
+
+  async remove(companyId: string, projectId: string, unitId: string): Promise<void> {
+    return withLogging("UnitService", "remove", (async () => {
+      await deleteDoc(
+        doc(db, "companies", companyId, "projects", projectId, "units", unitId)
       );
     })());
   },

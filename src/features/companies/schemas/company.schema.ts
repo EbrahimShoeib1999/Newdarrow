@@ -24,6 +24,14 @@ export const companyProfileSchema = z.object({
   legalName: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional(),
+  whatsappSupportPhone: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (v) => !v || /^\+?[0-9\s-]{6,20}$/.test(v),
+      "Use digits with an optional leading + (country code)"
+    ),
   address: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),

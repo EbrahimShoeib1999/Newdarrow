@@ -29,6 +29,7 @@
       "legalName": "Legal entity name",
       "email": "Business email",
       "phone": "Business phone",
+      "whatsappSupportPhone": "WhatsApp support number",
       "address": "Address",
       "city": "City",
       "country": "Country",

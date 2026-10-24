@@ -161,6 +161,7 @@
     "noSubtasks": "No subtasks found.",
     "addSubtask": "Add Subtask",
     "parentTask": "Parent Task",
+    "relatedProject": "Related Project",
     "saveChanges": "Save Changes",
     "createdAt": "Created At",
     "attachedFiles": "Attached Files ({{count}})",

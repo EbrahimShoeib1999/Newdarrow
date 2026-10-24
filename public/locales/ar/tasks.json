@@ -161,6 +161,7 @@
     "noSubtasks": "لا توجد مهام فرعية.",
     "addSubtask": "إضافة مهمة فرعية",
     "parentTask": "المهمة الرئيسية",
+    "relatedProject": "المشروع المرتبط",
     "saveChanges": "حفظ التغييرات",
     "createdAt": "تاريخ الإنشاء",
     "attachedFiles": "الملفات المرفقة ({{count}})",
