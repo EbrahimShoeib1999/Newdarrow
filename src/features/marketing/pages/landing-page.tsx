@@ -33,12 +33,12 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
       className="sticky top-0 z-50"
     >
       <header className="border-b border-default-100 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 md:px-6">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 md:px-6 overflow-hidden">
           <Link to="/" className="shrink-0 transition-transform duration-300 hover:scale-105">
             <Logo size="md" className="h-11" />
           </Link>
 
-          <nav className="hidden items-center gap-8 text-sm font-medium text-default-600 md:flex">
+          <nav className="hidden items-center gap-6 text-sm font-medium text-default-600 md:flex flex-1 min-w-0">
             {[
               { href: "#apps", label: t("nav.apps") },
               { href: "#features", label: t("nav.features") },
@@ -47,7 +47,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
               <a
                 key={item.href}
                 href={item.href}
-                className="group relative transition-colors hover:text-primary"
+                className="group relative transition-colors hover:text-primary shrink-0"
               >
                 {item.label}
                 <span className="absolute -bottom-1 start-0 h-0.5 w-0 bg-primary transition-all duration-300 group-hover:w-full" />
@@ -55,16 +55,16 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
-            <LanguageTogglePills className="hidden sm:inline-flex" />
-            <LanguageSwitcher compact className="sm:hidden" />
+          <div className="flex items-center gap-2 shrink-0">
+            <LanguageTogglePills className="hidden sm:inline-flex shrink-0" />
+            <LanguageSwitcher compact className="sm:hidden shrink-0" />
             {isAuthenticated ? (
               <Button
                 as={Link}
                 to="/apps"
                 color="primary"
                 size="sm"
-                className="font-semibold shadow-md shadow-primary/20 transition-transform duration-300 hover:scale-105"
+                className="font-semibold shadow-md shadow-primary/20 transition-transform duration-300 hover:scale-105 shrink-0"
                 startContent={<LayoutGrid className="h-4 w-4" />}
               >
                 {t("nav.workspace", "My Workspace")}
@@ -76,7 +76,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
                   to="/login"
                   variant="light"
                   size="sm"
-                  className="hidden font-semibold sm:inline-flex"
+                  className="hidden font-semibold sm:inline-flex shrink-0"
                 >
                   {t("nav.signIn")}
                 </Button>
@@ -85,7 +85,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
                   to="/register"
                   color="primary"
                   size="sm"
-                  className="font-semibold transition-transform duration-300 hover:scale-105"
+                  className="font-semibold transition-transform duration-300 hover:scale-105 shrink-0"
                 >
                   {t("nav.tryFree")}
                 </Button>
