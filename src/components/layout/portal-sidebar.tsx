@@ -848,7 +848,7 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
       {/* Footer controls */}
       {portals.length > 1 && (
         <div className="border-t border-default-200/80 p-3 space-y-1.5 bg-default-50/60">
-          {!sidebarCollapsed && (
+          {/* {!sidebarCollapsed && (
             <button
               type="button"
               onClick={handleResetOrder}
@@ -856,8 +856,8 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span className="min-w-0 truncate">{isRtl ? "إعادة الترتيب الافتراضي" : "Reset navigation order"}</span>
-            </button>
-          )}
+            </button> */}
+          {/* )} */}
 
         {/* Dedicated Landing Page Navigation Item */}
         <Tooltip
@@ -880,28 +880,28 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
           </Link>
         </Tooltip>
 
-        {portals.length > 1 && (
-          <Tooltip
-            isDisabled={!sidebarCollapsed}
-            content={t("portals.allApps")}
-            placement={isRtl ? "left" : "right"}
+        {/* All Apps Navigation Item */}
+        <Tooltip
+          isDisabled={!sidebarCollapsed}
+          content={isRtl ? "كل التطبيقات" : "All Apps"}
+          placement={isRtl ? "left" : "right"}
+        >
+          <Link
+            to="/apps"
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs md:text-sm font-bold transition-all",
+              "text-default-700 hover:bg-default-200/60 hover:text-foreground",
+              sidebarCollapsed && "justify-center px-0"
+            )}
           >
-            <button
-              type="button"
-              onClick={() => setPortalPickerOpen(true)}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs md:text-sm font-extrabold transition-all",
-                "text-default-700 hover:bg-default-200/60 hover:text-foreground",
-                sidebarCollapsed && "justify-center px-0"
-              )}
-            >
-              <LayoutGrid className="h-4.5 w-4.5 shrink-0 text-primary" />
-              {!sidebarCollapsed && (
-                <span className="truncate">{t("portals.allApps")}</span>
-              )}
-            </button>
-          </Tooltip>
-        )}
+            <LayoutGrid className="h-4.5 w-4.5 shrink-0 text-primary" />
+            {!sidebarCollapsed && (
+              <span className="truncate">{isRtl ? "كل التطبيقات" : "All Apps"}</span>
+            )}
+          </Link>
+        </Tooltip>
+
+  
         </div>
       )}
     </aside>

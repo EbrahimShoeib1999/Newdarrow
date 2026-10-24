@@ -237,15 +237,17 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
               >
                 {isAuthenticated ? t("nav.workspace", "My Workspace") : t("hero.ctaPrimary")}
               </Button>
-              <Button
-                as={Link}
-                to="/login"
-                variant="bordered"
-                size="lg"
-                className="min-w-[170px] font-bold bg-background/80 backdrop-blur-md transition-transform duration-300 hover:-translate-y-0.5 rounded-2xl h-12 border-default-300"
-              >
-                {t("hero.ctaSecondary")}
-              </Button>
+              {!isAuthenticated && (
+                <Button
+                  as={Link}
+                  to="/login"
+                  variant="bordered"
+                  size="lg"
+                  className="min-w-[170px] font-bold bg-background/80 backdrop-blur-md transition-transform duration-300 hover:-translate-y-0.5 rounded-2xl h-12 border-default-300"
+                >
+                  {t("hero.ctaSecondary")}
+                </Button>
+              )}
             </AnimatedDiv>
 
             {/* KPI Metrics Ribbon (Western digits 0-9) */}
@@ -408,15 +410,17 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
                 >
                   {isAuthenticated ? t("nav.workspace", "My Workspace") : t("cta.button")}
                 </Button>
-                <Button
-                  as={Link}
-                  to="/login"
-                  variant="bordered"
-                  size="lg"
-                  className="min-w-[150px] border-white/60 text-white font-bold rounded-2xl h-12 hover:bg-white/10"
-                >
-                  {t("hero.ctaSecondary")}
-                </Button>
+                {!isAuthenticated && (
+                  <Button
+                    as={Link}
+                    to="/login"
+                    variant="bordered"
+                    size="lg"
+                    className="min-w-[150px] border-white/60 text-white font-bold rounded-2xl h-12 hover:bg-white/10"
+                  >
+                    {t("hero.ctaSecondary")}
+                  </Button>
+                )}
               </div>
             </div>
           </AnimatedDiv>
