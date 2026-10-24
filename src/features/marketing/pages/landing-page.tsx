@@ -35,7 +35,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
       <header className="border-b border-default-100 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 md:px-6">
           <Link to="/" className="shrink-0 transition-transform duration-300 hover:scale-105">
-            <Logo size="sm" className="h-9" />
+            <Logo size="md" className="h-11" />
           </Link>
 
           <nav className="hidden items-center gap-8 text-sm font-medium text-default-600 md:flex">

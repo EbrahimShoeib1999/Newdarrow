@@ -9,7 +9,6 @@ import {
   ChevronDown,
   LayoutGrid,
   GripVertical,
-  RotateCcw,
   Search,
   Star,
   Folder,
@@ -133,7 +132,7 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
   const { t: tChat } = useTranslation("chat");
   // Terminology-aware: projects labels carry the tenant's configured display names.
   const { t: tProjects, terms: projectTerms } = useProjectT();
-  const { sidebarCollapsed, toggleSidebar, setPortalPickerOpen } = useLayoutStore();
+  const { sidebarCollapsed, toggleSidebar } = useLayoutStore();
   const location = useLocation();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -336,21 +335,6 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
         /* ignore */
       }
     }
-  };
-
-  const handleResetOrder = () => {
-    localStorage.removeItem(`sidebar_tree_order_${portal}`);
-    localStorage.removeItem(`sidebar_tree_item_orders_${portal}`);
-    localStorage.removeItem(`sidebar_tree_expanded_${portal}`);
-    localStorage.removeItem(`sidebar_favorites_${portal}`);
-    setTreeGroups(defaultTree);
-    setFavorites([]);
-    const initialExpanded: Record<string, boolean> = {};
-    defaultTree.forEach((g) => {
-      initialExpanded[g.id] = true;
-    });
-    setExpandedGroups(initialExpanded);
-    setSearchQuery("");
   };
 
   const getItemLabel = (item: PortalNavItem) => {
@@ -848,17 +832,6 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
       {/* Footer controls */}
       {portals.length > 1 && (
         <div className="border-t border-default-200/80 p-3 space-y-1.5 bg-default-50/60">
-          {/* {!sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={handleResetOrder}
-              className="flex items-center justify-center gap-2 text-xs font-bold text-default-400 hover:text-foreground px-3 py-1.5 w-full rounded-xl transition-colors"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span className="min-w-0 truncate">{isRtl ? "إعادة الترتيب الافتراضي" : "Reset navigation order"}</span>
-            </button> */}
-          {/* )} */}
-
         {/* Dedicated Landing Page Navigation Item */}
         <Tooltip
           isDisabled={!sidebarCollapsed}
