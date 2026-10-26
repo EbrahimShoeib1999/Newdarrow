@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, type To } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@heroui/react";
 import {
@@ -20,6 +20,7 @@ import AnimatedDiv, {
 } from "@/components/motion/animated-div";
 import SmoothScrollProvider from "@/components/providers/smooth-scroll-provider";
 import { LANDING_APPS } from "../constants/landing-apps";
+import { useAccessiblePortals } from "@/features/portals/hooks/use-portals";
 import { cn } from "@/lib/utils";
 
 function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
@@ -102,13 +103,23 @@ function AppTile({
   label,
   icon: Icon,
   gradient,
+  to,
+  state,
+  disabled = false,
+  restrictedHint,
 }: {
   label: string;
   icon: LucideIcon;
   gradient: string;
+  /** Real destination — protected targets are never linked when unauthorized. */
+  to: To;
+  /** Optional navigation state (e.g. the login "from" contract). */
+  state?: Record<string, unknown>;
+  disabled?: boolean;
+  restrictedHint?: string;
 }) {
-  return (
-    <div className="group flex flex-col items-center gap-3 text-center">
+  const body = (
+    <>
       <div
         className={cn(
           "flex h-[72px] w-[72px] items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-md transition-all duration-300 group-hover:-translate-y-1.5 group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-primary/20",
@@ -120,7 +131,31 @@ function AppTile({
       <span className="text-sm font-semibold text-foreground leading-tight max-w-[100px] transition-colors group-hover:text-primary">
         {label}
       </span>
-    </div>
+    </>
+  );
+
+  // An unauthorized destination stays visibly inert: no link, no navigation.
+  if (disabled) {
+    return (
+      <div
+        className="group flex flex-col items-center gap-3 text-center opacity-50 cursor-not-allowed"
+        aria-disabled="true"
+        title={restrictedHint}
+      >
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      to={to}
+      state={state}
+      className="group flex flex-col items-center gap-3 text-center"
+      aria-label={label}
+    >
+      {body}
+    </Link>
   );
 }
 
@@ -170,6 +205,9 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
   const { t, i18n } = useTranslation("landing");
   const isAr = i18n.language === "ar";
   const year = 2026;
+  // Permission- AND activity-aware: tiles for apps the signed-in user cannot
+  // reach (role, or an inactive owning activity) are inert, never dead links.
+  const accessiblePortals = useAccessiblePortals();
 
   return (
     <div className="min-h-screen bg-default-50 text-foreground selection:bg-primary/20 selection:text-primary">
@@ -290,8 +328,13 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
               </p>
             </AnimatedDiv>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-5">
-              {LANDING_APPS.map((app, index) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-5">
+              {LANDING_APPS.map((app, index) => {
+                const restricted =
+                  isAuthenticated &&
+                  Boolean(app.portal) &&
+                  !accessiblePortals.includes(app.portal!);
+                return (
                 <AnimatedDiv
                   key={app.id}
                   triggerOnScroll
@@ -304,10 +347,21 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
                       label={t(app.labelKey)}
                       icon={app.icon}
                       gradient={app.gradient}
+                      restrictedHint={t("apps.restricted")}
+                      disabled={restricted}
+                      to={isAuthenticated || restricted ? app.path : "/login"}
+                      state={
+                        isAuthenticated || restricted
+                          ? undefined
+                          : // Unauthenticated: existing login flow, preserving the
+                            // intended return destination.
+                            { from: { pathname: app.path } }
+                      }
                     />
                   </div>
                 </AnimatedDiv>
-              ))}
+                );
+              })}
             </div>
 
             <AnimatedDiv triggerOnScroll delay={0.2} className="mt-14 text-center">

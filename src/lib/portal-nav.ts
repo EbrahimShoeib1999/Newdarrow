@@ -33,10 +33,15 @@ import {
   ClipboardCheck,
   ShieldCheck,
   Building2,
+  Building,
+  Wrench,
+  CalendarClock,
   FolderKanban,
   FolderOpen,
   CheckCircle2,
   Activity,
+  Megaphone,
+  Send,
   type LucideIcon,
 } from "lucide-react";
 
@@ -45,7 +50,7 @@ export interface PortalNavItem {
   path: string;
   icon: LucideIcon;
   end?: boolean;
-  namespace?: "common" | "crm" | "billing" | "chat" | "projects";
+  namespace?: "common" | "crm" | "billing" | "chat" | "projects" | "facilities" | "marketing";
   /** If set, item is shown only when the user has this permission. */
   permission?: import("@/lib/permissions").Permission;
 }
@@ -54,7 +59,7 @@ export interface PortalNavTreeGroup {
   id: string;
   labelKey: string;
   icon?: LucideIcon;
-  namespace?: "common" | "crm" | "billing" | "chat" | "projects";
+  namespace?: "common" | "crm" | "billing" | "chat" | "projects" | "facilities" | "marketing";
   items: PortalNavItem[];
 }
 
@@ -305,12 +310,161 @@ export const PROJECTS_NAV_TREE: PortalNavTreeGroup[] = [
   },
 ];
 
+export const FACILITIES_NAV_TREE: PortalNavTreeGroup[] = [
+  {
+    id: "fm_overview",
+    labelKey: "nav.overview",
+    icon: LayoutDashboard,
+    namespace: "facilities",
+    items: [
+      {
+        labelKey: "nav.dashboard",
+        path: "/facilities",
+        icon: LayoutDashboard,
+        end: true,
+        namespace: "facilities",
+        permission: "facilities.view",
+      },
+      {
+        labelKey: "nav.reports",
+        path: "/facilities/reports",
+        icon: BarChart3,
+        namespace: "facilities",
+        permission: "facilities.view",
+      },
+    ],
+  },
+  {
+    id: "fm_operations",
+    labelKey: "nav.operations",
+    icon: Wrench,
+    namespace: "facilities",
+    items: [
+      {
+        labelKey: "nav.work_orders",
+        path: "/facilities/work-orders",
+        icon: Wrench,
+        namespace: "facilities",
+        permission: "facilities.view",
+      },
+      {
+        labelKey: "nav.schedules",
+        path: "/facilities/schedules",
+        icon: CalendarClock,
+        namespace: "facilities",
+        permission: "facilities.view",
+      },
+    ],
+  },
+  {
+    id: "fm_inventory",
+    labelKey: "nav.inventory",
+    icon: Building,
+    namespace: "facilities",
+    items: [
+      {
+        labelKey: "nav.facilities",
+        path: "/facilities/facilities",
+        icon: Building,
+        namespace: "facilities",
+        permission: "facilities.view",
+      },
+      {
+        labelKey: "nav.assets",
+        path: "/facilities/assets",
+        icon: Package,
+        namespace: "facilities",
+        permission: "facilities.view",
+      },
+      {
+        labelKey: "nav.vendors",
+        path: "/facilities/vendors",
+        icon: Users,
+        namespace: "facilities",
+        permission: "facilities.view",
+      },
+    ],
+  },
+];
+
+export const AGENCY_NAV_TREE: PortalNavTreeGroup[] = [
+  {
+    id: "agency_overview",
+    labelKey: "nav.overview",
+    icon: LayoutDashboard,
+    namespace: "marketing",
+    items: [
+      {
+        labelKey: "nav.dashboard",
+        path: "/agency",
+        icon: LayoutDashboard,
+        end: true,
+        namespace: "marketing",
+        permission: "marketing.view",
+      },
+      {
+        labelKey: "nav.reports",
+        path: "/agency/reports",
+        icon: BarChart3,
+        namespace: "marketing",
+        permission: "marketing.view",
+      },
+    ],
+  },
+  {
+    id: "agency_campaigns",
+    labelKey: "nav.campaigns",
+    icon: Megaphone,
+    namespace: "marketing",
+    items: [
+      {
+        labelKey: "nav.campaigns",
+        path: "/agency/campaigns",
+        icon: Megaphone,
+        namespace: "marketing",
+        permission: "marketing.view",
+      },
+      {
+        labelKey: "nav.briefs",
+        path: "/agency/briefs",
+        icon: FileText,
+        namespace: "marketing",
+        permission: "marketing.view",
+      },
+    ],
+  },
+  {
+    id: "agency_delivery",
+    labelKey: "nav.delivery",
+    icon: Send,
+    namespace: "marketing",
+    items: [
+      {
+        labelKey: "nav.deliverables",
+        path: "/agency/deliverables",
+        icon: Send,
+        namespace: "marketing",
+        permission: "marketing.view",
+      },
+      {
+        labelKey: "nav.content",
+        path: "/agency/content",
+        icon: Calendar,
+        namespace: "marketing",
+        permission: "marketing.view",
+      },
+    ],
+  },
+];
+
 export const TASKS_NAV = TASKS_NAV_TREE.flatMap((g) => g.items);
 export const CRM_NAV = CRM_NAV_TREE.flatMap((g) => g.items);
 export const PEOPLE_NAV = PEOPLE_NAV_TREE.flatMap((g) => g.items);
 export const BILLING_NAV = BILLING_NAV_TREE.flatMap((g) => g.items);
 export const CHAT_NAV = CHAT_NAV_TREE.flatMap((g) => g.items);
 export const PROJECTS_NAV = PROJECTS_NAV_TREE.flatMap((g) => g.items);
+export const FACILITIES_NAV = FACILITIES_NAV_TREE.flatMap((g) => g.items);
+export const AGENCY_NAV = AGENCY_NAV_TREE.flatMap((g) => g.items);
 
 export function getNavForPortal(portal: PortalId): PortalNavItem[] {
   switch (portal) {
@@ -326,6 +480,10 @@ export function getNavForPortal(portal: PortalId): PortalNavItem[] {
       return CHAT_NAV;
     case "projects":
       return PROJECTS_NAV;
+    case "facilities":
+      return FACILITIES_NAV;
+    case "agency":
+      return AGENCY_NAV;
     default:
       return [];
   }
@@ -345,6 +503,10 @@ export function getNavTreeForPortal(portal: PortalId): PortalNavTreeGroup[] {
       return CHAT_NAV_TREE;
     case "projects":
       return PROJECTS_NAV_TREE;
+    case "facilities":
+      return FACILITIES_NAV_TREE;
+    case "agency":
+      return AGENCY_NAV_TREE;
     default:
       return [];
   }

@@ -20,7 +20,8 @@
   "apps": {
     "title": "Everything you need to run your company",
     "subtitle": "Modular apps that work together — install what you need, grow when you're ready.",
-    "viewAll": "Explore all apps"
+    "viewAll": "Explore all apps",
+    "restricted": "Not available for your account or the company's active business activity"
   },
   "modules": {
     "tasks": "Tasks & Projects",
@@ -29,6 +30,9 @@
     "billing": "Accounting & Finance",
     "invoices": "Invoices",
     "reports": "Reports",
+    "projects": "Projects",
+    "facilities": "Facilities Management",
+    "agency": "Marketing Agency",
     "settings": "Company Settings"
   },
   "features": {

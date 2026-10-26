@@ -12,6 +12,7 @@ import { PORTAL_PATHS, type PortalId } from "@/lib/portal-permissions";
 import { PORTAL_META } from "../constants/portal-meta";
 import { usePortalStat } from "../hooks/use-portal-stats";
 import { usePortalT } from "../hooks/use-portal-terminology";
+import { useActivityConfig } from "@/features/activities/hooks/use-activity-config";
 
 const PORTAL_ICON_GRADIENTS: Record<PortalId, string> = {
   tasks: "from-violet-500 to-indigo-600",
@@ -20,6 +21,8 @@ const PORTAL_ICON_GRADIENTS: Record<PortalId, string> = {
   billing: "from-fuchsia-500 to-purple-600",
   chat: "from-cyan-500 to-blue-600",
   projects: "from-blue-500 to-indigo-600",
+  facilities: "from-cyan-500 to-teal-600",
+  agency: "from-pink-500 to-rose-600",
 };
 
 function PortalCard({ portal }: { portal: PortalId }) {
@@ -68,12 +71,16 @@ export function PortalPickerPage({ forceChoose = false }: { forceChoose?: boolea
   const location = useLocation();
   const portals = useAccessiblePortals();
   const lastPath = useLastPortalPath();
+  const activityConfig = useActivityConfig();
   const choosePortal = forceChoose || Boolean(
     (location.state as { choosePortal?: boolean } | null)?.choosePortal
   );
 
   useEffect(() => {
     if (choosePortal) return;
+    // Never auto-route off the picker while the activity configuration is
+    // still resolving — the target list may change once it lands.
+    if (activityConfig.isConfigLoading) return;
 
     if (portals.length === 1) {
       setLastPortal(portals[0]);
@@ -84,7 +91,17 @@ export function PortalPickerPage({ forceChoose = false }: { forceChoose?: boolea
     if (portals.length > 1 && lastPath) {
       navigate(lastPath, { replace: true });
     }
-  }, [portals, navigate, choosePortal, lastPath]);
+  }, [portals, navigate, choosePortal, lastPath, activityConfig.isConfigLoading]);
+
+  // While auth/tenant/activity state resolves, show a loader instead of the
+  // (possibly empty) list so nothing restricted flashes in or out.
+  if (activityConfig.isConfigLoading && !choosePortal) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center" role="status">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   if (!choosePortal && portals.length === 1) return null;
   if (!choosePortal && portals.length > 1 && lastPath) return null;

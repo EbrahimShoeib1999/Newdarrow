@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { createBrowserRouter, Navigate, useLocation } from "react-router-dom";
 
 function DArrowRedirect() {
@@ -15,6 +16,8 @@ import { ProtectedRoute } from "@/features/auth/components/protected-route";
 import PublicInvoicePdfPage from "@/features/billing/pages/PublicInvoicePdfPage";
 import PublicClientReportPage from "@/features/crm/pages/PublicClientReportPage";
 import { AppLayout } from "@/components/layout/app-layout";
+import { ActivityRouteGuard } from "@/features/activities/components/activity-route-guard";
+import { ACTIVITY_ID_LIST } from "@/features/activities/types/activity.types";
 import { TasksLayout } from "@/features/tasks/components/TasksLayout";
 import { TasksDashboardPage } from "@/features/tasks/pages/tasks-dashboard-page";
 import { TasksWorkspacePage } from "@/features/tasks/pages/tasks-workspace-page";
@@ -59,10 +62,65 @@ import { NotFoundPage } from "@/components/shared/not-found-page";
 import { ErrorPage } from "@/components/shared/error-page";
 import { HomePage } from "@/features/marketing/pages/home-page";
 import { PortalPickerPage } from "@/features/portals/pages/PortalPickerPage";
-import { ProjectsLayout } from "@/features/projects/components/ProjectsLayout";
-import { ProjectsListPage } from "@/features/projects/pages/ProjectsListPage";
-import { ProjectDetailPage } from "@/features/projects/pages/ProjectDetailPage";
-import { ProjectSettingsPage } from "@/features/projects/pages/ProjectSettingsPage";
+// The PROJECTS activity domain pages load lazily at route level (see the
+// lazy-pages module) so they never ship to tenants on another activity.
+import {
+  ProjectsLayout,
+  ProjectsListPage,
+  ProjectDetailPage,
+  ProjectSettingsPage,
+} from "@/features/projects/routes/lazy-pages";
+// The FACILITIES_MANAGEMENT activity domain pages load lazily the same way.
+import {
+  FacilitiesLayout,
+  FacilitiesDashboardPage,
+  FacilitiesListPage,
+  FacilityDetailPage,
+  AssetsListPage,
+  AssetDetailPage,
+  WorkOrdersListPage,
+  WorkOrderDetailPage,
+  SchedulesPage,
+  VendorsPage,
+  ReportsPage as FacilitiesReportsPage,
+} from "@/features/facilities/routes/lazy-pages";
+// The MARKETING_AGENCY activity domain pages load lazily the same way.
+import {
+  AgencyLayout,
+  AgencyDashboardPage,
+  CampaignsListPage,
+  CampaignDetailPage,
+  DeliverablesListPage,
+  ContentCalendarPage,
+  BriefsPage,
+  AgencyReportsPage,
+} from "@/features/agency/routes/lazy-pages";
+
+/** Route-level Suspense fallback — a loader, never protected content. */
+function routeSuspense(node: React.ReactNode) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center" role="status">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        </div>
+      }
+    >
+      {node}
+    </Suspense>
+  );
+}
+
+/**
+ * Reserved route namespaces for activities whose domain pages have not
+ * shipped yet. They are generated from the activity registry, so a new
+ * domain module automatically claims (and gates) its prefix at login time —
+ * direct URLs land on the guard, never on the 404 or an unrelated module.
+ */
+const RESERVED_DOMAIN_ROUTES = ACTIVITY_ID_LIST.filter((m) => !m.moduleLive).map((m) => ({
+  path: `${m.routeBase.replace(/^\//, "")}/*`,
+  element: <ActivityRouteGuard />,
+}));
 
 // Billing Imports
 import { BillingLayout } from "@/features/billing/components/BillingLayout";
@@ -260,16 +318,69 @@ export const router = createBrowserRouter([
           },
           {
             path: "projects",
-            element: <ProjectsLayout />,
+            // Activity-aware mount: the guard renders a loader until the
+            // tenant's activity configuration resolves, denies the module
+            // outright when PROJECTS is not the active activity, and only
+            // then renders the (lazy) projects pages.
+            element: (
+              <ActivityRouteGuard>
+                {routeSuspense(<ProjectsLayout />)}
+              </ActivityRouteGuard>
+            ),
             children: [
-              { index: true, element: <ProjectsListPage scope="all" /> },
-              { path: "mine", element: <ProjectsListPage scope="mine" /> },
-              { path: "completed", element: <ProjectsListPage scope="completed" /> },
+              { index: true, element: routeSuspense(<ProjectsListPage scope="all" />) },
+              { path: "mine", element: routeSuspense(<ProjectsListPage scope="mine" />) },
+              { path: "completed", element: routeSuspense(<ProjectsListPage scope="completed" />) },
               // Stable route ids — the configured display name never changes them.
-              { path: "settings", element: <ProjectSettingsPage /> },
-              { path: ":projectId", element: <ProjectDetailPage /> },
+              { path: "settings", element: routeSuspense(<ProjectSettingsPage />) },
+              { path: ":projectId", element: routeSuspense(<ProjectDetailPage />) },
             ],
           },
+          {
+            path: "facilities",
+            // Activity-aware mount (same contract as projects): the guard
+            // denies the namespace when FACILITIES_MANAGEMENT is not the
+            // tenant's active activity, then renders the lazy facilities pages.
+            element: (
+              <ActivityRouteGuard>
+                {routeSuspense(<FacilitiesLayout />)}
+              </ActivityRouteGuard>
+            ),
+            children: [
+              { index: true, element: routeSuspense(<FacilitiesDashboardPage />) },
+              { path: "reports", element: routeSuspense(<FacilitiesReportsPage />) },
+              { path: "work-orders", element: routeSuspense(<WorkOrdersListPage />) },
+              { path: "work-orders/:id", element: routeSuspense(<WorkOrderDetailPage />) },
+              { path: "schedules", element: routeSuspense(<SchedulesPage />) },
+              { path: "facilities", element: routeSuspense(<FacilitiesListPage />) },
+              { path: "facilities/:id", element: routeSuspense(<FacilityDetailPage />) },
+              { path: "assets", element: routeSuspense(<AssetsListPage />) },
+              { path: "assets/:id", element: routeSuspense(<AssetDetailPage />) },
+              { path: "vendors", element: routeSuspense(<VendorsPage />) },
+            ],
+          },
+          {
+            path: "agency",
+            // Activity-aware mount (same contract as facilities): the guard
+            // denies the namespace when MARKETING_AGENCY is not the tenant's
+            // active activity, then renders the lazy marketing pages.
+            element: (
+              <ActivityRouteGuard>
+                {routeSuspense(<AgencyLayout />)}
+              </ActivityRouteGuard>
+            ),
+            children: [
+              { index: true, element: routeSuspense(<AgencyDashboardPage />) },
+              { path: "reports", element: routeSuspense(<AgencyReportsPage />) },
+              { path: "campaigns", element: routeSuspense(<CampaignsListPage />) },
+              { path: "campaigns/:id", element: routeSuspense(<CampaignDetailPage />) },
+              { path: "deliverables", element: routeSuspense(<DeliverablesListPage />) },
+              { path: "content", element: routeSuspense(<ContentCalendarPage />) },
+              { path: "briefs", element: routeSuspense(<BriefsPage />) },
+            ],
+          },
+          // Inactive-activity namespaces (registry-generated).
+          ...RESERVED_DOMAIN_ROUTES,
           {
             // Meetings are open to every signed-in user, so they sit outside
             // the portal guards.

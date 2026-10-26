@@ -34,7 +34,15 @@ export type Permission =
   | "tasks.approve"
   | "projects.view"
   | "projects.manage"
-  | "projects.delete";
+  | "projects.delete"
+  | "portals.facilities"
+  | "facilities.view"
+  | "facilities.manage"
+  | "facilities.delete"
+  | "portals.agency"
+  | "marketing.view"
+  | "marketing.manage"
+  | "marketing.delete";
 
 export const ROLE_LABELS: Record<UserRole, { en: string; ar: string }> = {
   super_admin: { en: "Super Admin", ar: "مدير عام" },
@@ -78,6 +86,14 @@ const ALL_PERMISSIONS: Permission[] = [
   "projects.view",
   "projects.manage",
   "projects.delete",
+  "portals.facilities",
+  "facilities.view",
+  "facilities.manage",
+  "facilities.delete",
+  "portals.agency",
+  "marketing.view",
+  "marketing.manage",
+  "marketing.delete",
 ];
 
 export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
@@ -113,6 +129,14 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "projects.view",
     "projects.manage",
     "projects.delete",
+    "portals.facilities",
+    "facilities.view",
+    "facilities.manage",
+    "facilities.delete",
+    "portals.agency",
+    "marketing.view",
+    "marketing.manage",
+    "marketing.delete",
   ],
   employee: [
     "portals.tasks",
@@ -131,6 +155,12 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "tasks.edit",
     "projects.view",
     "projects.manage",
+    "portals.facilities",
+    "facilities.view",
+    "facilities.manage",
+    "portals.agency",
+    "marketing.view",
+    "marketing.manage",
   ],
   viewer: [
     "portals.crm",
@@ -166,15 +196,15 @@ export function isManagerRole(role: UserRole | undefined): boolean {
 
 export function canAccessPortal(
   role: UserRole | undefined,
-  portal: "tasks" | "crm" | "people" | "billing" | "chat" | "projects"
+  portal: "tasks" | "crm" | "people" | "billing" | "chat" | "projects" | "facilities" | "agency"
 ): boolean {
   return hasPermission(role, `portals.${portal}` as Permission);
 }
 
 export function getAccessiblePortals(
   role: UserRole | undefined
-): Array<"tasks" | "crm" | "people" | "billing" | "chat" | "projects"> {
-  return (["tasks", "crm", "people", "billing", "chat", "projects"] as const).filter((p) =>
+): Array<"tasks" | "crm" | "people" | "billing" | "chat" | "projects" | "facilities" | "agency"> {
+  return (["tasks", "crm", "people", "billing", "chat", "projects", "facilities", "agency"] as const).filter((p) =>
     canAccessPortal(role, p)
   );
 }

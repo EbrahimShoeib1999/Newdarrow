@@ -76,6 +76,20 @@
       "stat": "{{count}} active {{plural}}",
       "denied": "You do not have access to the {{plural}} portal."
     },
+    "facilities": {
+      "title": "Facilities",
+      "short": "Facilities",
+      "description": "Facilities, assets, work orders and preventive maintenance for managed properties",
+      "stat": "{{count}} open work orders",
+      "denied": "You do not have access to the Facilities portal."
+    },
+    "agency": {
+      "title": "Marketing Agency",
+      "short": "Marketing",
+      "description": "Campaigns, budgets, deliverables, content calendars and client approvals",
+      "stat": "{{count}} active campaigns",
+      "denied": "You do not have access to the Marketing Agency portal."
+    },
     "noPortals": "No portals are assigned to your account. Contact your super admin."
   },
   "actions": {
@@ -109,6 +123,20 @@
     "profile": "Profile",
     "settings": "Settings",
     "logout": "Logout"
+  },
+  "activity": {
+    "deniedTitle": "Section not available",
+    "deniedBody": "This part of the application belongs to a business activity that is not enabled for your company, so it cannot be opened from a direct link either. Ask your administrator if the activity needs to be switched.",
+    "backToApps": "Back to my apps",
+    "configuringTitle": "module is being configured",
+    "configuringBody": "This is your company's active business activity, but its dedicated pages are not installed yet. Shared apps (CRM, HR, accounting, tasks) remain fully available.",
+    "settingsTitle": "Primary business activity",
+    "settingsSubtitle": "The selected activity determines which domain pages, navigation items and shortcuts the whole company sees. Display names never change the underlying logic.",
+    "switchNote": "Switching only changes the visible experience: existing records of other activities (projects, leases, patients, students, invoices) stay intact and are restored when their activity becomes active again. Open pages refresh to the new state after saving.",
+    "saved": "Business activity updated",
+    "saveError": "Could not save the business activity. Check your connection and permissions.",
+    "save": "Activate \"{{name}}\"",
+    "current": "Current activity"
   },
   "notFound": {
     "comingSoon": "Coming Soon",

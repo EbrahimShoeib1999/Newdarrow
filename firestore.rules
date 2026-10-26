@@ -49,6 +49,94 @@ service cloud.firestore {
         : '';
     }
 
+    // The tenant's primary business activity is the authoritative source that
+    // activity-aware routing resolves from — so a write may only persist a
+    // known stable id (never a display name or arbitrary string).
+    function validPrimaryActivity(data) {
+      return !('primaryActivity' in data)
+        || data.primaryActivity == null
+        || data.primaryActivity in [
+          'PROJECTS',
+          'REAL_ESTATE_MANAGEMENT',
+          'REAL_ESTATE_BROKERAGE',
+          'FACILITIES_MANAGEMENT',
+          'REAL_ESTATE_DEVELOPMENT',
+          'MARKETING_AGENCY',
+          'MEDICAL_CLINIC',
+          'SCHOOL_MANAGEMENT'
+        ];
+    }
+
+    function primaryActivityUnchanged() {
+      return resource.data.get('primaryActivity', '')
+        == request.resource.data.get('primaryActivity', '');
+    }
+
+    // ---- Phase 2: activity-aware domain data boundary (release-critical) ----
+    //
+    // Each Phase-2 domain module stores records in subcollections whose names
+    // begin with a reserved per-activity prefix. Deriving the owning activity
+    // from the collection NAME (not from a document field) is what makes this
+    // boundary authoritative: a client-supplied `activity`/`primaryActivity`
+    // field on the record itself can never be used to grant access, and any
+    // new domain collection is protected fail-closed the moment it is written
+    // — no rule edit required. Kept in sync with
+    // src/features/activities/types/activity-domain.ts.
+    //
+    // PROJECTS is intentionally absent: it already persists in bare shared
+    // collections (projects/tasks/sprints/…), so leaving it un-prefixed keeps
+    // every existing tenant working with zero regression.
+    // NOTE: Firestore rules have no String.startsWith(); prefix detection uses
+    // the supported matches() (regex is matched against the whole string).
+    function domainOwnerActivity(collection) {
+      return collection.matches('^rem_.*') ? 'REAL_ESTATE_MANAGEMENT'
+        : collection.matches('^reb_.*') ? 'REAL_ESTATE_BROKERAGE'
+        : collection.matches('^fm_.*') ? 'FACILITIES_MANAGEMENT'
+        : collection.matches('^rdv_.*') ? 'REAL_ESTATE_DEVELOPMENT'
+        : collection.matches('^mkt_.*') ? 'MARKETING_AGENCY'
+        : collection.matches('^cln_.*') ? 'MEDICAL_CLINIC'
+        : collection.matches('^sch_.*') ? 'SCHOOL_MANAGEMENT'
+        : '';
+    }
+
+    function isDomainCollection(collection) {
+      return domainOwnerActivity(collection) != '';
+    }
+
+    // Clinical and student records are the sensitive domains: least-privilege
+    // is enforced on top of the activity gate so a generic clinic/school
+    // employee cannot enumerate every patient/student by guessed ids.
+    function isSensitiveDomainCollection(collection) {
+      return collection.matches('^cln_.*') || collection.matches('^sch_.*');
+    }
+
+    // Authoritative tenant activity, read from the company doc on the server.
+    // A missing/legacy value normalizes to PROJECTS, which owns none of the
+    // reserved prefixes, so every domain collection is denied fail-closed.
+    function companyAuthoritativeActivity(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId))
+        .data.get('primaryActivity', 'PROJECTS');
+    }
+
+    // Mirrors isAdminRole/isManagerRole plus an explicit `domain.manage` grant
+    // from src/lib/permissions.
+    function hasSensitiveDomainPrivilege(companyId) {
+      return belongsToCompany(companyId) && (
+        isCompanyAdmin(companyId)
+        || userDoc().get('role', '') == 'manager'
+        || 'domain.manage' in customPermissions()
+      );
+    }
+
+    // Full domain gate. Only ever evaluated when `collection` is a domain
+    // collection, so shared reads pay no extra get() cost (|| short-circuits).
+    function domainAccessAllowed(companyId, collection) {
+      return belongsToCompany(companyId)
+        && companyAuthoritativeActivity(companyId) == domainOwnerActivity(collection)
+        && (!isSensitiveDomainCollection(collection)
+            || hasSensitiveDomainPrivilege(companyId));
+    }
+
     // Mirrors canApproveDocuments() plus the accounting-specific Billing
     // sub-role, so the client review gate is enforced on the server too.
     function canReviewDocuments(companyId) {
@@ -172,8 +260,16 @@ service cloud.firestore {
     }
 
     match /companies/{companyId} {
-      allow read, write: if belongsToCompany(companyId);
-      allow create: if signedIn();
+      allow read: if belongsToCompany(companyId);
+      // Company profile updates stay open to company members EXCEPT for the
+      // primaryActivity field, which only a company admin may change and only
+      // to a registry-known stable id. The browser's selected activity is
+      // never trusted: this is the authoritative write boundary.
+      allow update: if belongsToCompany(companyId)
+        && validPrimaryActivity(request.resource.data)
+        && (isCompanyAdmin(companyId) || primaryActivityUnchanged());
+      allow delete: if belongsToCompany(companyId) && isCompanyAdmin(companyId);
+      allow create: if signedIn() && validPrimaryActivity(request.resource.data);
 
       // Allow public unauthenticated single GET for client reports (direct share link)
       match /client_reports/{reportId} {
@@ -294,13 +390,17 @@ service cloud.firestore {
 
       // Every other company subcollection stays open to company members.
       // Rules are additive, so explicit collections are excluded by name here.
+      // Activity-owned domain collections (reserved prefixes) are additionally
+      // gated by the tenant's authoritative activity + least-privilege; shared
+      // collections short-circuit past the domain check and pay no extra read.
       match /{collection}/{docId} {
         allow read, write: if belongsToCompany(companyId)
           && collection != 'daily_reports'
           && collection != 'conversations'
           && collection != 'journals'
           && collection != 'payments'
-          && collection != 'bills';
+          && collection != 'bills'
+          && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection));
 
         // Nested data such as tasks/{id}/comments
         match /{nested=**} {
@@ -309,7 +409,8 @@ service cloud.firestore {
             && collection != 'conversations'
             && collection != 'journals'
             && collection != 'payments'
-            && collection != 'bills';
+            && collection != 'bills'
+            && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection));
         }
       }
     }

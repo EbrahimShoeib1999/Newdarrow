@@ -45,6 +45,13 @@ await testEnv.clearFirestore();
 // Seed user profiles and two reports without going through the rules.
 await testEnv.withSecurityRulesDisabled(async (ctx) => {
   const db = ctx.firestore();
+  // Company profile doc: the authoritative source activity-aware routing
+  // resolves from. Seeded pre-rules so the primaryActivity boundary below has
+  // an existing resource to compare against.
+  await setDoc(doc(db, "companies", COMPANY), {
+    name: "Acme",
+    primaryActivity: "PROJECTS",
+  });
   await setDoc(doc(db, "users", "emp1"), { companyId: COMPANY, role: "employee" });
   await setDoc(doc(db, "users", "emp2"), { companyId: COMPANY, role: "employee" });
   await setDoc(doc(db, "users", "mgr"), { companyId: COMPANY, role: "manager" });
@@ -570,6 +577,171 @@ await check("billing accountant sub-role (employee) CAN reject a bill", () =>
 await check("outsider CANNOT read company bills", () =>
   assertFails(getDoc(doc(asUser("outsider"), "companies", COMPANY, "bills", "bill1")))
 );
+
+// --- Authoritative primaryActivity write boundary (activity-aware routing) ---
+// The frontend guard is NOT the security boundary: prove the server rejects
+// an activity change that comes from anywhere other than a company admin,
+// rejects unknown/display-name ids, and still lets members do legitimate
+// company-profile updates that do not touch the field.
+await check("company admin CAN set a valid registry activity", () =>
+  assertSucceeds(
+    updateDoc(doc(asUser("admin"), "companies", COMPANY), { primaryActivity: "MEDICAL_CLINIC" })
+  )
+);
+
+await check("non-admin member CANNOT change primaryActivity", () =>
+  assertFails(
+    updateDoc(doc(asUser("emp1"), "companies", COMPANY), { primaryActivity: "SCHOOL_MANAGEMENT" })
+  )
+);
+
+await check("admin CANNOT persist an unknown/display-name activity id", () =>
+  assertFails(
+    updateDoc(doc(asUser("admin"), "companies", COMPANY), { primaryActivity: "المشاريع" })
+  )
+);
+
+await check("member CAN update other company profile fields (primaryActivity unchanged)", () =>
+  assertSucceeds(
+    updateDoc(doc(asUser("emp1"), "companies", COMPANY), { name: "Acme Renamed" })
+  )
+);
+
+await check("unauthenticated user CANNOT change primaryActivity", () =>
+  assertFails(
+    updateDoc(doc(unauth, "companies", COMPANY), { primaryActivity: "PROJECTS" })
+  )
+);
+
+await check("outsider CANNOT change primaryActivity of another company", () =>
+  assertFails(
+    updateDoc(doc(asUser("outsider"), "companies", COMPANY), { primaryActivity: "PROJECTS" })
+  )
+);
+
+await check("non-admin member CANNOT delete company profile (admin-only)", () =>
+  assertFails(deleteDoc(doc(asUser("emp1"), "companies", COMPANY)))
+);
+
+// --- Phase 2: activity-aware DOMAIN data boundary (release-critical, §12) ---
+// Reserved per-activity collection prefixes (rem_/reb_/fm_/rdv_/mkt_/cln_/sch_)
+// gate access by the tenant's AUTHORITATIVE activity (server get of the company
+// doc) — never by a client field. Clinical/school domains add least-privilege.
+// Shared collections (tasks, contacts, projects, …) match no prefix and are
+// unaffected. These cases prove authorized access AND denial for a live and a
+// sensitive domain, record preservation across a switch, and forged-field
+// resistance.
+const clnP1 = (db) => doc(db, "companies", COMPANY, "cln_patients", "P1");
+const remRP1 = (db) => doc(db, "companies", COMPANY, "rem_properties", "RP1");
+const setActivity = (activity) =>
+  assertSucceeds(
+    updateDoc(doc(asUser("admin"), "companies", COMPANY), { primaryActivity: activity })
+  );
+
+await check("domain setup: tenant activity pinned to MEDICAL_CLINIC", () => setActivity("MEDICAL_CLINIC"));
+
+await check("privileged clinic admin CAN create clinical (domain) record", () =>
+  assertSucceeds(setDoc(clnP1(asUser("admin")), { name: "Patient One", companyId: COMPANY }))
+);
+await check("privileged clinic manager CAN read clinical record", () =>
+  assertSucceeds(getDoc(clnP1(asUser("mgr"))))
+);
+await check("plain clinic employee CANNOT read clinical record (least-privilege)", () =>
+  assertFails(getDoc(clnP1(asUser("emp1"))))
+);
+await check("plain clinic employee CANNOT write clinical record (least-privilege)", () =>
+  assertFails(setDoc(doc(asUser("emp1"), "companies", COMPANY, "cln_patients", "P2"), { name: "Nope" }))
+);
+await check("tenant is MEDICAL: writing a real-estate domain collection is DENIED", () =>
+  assertFails(setDoc(remRP1(asUser("admin")), { address: "x" }))
+);
+await check("tenant is MEDICAL: writing a facilities domain collection is DENIED", () =>
+  assertFails(setDoc(doc(asUser("admin"), "companies", COMPANY, "fm_assets", "A1"), { label: "HVAC" }))
+);
+
+// Facilities Management is now a LIVE domain module: prove the fm_* boundary
+// opens for ordinary members when it is the tenant's activity (non-sensitive
+// domain: no least-privilege elevation), and that outsiders stay denied.
+const fmW1 = (db) => doc(db, "companies", COMPANY, "fm_work_orders", "W1");
+await check("domain switch: tenant activity -> FACILITIES_MANAGEMENT", () => setActivity("FACILITIES_MANAGEMENT"));
+await check("facilities active: plain member CAN create fm_work_orders record", () =>
+  assertSucceeds(setDoc(fmW1(asUser("emp1")), { title: "AC repair", status: "requested", companyId: COMPANY }))
+);
+await check("facilities active: plain member CAN read the facilities domain back", () =>
+  assertSucceeds(getDoc(fmW1(asUser("emp1"))))
+);
+await check("facilities active: outsider CANNOT read the facilities domain", () =>
+  assertFails(getDoc(fmW1(asUser("outsider"))))
+);
+await check("facilities active: clinical domain stays DENIED (no cross-domain leak)", () =>
+  assertFails(getDoc(clnP1(asUser("admin"))))
+);
+
+await check("domain switch: tenant activity -> REAL_ESTATE_MANAGEMENT", () => setActivity("REAL_ESTATE_MANAGEMENT"));
+await check("now-active non-sensitive domain: plain member CAN create property", () =>
+  assertSucceeds(setDoc(remRP1(asUser("emp1")), { address: "Riyadh", companyId: COMPANY }))
+);
+await check("deactivated clinical domain is DENIED even for the admin", () =>
+  assertFails(getDoc(clnP1(asUser("admin"))))
+);
+await check("records are PRESERVED (not deleted) when their activity is disabled", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await getDoc(clnP1(ctx.firestore()));
+    if (!snap.exists()) throw new Error("clinical record vanished after activity switch");
+  });
+});
+
+await check("domain switch back: tenant activity -> MEDICAL_CLINIC", () => setActivity("MEDICAL_CLINIC"));
+await check("re-enabled clinical domain readable by privileged admin again", () =>
+  assertSucceeds(getDoc(clnP1(asUser("admin"))))
+);
+await check("client-forged primaryActivity field CANNOT bypass collection-name gate", () =>
+  assertFails(
+    setDoc(doc(asUser("admin"), "companies", COMPANY, "mkt_campaigns", "C1"), {
+      name: "x",
+      primaryActivity: "MARKETING_AGENCY",
+    })
+  )
+);
+await check("shared tasks collection stays writable while clinic domain active", () =>
+  assertSucceeds(setDoc(doc(asUser("emp1"), "companies", COMPANY, "tasks", "tShared"), { title: "still works" }))
+);
+await check("outsider CANNOT write into a company's clinical domain", () =>
+  assertFails(setDoc(doc(asUser("outsider"), "companies", COMPANY, "cln_patients", "HACK"), { name: "x" }))
+);
+
+// Marketing Agency boundary: same prefix contract (mkt_) as the live domains
+// above — allowed for ordinary members only while MARKETING_AGENCY is the
+// tenant activity, denied cross-domain otherwise, records preserved on exit.
+const mktC1 = (db) => doc(db, "companies", COMPANY, "mkt_campaigns", "C1");
+const mktE1 = (db) => doc(db, "companies", COMPANY, "mkt_expenses", "E1");
+await check("domain switch: tenant activity -> MARKETING_AGENCY", () => setActivity("MARKETING_AGENCY"));
+await check("marketing active: plain member CAN create mkt_campaigns record", () =>
+  assertSucceeds(setDoc(mktC1(asUser("emp1")), { name: "Ramadan Push", status: "draft", companyId: COMPANY }))
+);
+await check("marketing active: plain member CAN read the marketing domain back", () =>
+  assertSucceeds(getDoc(mktC1(asUser("emp1"))))
+);
+await check("marketing active: member CAN write a second mkt_ collection (expenses)", () =>
+  assertSucceeds(setDoc(mktE1(asUser("emp1")), { campaignId: "C1", amount: 100, currency: "SAR" }))
+);
+await check("marketing active: outsider CANNOT read the marketing domain", () =>
+  assertFails(getDoc(mktC1(asUser("outsider"))))
+);
+await check("marketing active: facilities domain stays DENIED (no cross-domain leak)", () =>
+  assertFails(getDoc(fmW1(asUser("admin"))))
+);
+await check("marketing active: outsider CANNOT write marketing records", () =>
+  assertFails(setDoc(doc(asUser("outsider"), "companies", COMPANY, "mkt_deliverables", "HACK"), { title: "x" }))
+);
+await check("domain switch away: MARKETING records stay durable but gated", async () => {
+  await setActivity("MEDICAL_CLINIC");
+  await assertFails(getDoc(mktC1(asUser("admin"))));
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const snap = await getDoc(mktC1(ctx.firestore()));
+    if (!snap.exists()) throw new Error("campaign record vanished after leaving MARKETING_AGENCY");
+  });
+});
 
 await testEnv.cleanup();
 

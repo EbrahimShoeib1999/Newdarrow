@@ -21,6 +21,8 @@ import {
   ListTodo,
   MessageSquare,
   FolderKanban,
+  Building2,
+  Megaphone,
   Globe2,
   type LucideIcon,
 } from "lucide-react";
@@ -33,6 +35,8 @@ import {
   type PortalNavTreeGroup,
   type PortalNavItem,
 } from "@/lib/portal-nav";
+import { filterPathsForActivity } from "@/lib/activity-routes";
+import { useActivityConfig } from "@/features/activities/hooks/use-activity-config";
 import { useAccessiblePortals } from "@/features/portals/hooks/use-portals";
 import { ChatInboxBadge } from "@/features/chat/components/ChatInboxBadge";
 import { useProjectT } from "@/features/projects/hooks/use-project-terminology";
@@ -88,6 +92,18 @@ const PORTAL_DETAILS: Record<
     icon: FolderKanban,
     iconColor: "text-indigo-500 dark:text-indigo-400",
   },
+  facilities: {
+    titleKey: "portals.facilities.short",
+    titleAr: "إدارة المرافق",
+    icon: Building2,
+    iconColor: "text-cyan-500 dark:text-cyan-400",
+  },
+  agency: {
+    titleKey: "portals.agency.short",
+    titleAr: "التسويق والحملات",
+    icon: Megaphone,
+    iconColor: "text-pink-500 dark:text-pink-400",
+  },
 };
 
 const GROUP_TITLES_AR: Record<string, string> = {
@@ -136,7 +152,23 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
   const location = useLocation();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const defaultTree = useMemo(() => getNavTreeForPortal(portal), [portal]);
+  // Activity-aware tree: items whose path belongs to an inactive activity are
+  // stripped here, so the visible links, the sidebar search results and the
+  // favorites section all respect the same registry decision as the router.
+  const activityConfig = useActivityConfig();
+  const activeActivity = activityConfig.status === "ready" ? activityConfig.activity : null;
+  const defaultTree = useMemo(() => {
+    const tree = getNavTreeForPortal(portal);
+    return tree
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) => filterPathsForActivity([item.path], activityConfig).length > 0,
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recompute only when the resolved activity actually changes, not on every config object identity flip.
+  }, [portal, activeActivity]);
   const [treeGroups, setTreeGroups] = useState<PortalNavTreeGroup[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [favorites, setFavorites] = useState<string[]>([]);

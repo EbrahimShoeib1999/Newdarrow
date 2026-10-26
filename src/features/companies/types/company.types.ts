@@ -1,3 +1,5 @@
+import type { ActivityId } from "@/features/activities/types/activity.types";
+
 export interface CompanyProfile {
   id: string;
   name: string;
@@ -23,6 +25,13 @@ export interface CompanyProfile {
   brandColor?: string;
   /** Hex color, e.g. "#d53a81" — overrides the app's default secondary brand color for this company. */
   brandSecondaryColor?: string;
+  /**
+   * Tenant's primary business activity (stable id, never a display name).
+   * Absent means DEFAULT_ACTIVITY (PROJECTS) — the pre-engine behavior.
+   * This is the authoritative source for activity-aware routing; the client
+   * re-reads it from Firestore and the security rules validate any write.
+   */
+  primaryActivity?: ActivityId | null;
   createdAt: string;
   updatedAt: string;
 }

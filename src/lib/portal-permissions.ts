@@ -4,7 +4,7 @@ import {
   resolveUserPortals,
 } from "@/lib/permissions/portal-access";
 
-export type PortalId = "tasks" | "crm" | "people" | "billing" | "chat" | "projects";
+export type PortalId = "tasks" | "crm" | "people" | "billing" | "chat" | "projects" | "facilities" | "agency";
 
 export const PORTAL_PATHS: Record<PortalId, string> = {
   tasks: "/tasks",
@@ -13,6 +13,8 @@ export const PORTAL_PATHS: Record<PortalId, string> = {
   billing: "/billing",
   chat: "/chat",
   projects: "/projects",
+  facilities: "/facilities",
+  agency: "/agency",
 };
 
 /** @deprecated Use ROLE_PERMISSIONS from @/lib/permissions */
@@ -23,6 +25,8 @@ export const PORTAL_ACCESS: Record<PortalId, readonly UserRole[]> = {
   billing: ["super_admin", "admin", "manager"],
   chat: ["super_admin", "admin", "manager", "employee", "viewer"],
   projects: ["super_admin", "admin", "manager", "employee"],
+  facilities: ["super_admin", "admin", "manager", "employee"],
+  agency: ["super_admin", "admin", "manager", "employee"],
 };
 
 export function canAccessPortal(
@@ -48,6 +52,8 @@ export function getPortalFromPath(pathname: string): PortalId | "picker" | "sett
   if (pathname.startsWith("/billing")) return "billing";
   if (pathname.startsWith("/chat")) return "chat";
   if (pathname.startsWith("/projects")) return "projects";
+  if (pathname.startsWith("/facilities")) return "facilities";
+  if (pathname.startsWith("/agency")) return "agency";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname === "/profile" || pathname === "/notifications" || pathname === "/seed") return null;
   return null;

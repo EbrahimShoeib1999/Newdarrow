@@ -64,6 +64,8 @@ const oversizedBuffer = new Uint8Array(6 * 1024 * 1024); // 6MB (exceeds 5MB ava
 
 const CO_A = "company_alpha";
 const CO_B = "company_beta";
+const CO_C = "company_gamma";
+const CO_D = "company_delta";
 
 // Seed authentic Firestore user profiles (no custom claims)
 await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -76,15 +78,39 @@ await testEnv.withSecurityRulesDisabled(async (context) => {
     companyId: CO_B,
     role: "admin",
   });
+  await setDoc(doc(db, "users", "user_a_emp"), {
+    companyId: CO_A,
+    role: "employee",
+  });
+  await setDoc(doc(db, "users", "user_c"), {
+    companyId: CO_C,
+    role: "employee",
+  });
+  await setDoc(doc(db, "users", "user_d"), {
+    companyId: CO_D,
+    role: "employee",
+  });
+  // Company docs are the AUTHORITATIVE source the domain gate reads activity
+  // from via a trusted server get — the client never supplies it.
+  await setDoc(doc(db, "companies", CO_A), { name: "Alpha Clinic", primaryActivity: "MEDICAL_CLINIC" });
+  await setDoc(doc(db, "companies", CO_B), { name: "Beta", primaryActivity: "PROJECTS" });
+  await setDoc(doc(db, "companies", CO_C), { name: "Gamma Estates", primaryActivity: "REAL_ESTATE_MANAGEMENT" });
+  await setDoc(doc(db, "companies", CO_D), { name: "Delta Agency", primaryActivity: "MARKETING_AGENCY" });
 });
 
 // Realistic authenticated contexts: standard Firebase Auth without synthetic claims
 const userA = testEnv.authenticatedContext("user_a");
 const userB = testEnv.authenticatedContext("user_b");
+const userAEmp = testEnv.authenticatedContext("user_a_emp");
+const userC = testEnv.authenticatedContext("user_c");
+const userD = testEnv.authenticatedContext("user_d");
 const unauth = testEnv.unauthenticatedContext();
 
 const storageA = userA.storage();
 const storageB = userB.storage();
+const storageAEmp = userAEmp.storage();
+const storageC = userC.storage();
+const storageD = userD.storage();
 const storageUnauth = unauth.storage();
 
 // --- 1. User Avatars ---
@@ -212,6 +238,77 @@ await test("23. Company A member can delete own CRM attachment", async () => {
 await test("24. Company B member CANNOT delete Company A task attachment", async () => {
   const taskRef = ref(storageB, `tasks/${CO_A}/attachments/task_doc.pdf`);
   await assertFails(deleteObject(taskRef));
+});
+
+// --- 8. Activity-owned domain attachments (Phase 2, §12 Storage parity) ---
+// Path shape: domain/{collection}/{companyId}/... ; {collection} carries the
+// reserved per-activity prefix. Access = tenant membership + the company's
+// AUTHORITATIVE Firestore activity owns the prefix + (clinical/school) role.
+await test("25. Privileged clinic admin CAN upload clinical domain attachment", async () => {
+  const dRef = ref(storageA, `domain/cln_patients/${CO_A}/P1/scan.pdf`);
+  await assertSucceeds(uploadBytes(dRef, samplePdf, { contentType: "application/pdf" }));
+});
+
+await test("26. Plain clinic employee CANNOT upload clinical domain attachment (least-privilege)", async () => {
+  const dRef = ref(storageAEmp, `domain/cln_patients/${CO_A}/P2/scan.pdf`);
+  await assertFails(uploadBytes(dRef, samplePdf, { contentType: "application/pdf" }));
+});
+
+await test("27. Plain clinic employee CANNOT read clinical domain attachment (least-privilege)", async () => {
+  const dRef = ref(storageAEmp, `domain/cln_patients/${CO_A}/P1/scan.pdf`);
+  await assertFails(getBytes(dRef));
+});
+
+await test("28. Clinic admin CAN read own clinical domain attachment", async () => {
+  const dRef = ref(storageA, `domain/cln_patients/${CO_A}/P1/scan.pdf`);
+  await assertSucceeds(getBytes(dRef));
+});
+
+await test("29. Real-estate member CAN upload non-sensitive domain attachment", async () => {
+  const dRef = ref(storageC, `domain/rem_units/${CO_C}/U1/floor.pdf`);
+  await assertSucceeds(uploadBytes(dRef, samplePdf, { contentType: "application/pdf" }));
+});
+
+await test("30. Real-estate tenant CANNOT upload clinical domain attachment (wrong activity)", async () => {
+  const dRef = ref(storageC, `domain/cln_patients/${CO_C}/P1/scan.pdf`);
+  await assertFails(uploadBytes(dRef, samplePdf, { contentType: "application/pdf" }));
+});
+
+await test("31. Clinic tenant CANNOT upload real-estate domain attachment (wrong activity)", async () => {
+  const dRef = ref(storageAEmp, `domain/rem_units/${CO_A}/U1/floor.pdf`);
+  await assertFails(uploadBytes(dRef, samplePdf, { contentType: "application/pdf" }));
+});
+
+await test("32. Outsider CANNOT upload into another company's domain partition", async () => {
+  const dRef = ref(storageB, `domain/cln_patients/${CO_A}/HACK/x.pdf`);
+  await assertFails(uploadBytes(dRef, samplePdf, { contentType: "application/pdf" }));
+});
+
+// Marketing Agency parity: briefs upload under domain/mkt_briefs/{companyId}/...
+// — gated by the same prefix contract as the other live domains.
+await test("33. Marketing member CAN upload mkt_briefs domain attachment", async () => {
+  const dRef = ref(storageD, `domain/mkt_briefs/${CO_D}/C1/creative.pdf`);
+  await assertSucceeds(uploadBytes(dRef, samplePdf, { contentType: "application/pdf" }));
+});
+
+await test("34. Marketing member CAN read the domain attachment back", async () => {
+  const dRef = ref(storageD, `domain/mkt_briefs/${CO_D}/C1/creative.pdf`);
+  await assertSucceeds(getBytes(dRef));
+});
+
+await test("35. Clinic tenant CANNOT upload marketing domain attachment (wrong activity)", async () => {
+  const dRef = ref(storageAEmp, `domain/mkt_briefs/${CO_A}/C1/x.pdf`);
+  await assertFails(uploadBytes(dRef, samplePdf, { contentType: "application/pdf" }));
+});
+
+await test("36. Marketing tenant CANNOT upload into the clinical domain (no cross-domain)", async () => {
+  const dRef = ref(storageD, `domain/cln_patients/${CO_D}/P1/x.pdf`);
+  await assertFails(uploadBytes(dRef, samplePdf, { contentType: "application/pdf" }));
+});
+
+await test("37. Outsider CANNOT read another company's marketing domain file", async () => {
+  const dRef = ref(storageB, `domain/mkt_briefs/${CO_D}/C1/creative.pdf`);
+  await assertFails(getBytes(dRef));
 });
 
 await testEnv.cleanup();

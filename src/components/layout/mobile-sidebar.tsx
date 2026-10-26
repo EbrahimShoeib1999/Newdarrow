@@ -55,6 +55,8 @@ const PORTAL_TITLES_AR: Record<PortalId | "picker" | "settings", string> = {
   tasks: "إدارة المهام والمشاريع",
   chat: "المحادثات والرسائل",
   projects: "إدارة المشاريع",
+  facilities: "إدارة المرافق والصيانة",
+  agency: "التسويق والحملات",
   picker: "جميع التطبيقات",
   settings: "الإعدادات",
 };

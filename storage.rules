@@ -41,6 +41,56 @@ service firebase.storage {
       return request.resource.contentType.matches('application/(pdf|vnd.openxmlformats-officedocument.*|vnd.ms-excel|msword|zip)');
     }
 
+    // ---- Phase 2: activity-owned domain attachments (mirrors firestore.rules) ----
+    //
+    // Domain modules upload files under `domain/{collection}/{companyId}/...`
+    // where {collection} carries the SAME reserved per-activity prefix used by
+    // Firestore domain collections. Ownership is derived from the collection
+    // name + the tenant's authoritative Firestore primaryActivity (a trusted
+    // server read), never from anything the client sends. Kept in sync with
+    // src/features/activities/types/activity-domain.ts and firestore.rules.
+    // NOTE: this rules runtime has no String.startsWith(); use matches().
+    function domainOwnerActivity(collection) {
+      return collection.matches('^rem_.*') ? 'REAL_ESTATE_MANAGEMENT'
+        : collection.matches('^reb_.*') ? 'REAL_ESTATE_BROKERAGE'
+        : collection.matches('^fm_.*') ? 'FACILITIES_MANAGEMENT'
+        : collection.matches('^rdv_.*') ? 'REAL_ESTATE_DEVELOPMENT'
+        : collection.matches('^mkt_.*') ? 'MARKETING_AGENCY'
+        : collection.matches('^cln_.*') ? 'MEDICAL_CLINIC'
+        : collection.matches('^sch_.*') ? 'SCHOOL_MANAGEMENT'
+        : '';
+    }
+
+    function isSensitiveDomainCollection(collection) {
+      return collection.matches('^cln_.*') || collection.matches('^sch_.*');
+    }
+
+    // Missing company doc yields 'PROJECTS', which owns no prefix -> fail-closed.
+    function firestoreCompanyActivity(companyId) {
+      let ref = /databases/(default)/documents/companies/$(companyId);
+      let hasField = firestore.exists(ref) && 'primaryActivity' in firestore.get(ref).data;
+      return hasField ? firestore.get(ref).data.primaryActivity : 'PROJECTS';
+    }
+
+    function callerRole(companyId) {
+      return hasUserDoc() && userDoc().get('companyId', '') == companyId
+        ? userDoc().get('role', '')
+        : '';
+    }
+
+    function hasSensitiveDomainPrivilege(companyId) {
+      return isMemberOf(companyId) && (
+        callerRole(companyId) in ['super_admin', 'admin', 'manager']
+      );
+    }
+
+    function domainFileAllowed(collection, companyId) {
+      return isMemberOf(companyId)
+        && firestoreCompanyActivity(companyId) == domainOwnerActivity(collection)
+        && (!isSensitiveDomainCollection(collection)
+            || hasSensitiveDomainPrivilege(companyId));
+    }
+
     // 1. User Avatars: strictly isolated to the user
     match /avatars/{userId}/{fileName} {
       allow read: if isSignedIn();
@@ -90,6 +140,14 @@ service firebase.storage {
       allow write: if isMemberOf(companyId)
         && request.resource.size < 25 * 1024 * 1024;
       allow delete: if isMemberOf(companyId);
+    }
+
+    // 7. Activity-owned domain attachments: same tenant boundary PLUS the
+    // authoritative activity gate and clinical/school least-privilege.
+    match /domain/{collection}/{companyId}/{allPaths=**} {
+      allow read, delete: if domainFileAllowed(collection, companyId);
+      allow write: if domainFileAllowed(collection, companyId)
+        && request.resource.size < 25 * 1024 * 1024;
     }
 
     // Default Deny for all other paths (wildcard unrestricted read/write removed)

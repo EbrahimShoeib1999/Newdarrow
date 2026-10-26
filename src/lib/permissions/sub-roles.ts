@@ -87,6 +87,8 @@ export const PORTAL_SUB_ROLE_OPTIONS: Record<PortalId, readonly PortalSubRole[]>
   billing: ["admin", "manager", "accountant"],
   chat: [],
   projects: [],
+  facilities: [],
+  agency: [],
 };
 
 const DEFAULT_SUB_ROLES_BY_GLOBAL: Partial<
@@ -123,7 +125,7 @@ export function getDefaultSubRole(
   portal: PortalId,
   globalRole: import("@/features/auth/types/auth.types").UserRole
 ): PortalSubRole | undefined {
-  if (portal === "chat" || portal === "projects") return undefined;
+  if (portal === "chat" || portal === "projects" || portal === "facilities" || portal === "agency") return undefined;
   return DEFAULT_SUB_ROLES_BY_GLOBAL[globalRole]?.[portal];
 }
 
@@ -132,7 +134,7 @@ export function resolvePortalSubRole(
   globalRole: import("@/features/auth/types/auth.types").UserRole,
   portalSubRoles?: PortalSubRoles | null
 ): PortalSubRole | undefined {
-  if (portal === "chat" || portal === "projects") return undefined;
+  if (portal === "chat" || portal === "projects" || portal === "facilities" || portal === "agency") return undefined;
   return portalSubRoles?.[portal] ?? getDefaultSubRole(portal, globalRole);
 }
 

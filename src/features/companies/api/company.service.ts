@@ -9,6 +9,7 @@ import { db } from "@/lib/firebase";
 import type { ApiResponse } from "@/types/api.types";
 import { withLogging } from "@/lib/service-utils";
 import { stripUndefined } from "@/features/crm/utils/firestore-mappers";
+import { resolveStoredActivity } from "@/features/activities/types/activity.types";
 import type { CompanyProfile, UpdateCompanyProfileDTO } from "../types/company.types";
 
 const SERVICE_NAME = "CompanyService";
@@ -39,6 +40,9 @@ function mapCompanyDoc(
     logoUrl: data.logoUrl as string | undefined,
     brandColor: data.brandColor as string | undefined,
     brandSecondaryColor: data.brandSecondaryColor as string | undefined,
+    // Normalize through the registry: a stored garbage/legacy value resolves to
+    // the default instead of unlocking an unknown route namespace.
+    primaryActivity: resolveStoredActivity(data.primaryActivity),
     createdAt: (data.createdAt as string) ?? new Date().toISOString(),
     updatedAt: (data.updatedAt as string) ?? new Date().toISOString(),
   };
