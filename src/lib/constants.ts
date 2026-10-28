@@ -68,6 +68,11 @@ export const QUERY_KEYS = {
     announcements: (companyId: string) => ["people", companyId, "announcements"] as const,
     workLocations: (companyId: string) => ["people", companyId, "work-locations"] as const,
     attendanceSettings: (companyId: string) => ["people", companyId, "attendance-settings"] as const,
+    scheduleTemplates: (companyId: string) => ["people", companyId, "schedule-templates"] as const,
+    scheduleAssignments: (companyId: string) => ["people", companyId, "schedule-assignments"] as const,
+    latenessPolicies: (companyId: string) => ["people", companyId, "lateness-policies"] as const,
+    deductionCases: (companyId: string) => ["people", companyId, "deduction-cases"] as const,
+    latenessReport: (companyId: string, periodKey: string) => ["people", companyId, "lateness-report", periodKey] as const,
   },
   company: {
     profile: (companyId: string) => ["company", companyId, "profile"] as const,

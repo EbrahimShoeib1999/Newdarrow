@@ -20,6 +20,7 @@ import AnimatedDiv, {
 } from "@/components/motion/animated-div";
 import SmoothScrollProvider from "@/components/providers/smooth-scroll-provider";
 import { LANDING_APPS } from "../constants/landing-apps";
+import { PUBLIC_ACTIVITY_CARDS } from "../constants/landing-activities";
 import { useAccessiblePortals } from "@/features/portals/hooks/use-portals";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +43,7 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
           <nav className="hidden items-center gap-5 text-sm font-medium text-default-600 md:flex flex-1 min-w-0 justify-center">
             {[
               { href: "#apps", label: t("nav.apps") },
+              { href: "#activities", label: t("nav.activities") },
               { href: "#features", label: t("nav.features") },
               { href: "#cta", label: t("nav.pricing") },
             ].map((item) => (
@@ -316,7 +318,7 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
         </section>
 
         {/* Apps grid */}
-        <section id="apps" className="bg-background px-4 py-16 md:px-6 md:py-24 border-y border-default-100">
+        <section id="apps" className="bg-background px-4 py-16 md:px-6 md:py-24 border-y border-default-100 scroll-mt-20">
           <div className="mx-auto max-w-5xl">
             <AnimatedDiv triggerOnScroll variants={fadeInUpVariants} className="mb-14 text-center">
               <span className="text-xs font-bold uppercase tracking-widest text-primary mb-2 block">
@@ -380,8 +382,85 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
           </div>
         </section>
 
+        {/* Industries / activity catalog. Public marketing ONLY: shows the full
+            supported scope with honest availability. Cards never activate a
+            module, change tenant config, or link into a gated internal route —
+            live and inquiry cards both point to the public /register path. */}
+        <section id="activities" className="bg-default-50 px-4 py-16 md:px-6 md:py-24 scroll-mt-20">
+          <div className="mx-auto max-w-5xl">
+            <AnimatedDiv triggerOnScroll variants={fadeInUpVariants} className="mb-14 text-center">
+              <span className="text-xs font-bold uppercase tracking-widest text-primary mb-2 block">
+                {isAr ? "القطاعات المدعومة" : "Supported Industries"}
+              </span>
+              <h2 className="text-3xl font-black md:text-4xl tracking-tight text-default-900">{t("activities.title")}</h2>
+              <p className="mt-3 text-default-500 max-w-2xl mx-auto text-base">
+                {t("activities.subtitle")}
+              </p>
+            </AnimatedDiv>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {PUBLIC_ACTIVITY_CARDS.map((card, index) => {
+                const Icon = card.icon;
+                const name = isAr ? card.nameAr : card.nameEn;
+                const desc = isAr ? card.descAr : card.descEn;
+                return (
+                  <AnimatedDiv
+                    key={card.id}
+                    triggerOnScroll
+                    amount={0.15}
+                    delay={index * 0.05}
+                    variants={fadeInUpVariants}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-full flex-col rounded-3xl border bg-background p-6 shadow-sm transition-all duration-300",
+                        card.live
+                          ? "border-default-200/90 hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10"
+                          : "border-dashed border-default-200 opacity-80"
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div
+                          className={cn(
+                            "inline-flex rounded-2xl p-3 shadow-sm transition-colors",
+                            card.live ? "bg-primary/10 text-primary" : "bg-default-100 text-default-400"
+                          )}
+                        >
+                          <Icon className="h-6 w-6" />
+                        </div>
+                        <span
+                          className={cn(
+                            "text-[11px] font-bold px-2.5 py-1 rounded-full border",
+                            card.live
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                              : "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                          )}
+                        >
+                          {card.live ? t("activities.available") : t("activities.comingSoon")}
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-bold text-default-900">{name}</h3>
+                      <p className="mt-2 text-sm text-default-500 leading-relaxed flex-1">{desc}</p>
+                      <Link
+                        to="/register"
+                        className={cn(
+                          "mt-5 inline-flex items-center gap-1.5 text-sm font-bold transition-colors",
+                          card.live ? "text-primary hover:text-primary-600" : "text-default-500 hover:text-primary"
+                        )}
+                      >
+                        {card.live ? t("cta.button") : t("activities.requestAccess")}
+                        <ArrowRight className="h-4 w-4 rtl:rotate-180" />
+                      </Link>
+                    </div>
+                  </AnimatedDiv>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
         {/* Features Bento */}
-        <section id="features" className="px-4 py-16 md:px-6 md:py-24 bg-default-50">
+        <section id="features" className="px-4 py-16 md:px-6 md:py-24 bg-default-50 scroll-mt-20">
           <div className="mx-auto max-w-5xl">
             <AnimatedDiv triggerOnScroll className="mb-14 text-center">
               <span className="text-xs font-bold uppercase tracking-widest text-primary mb-2 block">
@@ -441,7 +520,7 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
         </section>
 
         {/* CTA Banner */}
-        <section id="cta" className="px-4 py-16 md:px-6 md:py-24">
+        <section id="cta" className="px-4 py-16 md:px-6 md:py-24 scroll-mt-20">
           <AnimatedDiv triggerOnScroll amount={0.3} variants={scaleInVariants} className="mx-auto max-w-4xl">
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary-600 to-violet-700 px-8 py-16 text-center text-white shadow-2xl transition-shadow duration-300 hover:shadow-primary/30">
               {/* Radial glow background */}

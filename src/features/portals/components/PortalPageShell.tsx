@@ -2,6 +2,7 @@ import { useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import type { PortalId } from "@/lib/portal-permissions";
 import { PortalSubNav } from "@/features/portals/components/PortalSubNav";
+import { BackBar } from "@/components/shared/back-bar";
 
 function isFullBleedPath(pathname: string) {
   if (pathname.startsWith("/chat")) return true;
@@ -45,6 +46,10 @@ export function PortalPageShell({
       >
         <PortalSubNav portal={portal} />
       </div>
+
+      {/* Registry-driven unified back + breadcrumbs. Renders nothing on pages
+      that already own their controls (bar "none"), so nothing duplicates. */}
+      {!fullBleed && <BackBar />}
 
       {toolbar && (
         <div className="shrink-0 mb-3 flex items-center gap-2 flex-wrap sm:justify-end">

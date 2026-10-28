@@ -131,6 +131,13 @@ await test("exactly one activity grants access to each domain namespace; all oth
     for (const other of ACTIVITY_ID_LIST) {
       const path = `${owner.routeBase}/records/7`;
       const decision = resolveRouteAccess(path, ready(other.id));
+      if (owner.id === "PROJECTS") {
+        // Projects is a CORE module (see CORE_ROUTE_PREFIXES), not an
+        // activity-gated one: it stays reachable under every activity, which
+        // is exactly the "restore Projects" requirement.
+        assert(decision === "allow", `${path} must stay reachable under ${other.id} (core module)`);
+        continue;
+      }
       if (other.id === owner.id) {
         assert(
           decision === "allow" || decision === "configuring",
@@ -153,7 +160,7 @@ await test("nested routes inherit their activity's restriction (no nested bypass
     "/clinic/patients/1/encounters/2",
     "/school/students/5/grades",
     "/real-estate/properties/3/units/14/leases",
-    "/projects/settings",
+    "/development/phases/1/claims/2",
     "/agency/campaigns/9/deliverables/3",
   ];
   for (const p of nested) {
@@ -172,9 +179,15 @@ await test("nested routes inherit their activity's restriction (no nested bypass
 
 await test("direct URL entry produces the same decision as in-app navigation", () => {
   // There is one resolution function; simulate a typed URL vs a pushed link.
-  const viaUrl = resolveRouteAccess("/projects", ready("MEDICAL_CLINIC"));
-  const viaNav = resolveRouteAccess("/projects", ready("MEDICAL_CLINIC"));
+  const viaUrl = resolveRouteAccess("/real-estate/properties/1", ready("MEDICAL_CLINIC"));
+  const viaNav = resolveRouteAccess("/real-estate/properties/1", ready("MEDICAL_CLINIC"));
   assert(viaUrl === "deny-activity" && viaNav === "deny-activity", "typed URLs bypass nothing");
+  // A core module resolves identically whether typed or navigated, and is
+  // never denied by an inactive activity.
+  assert(
+    resolveRouteAccess("/projects", ready("MEDICAL_CLINIC")) === "allow",
+    "core /projects must be reachable regardless of the active activity",
+  );
 });
 
 /* -------------------------------------------------------------------------- */
@@ -247,10 +260,16 @@ await test("refreshing re-resolves identically from the stored activity", () => 
 console.log("5. Activity switching (no data loss, correct re-resolution):");
 
 await test("switching away hides the module; switching back restores it — ids never mutate", () => {
-  const before = resolveRouteAccess("/projects", ready("PROJECTS"));
-  const away = resolveRouteAccess("/projects", ready("SCHOOL_MANAGEMENT"));
-  const back = resolveRouteAccess("/projects", ready("PROJECTS"));
+  const before = resolveRouteAccess("/real-estate", ready("REAL_ESTATE_MANAGEMENT"));
+  const away = resolveRouteAccess("/real-estate", ready("SCHOOL_MANAGEMENT"));
+  const back = resolveRouteAccess("/real-estate", ready("REAL_ESTATE_MANAGEMENT"));
   assert(before === "allow" && away === "deny-activity" && back === "allow", "switch lifecycle broken");
+  // Core modules survive the switch untouched — switching activity never
+  // hides or denies Projects (the regression this suite guards).
+  assert(
+    resolveRouteAccess("/projects", ready("SCHOOL_MANAGEMENT")) === "allow",
+    "activity switch must not hide the core Projects module",
+  );
   // Records are keyed by their own stable ids/collections — routing holds no
   // mutation path at all: registry entries are read-only constants.
   assert(ACTIVITY_REGISTRY.PROJECTS.id === "PROJECTS", "stable id mutated");
@@ -258,24 +277,48 @@ await test("switching away hides the module; switching back restores it — ids 
 
 await test("portals are visible exactly for the active/owning activity (picker & launcher)", () => {
   for (const a of ACTIVITY_IDS) {
-    assert(portalAllowedForActivity("projects", ready(a)) === (a === "PROJECTS"), `projects portal wrong under ${a}`);
+    // Projects is core: visible for every activity.
+    assert(portalAllowedForActivity("projects", ready(a)), `projects portal hidden under ${a}`);
+    // Real Estate is activity-owned: visible ONLY under REAL_ESTATE_MANAGEMENT.
+    assert(
+      portalAllowedForActivity("real_estate", ready(a)) === (a === "REAL_ESTATE_MANAGEMENT"),
+      `real_estate portal wrong under ${a}`,
+    );
     for (const portal of ["crm", "people", "billing", "chat", "tasks"] as const) {
       assert(portalAllowedForActivity(portal, ready(a)), `shared portal ${portal} hidden under ${a}`);
     }
   }
-  // Fail closed while loading: the activity-owned portal is not shown on a guess.
-  assert(!portalAllowedForActivity("projects", LOADING), "projects portal shown before config ready");
+  // Fail closed while loading: an activity-owned portal is not shown on a guess.
+  assert(!portalAllowedForActivity("real_estate", LOADING), "real_estate portal shown before config ready");
   assert(portalAllowedForActivity("crm", LOADING), "shared portal incorrectly hidden");
+  assert(portalAllowedForActivity("projects", LOADING), "core projects portal must not be gated by activity");
+});
+
+await test("PROJECTS IS CORE: visible + accessible for every supported activity; Real Estate is not", () => {
+  // Acceptance guard for the P0 report. The nav filter (picker/launcher/sidebar)
+  // and the route guard (direct URL) are driven by the same registry, so both
+  // must agree: Projects stays everywhere, Real Estate only under its activity.
+  for (const a of ACTIVITY_IDS) {
+    assert(portalAllowedForActivity("projects", ready(a)), `projects portal hidden under ${a}`);
+    assert(resolveRouteAccess("/projects", ready(a)) === "allow", `/projects denied on direct URL under ${a}`);
+    assert(resolveRouteAccess("/projects/p-1", ready(a)) === "allow", `/projects/:id denied under ${a}`);
+    const remAllowed = resolveRouteAccess("/real-estate/properties/1", ready(a)) === "allow";
+    assert(remAllowed === (a === "REAL_ESTATE_MANAGEMENT"), `real-estate leak under ${a}`);
+    assert(portalAllowedForActivity("real_estate", ready(a)) === (a === "REAL_ESTATE_MANAGEMENT"), `real_estate portal leak under ${a}`);
+  }
 });
 
 await test("PORTAL_ACTIVITY maps only real portals and matches route ownership", () => {
   for (const [portal, activity] of Object.entries(PORTAL_ACTIVITY)) {
-        assert(portal in { tasks: 1, crm: 1, people: 1, billing: 1, chat: 1, projects: 1, facilities: 1, agency: 1 }, `unknown portal ${portal}`);
+    assert(portal in { real_estate: 1, facilities: 1, agency: 1, school: 1 }, `unknown activity-owned portal ${portal}`);
     assert(isActivityId(activity), `portal ${portal} mapped to unknown activity`);
   }
-  assert(PORTAL_ACTIVITY.projects === "PROJECTS", "projects portal ownership drift");
+  // Projects is core, so it must NOT be listed as an activity-owned portal.
+  assert(PORTAL_ACTIVITY.projects === undefined, "projects must not be activity-gated");
+  assert(PORTAL_ACTIVITY.real_estate === "REAL_ESTATE_MANAGEMENT", "real_estate portal ownership drift");
   assert(PORTAL_ACTIVITY.facilities === "FACILITIES_MANAGEMENT", "facilities portal ownership drift");
   assert(PORTAL_ACTIVITY.agency === "MARKETING_AGENCY", "agency portal ownership drift");
+  assert(PORTAL_ACTIVITY.school === "SCHOOL_MANAGEMENT", "school portal ownership drift");
 });
 
 /* -------------------------------------------------------------------------- */
@@ -287,21 +330,32 @@ await test("sidebar nav trees lose exactly the inactive activity's items", () =>
   const allNavPaths = [...TASKS_NAV, ...CRM_NAV, ...PEOPLE_NAV, ...BILLING_NAV, ...CHAT_NAV, ...PROJECTS_NAV].map(
     (i) => i.path,
   );
-  assert(allNavPaths.some((p) => p.startsWith("/projects")), "projects nav missing from fixtures");
+  const projectsPaths = allNavPaths.filter((p) => p.startsWith("/projects"));
+  assert(projectsPaths.length > 0, "projects nav missing from fixtures");
   for (const a of ACTIVITY_IDS) {
     const visible = filterPathsForActivity(allNavPaths, ready(a));
-    const projectsVisible = visible.filter((p) => p.startsWith("/projects"));
-    if (a === "PROJECTS") {
-      assert(projectsVisible.length > 0, "active activity's own nav items hidden");
-    } else {
-      assert(projectsVisible.length === 0, `${a} still shows projects nav entries`);
-    }
+    // Projects is core: every projects nav entry stays visible under every
+    // activity (the "restore Projects" requirement).
+    assert(
+      visible.filter((p) => p.startsWith("/projects")).length === projectsPaths.length,
+      `${a} hides core Projects nav entries`,
+    );
     // Shared entries are never dropped.
     assert(visible.includes("/crm/leads"), "shared nav entry dropped");
     assert(visible.includes("/billing/invoices"), "shared nav entry dropped");
   }
-  // The sidebar search index is built from the same filtered tree.
-  assert(filterPathsForActivity(allNavPaths, LOADING).every((p) => !p.startsWith("/projects")), "search index leaks inactive items while loading");
+  // A genuinely activity-owned namespace is dropped when its activity is not
+  // the active one — proving the filter still gates specialised modules.
+  const activityPaths = ["/real-estate", "/facilities/work-orders", "/agency/campaigns"];
+  assert(
+    filterPathsForActivity(activityPaths, ready("FACILITIES_MANAGEMENT")).join() === "/facilities/work-orders",
+    "inactive activity nav entries not stripped",
+  );
+  // The sidebar search index is built from the same filtered tree: core
+  // Projects stays while loading, activity-owned namespaces do not leak.
+  const loadingVisible = filterPathsForActivity(allNavPaths, LOADING);
+  assert(loadingVisible.filter((p) => p.startsWith("/projects")).length === projectsPaths.length, "core projects hidden while loading");
+  assert(filterPathsForActivity(["/real-estate"], LOADING).length === 0, "activity namespace leaks while loading");
 });
 
 await test("homepage shortcut destinations exist and respect the activity matrix", () => {

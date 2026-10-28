@@ -8,23 +8,14 @@ import {
   PORTAL_PATHS,
 } from "@/lib/portal-permissions";
 import { portalAllowedForActivity, type ActivityConfigState } from "@/lib/activity-routes";
+import { ALL_PORTAL_IDS } from "@/lib/permissions/portal-access";
 import { useActivityConfig } from "@/features/activities/hooks/use-activity-config";
 
 export function getLastPortal(): PortalId | null {
   const v = localStorage.getItem(STORAGE_KEYS.LAST_PORTAL);
-  if (
-    v === "tasks" ||
-    v === "crm" ||
-    v === "people" ||
-    v === "billing" ||
-    v === "chat" ||
-    v === "projects" ||
-    v === "facilities" ||
-    v === "agency"
-  ) {
-    return v;
-  }
-  return null;
+  // Validated against the single portal registry instead of a hand-kept list,
+  // so a newly mounted portal's remembered entry is never silently dropped.
+  return v && (ALL_PORTAL_IDS as readonly string[]).includes(v) ? (v as PortalId) : null;
 }
 
 export function setLastPortal(portal: PortalId): void {

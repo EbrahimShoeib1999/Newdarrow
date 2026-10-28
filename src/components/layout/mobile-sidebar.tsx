@@ -57,6 +57,9 @@ const PORTAL_TITLES_AR: Record<PortalId | "picker" | "settings", string> = {
   projects: "إدارة المشاريع",
   facilities: "إدارة المرافق والصيانة",
   agency: "التسويق والحملات",
+  real_estate: "إدارة العقارات والوحدات",
+  school: "إدارة المدرسة والطلاب",
+  custom_modules: "الوحدات المخصصة",
   picker: "جميع التطبيقات",
   settings: "الإعدادات",
 };
@@ -73,10 +76,13 @@ export function MobileSidebar() {
   const portals = useAccessiblePortals();
   const portal = getPortalFromPath(location.pathname);
 
+  // The drawer always renders the tree of the portal the user is actually in;
+  // falling back to a hard-coded portal would show the wrong module's nav
+  // (facilities/real-estate/school pages used to land on the billing tree).
   const activePortalId: PortalId =
-    portal === "tasks" || portal === "crm" || portal === "people" || portal === "billing" || portal === "chat" || portal === "projects"
+    portal && portal !== "picker" && portal !== "settings"
       ? portal
-      : "billing";
+      : (portals[0] ?? "tasks");
 
   const treeGroups = getNavTreeForPortal(activePortalId);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
@@ -97,12 +103,17 @@ export function MobileSidebar() {
     if (item.namespace === "billing") return tBilling(item.labelKey);
     if (item.namespace === "chat") return tChat(item.labelKey);
     if (item.namespace === "projects") return tProjects(item.labelKey);
+    // Activity domains keep their nav copy in their own namespace file.
+    if (item.namespace) return t(item.labelKey, { ns: item.namespace });
     return t(item.labelKey);
   };
 
   const getGroupLabel = (group: PortalNavTreeGroup) => {
     if (group.namespace === "projects") return tProjects(group.labelKey);
-    return (i18n.dir() === "rtl" ? GROUP_TITLES_AR : GROUP_TITLES_EN)[group.id] ?? t(group.labelKey);
+    const localTitle = (i18n.dir() === "rtl" ? GROUP_TITLES_AR : GROUP_TITLES_EN)[group.id];
+    if (localTitle) return localTitle;
+    if (group.namespace) return t(group.labelKey, { ns: group.namespace });
+    return t(group.labelKey);
   };
 
   // Projects honors the tenant's configured term (both languages); other portals

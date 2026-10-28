@@ -96,6 +96,20 @@ service cloud.firestore {
         : collection.matches('^mkt_.*') ? 'MARKETING_AGENCY'
         : collection.matches('^cln_.*') ? 'MEDICAL_CLINIC'
         : collection.matches('^sch_.*') ? 'SCHOOL_MANAGEMENT'
+        // Custom Business Modules Engine: runtime-created record collections
+        // carry the owning activity spelled INTO the name
+        // (mod_<activity_lowercase>_rec_<moduleKey>), exactly like the fixed
+        // prefixes above, so a forged `activity` field stays inert and the
+        // owner is always re-derived from the collection NAME. Kept in sync
+        // with src/features/activities/types/activity-domain.ts.
+        : collection.matches('^mod_projects_rec_.*') ? 'PROJECTS'
+        : collection.matches('^mod_real_estate_management_rec_.*') ? 'REAL_ESTATE_MANAGEMENT'
+        : collection.matches('^mod_real_estate_brokerage_rec_.*') ? 'REAL_ESTATE_BROKERAGE'
+        : collection.matches('^mod_facilities_management_rec_.*') ? 'FACILITIES_MANAGEMENT'
+        : collection.matches('^mod_real_estate_development_rec_.*') ? 'REAL_ESTATE_DEVELOPMENT'
+        : collection.matches('^mod_marketing_agency_rec_.*') ? 'MARKETING_AGENCY'
+        : collection.matches('^mod_medical_clinic_rec_.*') ? 'MEDICAL_CLINIC'
+        : collection.matches('^mod_school_management_rec_.*') ? 'SCHOOL_MANAGEMENT'
         : '';
     }
 
@@ -103,11 +117,20 @@ service cloud.firestore {
       return domainOwnerActivity(collection) != '';
     }
 
+    // The engine's dynamic record collections (as opposed to the fixed
+    // domain prefixes). Used to hold permanent deletion back to admins while
+    // ordinary members keep their activity-scoped CRUD.
+    function isModuleRecordCollection(collection) {
+      return collection.matches('^mod_.*_rec_.*');
+    }
+
     // Clinical and student records are the sensitive domains: least-privilege
     // is enforced on top of the activity gate so a generic clinic/school
     // employee cannot enumerate every patient/student by guessed ids.
     function isSensitiveDomainCollection(collection) {
-      return collection.matches('^cln_.*') || collection.matches('^sch_.*');
+      return collection.matches('^cln_.*') || collection.matches('^sch_.*')
+        || collection.matches('^mod_medical_clinic_rec_.*')
+        || collection.matches('^mod_school_management_rec_.*');
     }
 
     // Authoritative tenant activity, read from the company doc on the server.
@@ -388,29 +411,366 @@ service cloud.firestore {
         allow delete: if isCompanyAdmin(companyId);
       }
 
+      // ---- REAL_ESTATE_MANAGEMENT financial least-privilege -------------------
+      //
+      // Mirrors the real_estate.* grants in src/lib/permissions: super_admin/admin
+      // and manager roles hold the financial permissions implicitly; any other
+      // role needs an explicit customPermissions entry. Enforced in rules so a
+      // client can never mark installments paid, record/void a rent payment,
+      // refund a deposit, or activate/terminate a lease by writing Firestore
+      // directly (the UI gates are not the boundary).
+      function hasRemPermission(companyId, permission) {
+        return belongsToCompany(companyId) && (
+          isCompanyAdmin(companyId)
+          || userDoc().get('role', '') == 'manager'
+          || permission in customPermissions()
+        );
+      }
+      
+      // Lease states that create or end binding financial obligations. Moving a
+      // lease into one of them must go through the approve permission; drafts,
+      // expiring markers and renewals do not.
+      function remLeaseStateEscalates(data) {
+        return data.get('status', '') in ['active', 'terminated', 'cancelled']
+          && !(hasRemPermission(companyId, 'real_estate.approve'));
+      }
+      
+      // Leases: never hard-deletable — terminated/expired history must survive.
+      match /rem_leases/{leaseId} {
+        allow read: if domainAccessAllowed(companyId, 'rem_leases');
+        allow create: if domainAccessAllowed(companyId, 'rem_leases')
+          && !remLeaseStateEscalates(request.resource.data);
+        allow update: if domainAccessAllowed(companyId, 'rem_leases')
+          && !remLeaseStateEscalates(request.resource.data);
+        allow delete: if false;
+      }
+      
+      // Rent installments: the schedule is durable; only the collect workflow
+      // may move status/paidAmount. Other metadata edits stay available to the
+      // domain, and deletion is never allowed (financial history preservation).
+      match /rem_rent_installments/{installmentId} {
+        allow read: if domainAccessAllowed(companyId, 'rem_rent_installments');
+        allow create: if domainAccessAllowed(companyId, 'rem_rent_installments');
+        allow update: if domainAccessAllowed(companyId, 'rem_rent_installments') && (
+          hasRemPermission(companyId, 'real_estate.collect')
+          || (
+            request.resource.data.get('status', '') == resource.data.get('status', '')
+            && request.resource.data.get('paidAmount', 0) == resource.data.get('paidAmount', 0)
+          )
+        );
+        allow delete: if false;
+      }
+      
+      // Rent payments/allocations: only the collect permission may record or
+      // void (correction) a payment; documents are never deletable, preserving
+      // the audit trail of voided-but-recorded transactions.
+      match /rem_rent_payments/{paymentId} {
+        allow read: if domainAccessAllowed(companyId, 'rem_rent_payments');
+        allow create, update: if domainAccessAllowed(companyId, 'rem_rent_payments')
+          && hasRemPermission(companyId, 'real_estate.collect');
+        allow delete: if false;
+      }
+      
+      // Security deposits: refund/deduction/forfeiture transitions require the
+      // dedicated deposits permission; expected-deposit registration is open to
+      // the domain alongside the lease. No hard deletes.
+      match /rem_security_deposits/{depositId} {
+        allow read: if domainAccessAllowed(companyId, 'rem_security_deposits');
+        allow create: if domainAccessAllowed(companyId, 'rem_security_deposits');
+        allow update: if domainAccessAllowed(companyId, 'rem_security_deposits')
+          && hasRemPermission(companyId, 'real_estate.deposits');
+        allow delete: if false;
+      }
+      
       // Every other company subcollection stays open to company members.
       // Rules are additive, so explicit collections are excluded by name here.
       // Activity-owned domain collections (reserved prefixes) are additionally
       // gated by the tenant's authoritative activity + least-privilege; shared
       // collections short-circuit past the domain check and pay no extra read.
+
+      // ---- Work schedules, attendance & lateness-deduction boundary ----------
+      //
+      // Mirrors hasEffectivePermission for the new people.* atoms exactly:
+      // super_admin/admin hold everything; a manager-role user only gets the
+      // atoms that ROLE_PERMISSIONS.manager AND their People sub-role both
+      // contain (empty sub-role = default 'manager'); anyone may receive an
+      // explicit customPermissions grant. Everything else is fail-closed.
+      function peopleHrAllowed(companyId, permission) {
+        return belongsToCompany(companyId) && (
+          isCompanyAdmin(companyId)
+          || permission in customPermissions()
+          || (
+            userDoc().get('role', '') == 'manager'
+            && (
+              (
+                (peopleSubRole() == '' || peopleSubRole() in ['admin', 'manager'])
+                && permission in [
+                  'people.view_schedules',
+                  'people.manage_schedules',
+                  'people.view_all_attendance',
+                  'people.correct_attendance',
+                  'people.view_lateness',
+                  'people.evaluate_lateness',
+                  'people.decide_deductions'
+                ]
+              )
+              || (
+                peopleSubRole() == 'hr'
+                && permission in [
+                  'people.view_schedules',
+                  'people.manage_schedules',
+                  'people.view_all_attendance',
+                  'people.correct_attendance',
+                  'people.view_lateness',
+                  'people.evaluate_lateness'
+                ]
+              )
+            )
+          )
+        );
+      }
+
+      // The account (if any) behind an employee record — '' when unclaimed.
+      function employeeAccountUid(employeeId) {
+        return employeeId != '' && exists(/databases/$(database)/documents/companies/$(companyId)/employees/$(employeeId))
+          ? get(/databases/$(database)/documents/companies/$(companyId)/employees/$(employeeId)).data.get('userId', '')
+          : '';
+      }
+
+      function isMyAttendance(data) {
+        return signedIn() && (
+          data.get('userId', '') == request.auth.uid
+          || employeeAccountUid(data.get('employeeId', '')) == request.auth.uid
+        );
+      }
+
+      // Schedule configuration is transparent to the company; only holders of
+      // people.manage_schedules may change it. Templates are deactivated, not
+      // deleted — snapshots already reference them.
+      match /hr_schedule_templates/{templateId} {
+        allow read: if belongsToCompany(companyId);
+        allow create, update: if peopleHrAllowed(companyId, 'people.manage_schedules');
+        allow delete: if false;
+      }
+
+      match /hr_schedule_assignments/{assignmentId} {
+        allow read: if belongsToCompany(companyId);
+        allow create, update: if peopleHrAllowed(companyId, 'people.manage_schedules');
+        allow delete: if false;
+      }
+
+      // Employees must be able to read the policy lateness is judged under —
+      // transparency, not privilege.
+      match /hr_lateness_policies/{policyId} {
+        allow read: if belongsToCompany(companyId);
+        allow create, update: if peopleHrAllowed(companyId, 'people.manage_lateness_policies');
+        allow delete: if belongsToCompany(companyId) && (
+          isCompanyAdmin(companyId)
+          || 'people.manage_lateness_policies' in customPermissions()
+        );
+      }
+
+      // Deduction cases: only HR/management sees the workflow; the subject
+      // always sees their own. Identity fields and the frozen policy snapshot
+      // are immutable — decisions record, they never rewrite. A subject can
+      // NEVER decide or post against their own case, whatever their role.
+      function caseSubjectUid(data) {
+        return data.get('subjectUserId', '') != ''
+          ? data.get('subjectUserId', '')
+          : employeeAccountUid(data.get('employeeId', ''));
+      }
+
+      match /hr_deduction_cases/{caseId} {
+        allow read: if belongsToCompany(companyId) && (
+          peopleHrAllowed(companyId, 'people.view_lateness')
+          || (resource != null && caseSubjectUid(resource.data) == request.auth.uid)
+        );
+        allow create: if peopleHrAllowed(companyId, 'people.evaluate_lateness')
+          && request.resource.data.get('status', '') in ['pending_review', 'proposed'];
+        allow update: if peopleHrAllowed(companyId, 'people.evaluate_lateness') && resource != null && (
+          // identity + frozen snapshot never change
+          request.resource.data.get('employeeId', '') == resource.data.get('employeeId', '')
+          && request.resource.data.get('periodKey', '') == resource.data.get('periodKey', '')
+          && request.resource.data.get('thresholdId', '') == resource.data.get('thresholdId', '')
+          && request.resource.data.get('policyId', '') == resource.data.get('policyId', '')
+          && request.resource.data.get('policySnapshot', {}) == resource.data.get('policySnapshot', {})
+          && caseSubjectUid(resource.data) != request.auth.uid
+          // recalculation keeps the status and only ever touches open cases
+          && request.resource.data.get('status', '') == resource.data.get('status', '')
+          && resource.data.get('status', '') in ['pending_review', 'proposed']
+          // no posting money through a recalculation
+          && request.resource.data.get('journalId', '') == resource.data.get('journalId', '')
+        );
+        // Decisions (approve/reject) go through the decide atom, never on the
+        // subject's own case, always with the decider recorded, and only on
+        // cases that are still open for a decision.
+        allow update: if peopleHrAllowed(companyId, 'people.decide_deductions') && resource != null &&
+          resource.data.get('status', '') in ['pending_review', 'proposed'] &&
+          request.resource.data.get('status', '') in ['approved', 'rejected'] &&
+          request.resource.data.get('decidedBy', '') == request.auth.uid &&
+          caseSubjectUid(resource.data) != request.auth.uid &&
+          request.resource.data.get('employeeId', '') == resource.data.get('employeeId', '') &&
+          request.resource.data.get('periodKey', '') == resource.data.get('periodKey', '') &&
+          request.resource.data.get('policySnapshot', {}) == resource.data.get('policySnapshot', {}) &&
+          request.resource.data.get('journalId', '') == resource.data.get('journalId', '');
+        // Posting only moves an approved case to posted and stamps the journal.
+        allow update: if peopleHrAllowed(companyId, 'people.post_deductions') && resource != null &&
+          resource.data.get('status', '') == 'approved' &&
+          request.resource.data.get('status', '') == 'posted' &&
+          request.resource.data.get('journalId', '') != '' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'journalId', 'updatedAt']);
+        // Reversal is always attributed and never by the subject.
+        allow update: if peopleHrAllowed(companyId, 'people.reverse_deductions') && resource != null &&
+          resource.data.get('status', '') == 'posted' &&
+          request.resource.data.get('status', '') == 'reversed' &&
+          request.resource.data.get('reversedBy', '') == request.auth.uid &&
+          caseSubjectUid(resource.data) != request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reversedBy', 'reversedAt', 'reversalNote', 'updatedAt']);
+        allow delete: if false;
+      }
+
+      // Attendance: members read the team's sheet (unchanged), a person may
+      // open/close ONLY their own sessions, and the punch identity fields are
+      // immutable for everyone. Corrections (lateness, status, notes, the
+      // schedule snapshot, the audit trail) require people.correct_attendance
+      // and are appended — never overwritten.
+      match /attendance/{attendanceId} {
+        allow read: if belongsToCompany(companyId);
+        allow create: if belongsToCompany(companyId) && (
+          peopleHrAllowed(companyId, 'people.correct_attendance')
+          || isMyAttendance(request.resource.data)
+        );
+        allow update: if belongsToCompany(companyId) && resource != null && (
+          // identity is immutable for every writer
+          request.resource.data.get('employeeId', '') == resource.data.get('employeeId', '')
+          && request.resource.data.get('date', '') == resource.data.get('date', '')
+          && request.resource.data.get('userId', '') == resource.data.get('userId', '')
+        ) && (
+          peopleHrAllowed(companyId, 'people.correct_attendance')
+          // self close-out: only checkout/time/geo/report fields
+          || (
+            isMyAttendance(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'checkOut', 'totalHours', 'updatedAt',
+              'checkOutLat', 'checkOutLng', 'checkOutLocationId', 'checkOutLocationName', 'checkOutDistanceMeters',
+              'location', 'notes', 'hasDailyReport', 'dailyReportId', 'skippedReport'
+            ])
+          )
+        );
+        allow delete: if false;
+      }
+
+      // Settings stay member-writable EXCEPT the legacy attendance cutoff
+      // policy, which now requires the schedule-management capability.
+      match /settings/{settingId} {
+        allow read: if belongsToCompany(companyId);
+        allow create, update: if belongsToCompany(companyId) && (
+          settingId != 'attendance'
+          || peopleHrAllowed(companyId, 'people.manage_schedules')
+        );
+        allow delete: if isCompanyAdmin(companyId);
+      }
+
+      // Custom Business Modules Engine — module DEFINITIONS. Every tenant
+      // member reads them (the workspace must render active modules), but only
+      // an administrator holding the configuration capability may create or
+      // edit them, and they are never hard-deleted (archival is the safe
+      // off-switch, mirroring the service's lifecycle transitions).
+      match /module_definitions/{key} {
+        allow read: if belongsToCompany(companyId);
+        allow create, update: if belongsToCompany(companyId) && (
+          isCompanyAdmin(companyId)
+          || 'custom_modules.manage_config' in customPermissions()
+        );
+        allow delete: if false;
+      }
+
       match /{collection}/{docId} {
-        allow read, write: if belongsToCompany(companyId)
+        allow read, create, update: if belongsToCompany(companyId)
           && collection != 'daily_reports'
           && collection != 'conversations'
           && collection != 'journals'
           && collection != 'payments'
           && collection != 'bills'
+          && collection != 'rem_leases'
+          && collection != 'rem_rent_installments'
+          && collection != 'rem_rent_payments'
+          && collection != 'rem_security_deposits'
+          && collection != 'attendance'
+          && collection != 'settings'
+          && collection != 'module_definitions'
+          && collection != 'hr_schedule_templates'
+          && collection != 'hr_schedule_assignments'
+          && collection != 'hr_lateness_policies'
+          && collection != 'hr_deduction_cases'
           && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection));
+
+        // Engine records: ordinary members get activity-scoped CRUD, but
+        // permanent deletion is a separate `delete` operation (the `operation`
+        // variable is null inside create/update evaluation, so it must live
+        // on its own allow clause) and stays an admin action — mirrors
+        // canDelete in the hooks, which additionally requires the per-module
+        // opt-in flag.
+        allow delete: if belongsToCompany(companyId)
+          && collection != 'daily_reports'
+          && collection != 'conversations'
+          && collection != 'journals'
+          && collection != 'payments'
+          && collection != 'bills'
+          && collection != 'rem_leases'
+          && collection != 'rem_rent_installments'
+          && collection != 'rem_rent_payments'
+          && collection != 'rem_security_deposits'
+          && collection != 'attendance'
+          && collection != 'settings'
+          && collection != 'module_definitions'
+          && collection != 'hr_schedule_templates'
+          && collection != 'hr_schedule_assignments'
+          && collection != 'hr_lateness_policies'
+          && collection != 'hr_deduction_cases'
+          && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection))
+          && (!isModuleRecordCollection(collection) || isCompanyAdmin(companyId));
 
         // Nested data such as tasks/{id}/comments
         match /{nested=**} {
-          allow read, write: if belongsToCompany(companyId)
+          allow read, create, update: if belongsToCompany(companyId)
             && collection != 'daily_reports'
             && collection != 'conversations'
             && collection != 'journals'
             && collection != 'payments'
             && collection != 'bills'
+            && collection != 'rem_leases'
+            && collection != 'rem_rent_installments'
+            && collection != 'rem_rent_payments'
+            && collection != 'rem_security_deposits'
+            && collection != 'attendance'
+            && collection != 'settings'
+            && collection != 'module_definitions'
+            && collection != 'hr_schedule_templates'
+            && collection != 'hr_schedule_assignments'
+            && collection != 'hr_lateness_policies'
+            && collection != 'hr_deduction_cases'
             && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection));
+
+          allow delete: if belongsToCompany(companyId)
+            && collection != 'daily_reports'
+            && collection != 'conversations'
+            && collection != 'journals'
+            && collection != 'payments'
+            && collection != 'bills'
+            && collection != 'rem_leases'
+            && collection != 'rem_rent_installments'
+            && collection != 'rem_rent_payments'
+            && collection != 'rem_security_deposits'
+            && collection != 'attendance'
+            && collection != 'settings'
+            && collection != 'module_definitions'
+            && collection != 'hr_schedule_templates'
+            && collection != 'hr_schedule_assignments'
+            && collection != 'hr_lateness_policies'
+            && collection != 'hr_deduction_cases'
+            && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection))
+            && (!isModuleRecordCollection(collection) || isCompanyAdmin(companyId));
         }
       }
     }

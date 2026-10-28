@@ -57,6 +57,16 @@ const PEOPLE_SUB_ROLE_PERMISSIONS: Record<PeopleSubRole, readonly Permission[]> 
     "people.approve_leave",
     "people.view_performance",
     "people.view_all_reports",
+    "people.view_schedules",
+    "people.manage_schedules",
+    "people.view_all_attendance",
+    "people.correct_attendance",
+    "people.view_lateness",
+    "people.evaluate_lateness",
+    "people.manage_lateness_policies",
+    "people.decide_deductions",
+    "people.post_deductions",
+    "people.reverse_deductions",
   ],
   manager: [
     "people.view",
@@ -64,12 +74,26 @@ const PEOPLE_SUB_ROLE_PERMISSIONS: Record<PeopleSubRole, readonly Permission[]> 
     "people.approve_leave",
     "people.view_performance",
     "people.view_all_reports",
+    "people.view_schedules",
+    "people.manage_schedules",
+    "people.view_all_attendance",
+    "people.correct_attendance",
+    "people.view_lateness",
+    "people.evaluate_lateness",
+    "people.decide_deductions",
   ],
   hr: [
     "people.view",
     "people.manage_employees",
     "people.approve_leave",
     "people.view_all_reports",
+    "people.view_schedules",
+    "people.manage_schedules",
+    "people.view_all_attendance",
+    "people.correct_attendance",
+    "people.view_lateness",
+    "people.evaluate_lateness",
+    "people.manage_lateness_policies",
   ],
   employee: ["people.view"],
 };
@@ -89,6 +113,11 @@ export const PORTAL_SUB_ROLE_OPTIONS: Record<PortalId, readonly PortalSubRole[]>
   projects: [],
   facilities: [],
   agency: [],
+  real_estate: [],
+  // School has no sub-roles: access is a flat admin/manager grant because the
+  // `sch_*` domain is least-privilege in the security rules.
+  school: [],
+  custom_modules: [],
 };
 
 const DEFAULT_SUB_ROLES_BY_GLOBAL: Partial<
@@ -125,7 +154,7 @@ export function getDefaultSubRole(
   portal: PortalId,
   globalRole: import("@/features/auth/types/auth.types").UserRole
 ): PortalSubRole | undefined {
-  if (portal === "chat" || portal === "projects" || portal === "facilities" || portal === "agency") return undefined;
+  if (portal === "chat" || portal === "projects" || portal === "facilities" || portal === "agency" || portal === "real_estate" || portal === "school" || portal === "custom_modules") return undefined;
   return DEFAULT_SUB_ROLES_BY_GLOBAL[globalRole]?.[portal];
 }
 
@@ -134,7 +163,7 @@ export function resolvePortalSubRole(
   globalRole: import("@/features/auth/types/auth.types").UserRole,
   portalSubRoles?: PortalSubRoles | null
 ): PortalSubRole | undefined {
-  if (portal === "chat" || portal === "projects" || portal === "facilities" || portal === "agency") return undefined;
+  if (portal === "chat" || portal === "projects" || portal === "facilities" || portal === "agency" || portal === "real_estate" || portal === "school" || portal === "custom_modules") return undefined;
   return portalSubRoles?.[portal] ?? getDefaultSubRole(portal, globalRole);
 }
 
@@ -145,6 +174,8 @@ export function permissionPortal(permission: Permission): PortalId | null {
   if (permission.startsWith("portals.billing")) return "billing";
   if (permission.startsWith("portals.chat")) return "chat";
   if (permission.startsWith("projects.") || permission.startsWith("portals.projects")) return "projects";
+  if (permission.startsWith("custom_modules.")) return "custom_modules";
+  if (permission.startsWith("portals.custom_modules")) return "custom_modules";
   return null;
 }
 

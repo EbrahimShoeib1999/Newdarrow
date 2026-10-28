@@ -22,6 +22,9 @@ import {
   MessageSquare,
   FolderKanban,
   Building2,
+  Building,
+  GraduationCap,
+  Boxes,
   Megaphone,
   Globe2,
   type LucideIcon,
@@ -103,6 +106,24 @@ const PORTAL_DETAILS: Record<
     titleAr: "التسويق والحملات",
     icon: Megaphone,
     iconColor: "text-pink-500 dark:text-pink-400",
+  },
+  real_estate: {
+    titleKey: "portals.real_estate.short",
+    titleAr: "إدارة العقارات والوحدات",
+    icon: Building,
+    iconColor: "text-amber-500 dark:text-amber-400",
+  },
+  school: {
+    titleKey: "portals.school.short",
+    titleAr: "إدارة المدرسة والطلاب",
+    icon: GraduationCap,
+    iconColor: "text-teal-500 dark:text-teal-400",
+  },
+  custom_modules: {
+    titleKey: "portals.custom_modules.short",
+    titleAr: "الوحدات المخصصة",
+    icon: Boxes,
+    iconColor: "text-slate-500 dark:text-slate-400",
   },
 };
 
@@ -374,12 +395,19 @@ export function PortalSidebar({ portal }: PortalSidebarProps) {
     if (item.namespace === "billing") return tBilling(item.labelKey);
     if (item.namespace === "chat") return tChat(item.labelKey);
     if (item.namespace === "projects") return tProjects(item.labelKey);
+    // Activity domains keep their nav copy in their own namespace file
+    // (facilities, marketing, real_estate, school) — resolve it explicitly so a
+    // key can never fall through to common and render raw.
+    if (item.namespace) return t(item.labelKey, { ns: item.namespace });
     return t(item.labelKey);
   };
 
   const getGroupLabel = (group: PortalNavTreeGroup) => {
     if (group.namespace === "projects") return tProjects(group.labelKey);
-    return (i18n.dir() === "rtl" ? GROUP_TITLES_AR : GROUP_TITLES_EN)[group.id] ?? t(group.labelKey);
+    const localTitle = (i18n.dir() === "rtl" ? GROUP_TITLES_AR : GROUP_TITLES_EN)[group.id];
+    if (localTitle) return localTitle;
+    if (group.namespace) return t(group.labelKey, { ns: group.namespace });
+    return t(group.labelKey);
   };
 
   const isRtl = i18n.dir() === "rtl";

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Building2, Tags, Shield, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
+import { BackBar } from "@/components/shared/back-bar";
 import { useAppPermissions } from "../hooks/use-app-permissions";
 
 const SETTINGS_NAV = [
@@ -39,6 +40,9 @@ export function SettingsLayout() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
+      {/* Platform settings live under the People & HR portal in the navigation
+      registry; the shared bar supplies the unified back target and the trail. */}
+      <BackBar />
       <PageHeader title={t("title")} description={t("subtitle")} />
       <nav className="flex flex-wrap gap-2">
         {items.map((item) => {

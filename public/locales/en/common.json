@@ -1,6 +1,7 @@
 {
   "appName": "D-Arrow Business",
   "nav": {
+    "breadcrumbs": "Breadcrumb navigation",
     "dashboard": "Dashboard",
     "crm": "CRM",
     "projects": "Projects",
@@ -23,7 +24,12 @@
     "team_members": "Team Members & Invites",
     "roles_permissions": "Roles & Permissions",
     "company_settings": "Company Settings",
-    "hr_settings": "Settings Hub"
+    "hr_settings": "Settings Hub",
+    "schedules_lateness": "Schedules & Lateness",
+    "work_schedules": "Work Schedules",
+    "lateness_policies": "Lateness Policies",
+    "deduction_cases": "Deduction Cases",
+    "lateness_report": "Lateness Report"
   },
   "portals": {
     "pickerTitle": "Choose the system",
@@ -89,6 +95,27 @@
       "description": "Campaigns, budgets, deliverables, content calendars and client approvals",
       "stat": "{{count}} active campaigns",
       "denied": "You do not have access to the Marketing Agency portal."
+    },
+    "real_estate": {
+      "title": "Real Estate Management",
+      "short": "Real Estate",
+      "description": "Properties, buildings and units with leases, rent collection, deposits and maintenance",
+      "stat": "{{count}} units under management",
+      "denied": "You do not have access to the Real Estate portal."
+    },
+    "custom_modules": {
+      "title": "Custom Business Modules",
+      "short": "Custom Modules",
+      "description": "Configurable entities and CRUD workspaces built for your business without code changes",
+      "stat": "{{count}} active modules",
+      "denied": "You do not have access to the Custom Modules portal."
+    },
+    "school": {
+      "title": "School Management",
+      "short": "School",
+      "description": "Students, guardians, academic years, classes, subjects and attendance records",
+      "stat": "{{count}} enrolled students",
+      "denied": "You do not have access to the School portal."
     },
     "noPortals": "No portals are assigned to your account. Contact your super admin."
   },

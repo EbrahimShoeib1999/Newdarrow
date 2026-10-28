@@ -13,6 +13,9 @@ const PORTAL_I18N: Record<PortalId, string> = {
   projects: "portals.projects.denied",
   facilities: "portals.facilities.denied",
   agency: "portals.agency.denied",
+  real_estate: "portals.real_estate.denied",
+  school: "portals.school.denied",
+  custom_modules: "portals.custom_modules.denied",
 };
 
 export function PortalGuard({

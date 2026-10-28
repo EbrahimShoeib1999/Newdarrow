@@ -1,5 +1,5 @@
 import type { PortalId } from "@/lib/portal-permissions";
-import { CheckSquare, Handshake, ListTodo, Calculator, MessageSquare, FolderKanban, Building2, Megaphone } from "lucide-react";
+import { CheckSquare, Handshake, ListTodo, Calculator, MessageSquare, FolderKanban, Building2, Building, GraduationCap, Megaphone, Boxes } from "lucide-react";
 
 export const PORTAL_META: Record<
   PortalId,
@@ -66,5 +66,26 @@ export const PORTAL_META: Record<
     descKey: "portals.agency.description",
     shortKey: "portals.agency.short",
     statKey: "portals.agency.stat",
+  },
+  real_estate: {
+    icon: Building,
+    titleKey: "portals.real_estate.title",
+    descKey: "portals.real_estate.description",
+    shortKey: "portals.real_estate.short",
+    statKey: "portals.real_estate.stat",
+  },
+  school: {
+    icon: GraduationCap,
+    titleKey: "portals.school.title",
+    descKey: "portals.school.description",
+    shortKey: "portals.school.short",
+    statKey: "portals.school.stat",
+  },
+  custom_modules: {
+    icon: Boxes,
+    titleKey: "portals.custom_modules.title",
+    descKey: "portals.custom_modules.description",
+    shortKey: "portals.custom_modules.short",
+    statKey: "portals.custom_modules.stat",
   },
 };

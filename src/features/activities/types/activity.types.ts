@@ -61,7 +61,7 @@ export const ACTIVITY_REGISTRY: Record<ActivityId, ActivityMeta> = {
       ar: "العقارات والوحدات والمستأجرون وعقود الإيجار والتحصيلات وتقارير الأملاك.",
     },
     routeBase: "/real-estate",
-    moduleLive: false,
+    moduleLive: true,
   },
   REAL_ESTATE_BROKERAGE: {
     id: "REAL_ESTATE_BROKERAGE",
@@ -124,7 +124,7 @@ export const ACTIVITY_REGISTRY: Record<ActivityId, ActivityMeta> = {
       ar: "الطلاب وأولياء الأمر والتسجيلات والفصول والحضور والسجلات الأكاديمية.",
     },
     routeBase: "/school",
-    moduleLive: false,
+    moduleLive: true,
   },
 };
 

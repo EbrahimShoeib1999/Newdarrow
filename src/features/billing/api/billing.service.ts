@@ -244,7 +244,7 @@ export const BillingService = {
     });
   },
 
-  async reserveDocumentNumber(companyId: string, documentType: "invoice" | "quotation" | "estimate" | "proposal" | "zakat"): Promise<string> {
+  async reserveDocumentNumber(companyId: string, documentType: "invoice" | "quotation" | "estimate" | "proposal" | "zakat" | "payroll"): Promise<string> {
     const sequenceKey = `${documentType}Sequence` as keyof BillingSettings;
     const docRef = doc(db, "companies", companyId, "settings", "billing");
 

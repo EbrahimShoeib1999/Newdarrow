@@ -1,4 +1,8 @@
 import { Timestamp } from 'firebase/firestore';
+import type {
+  AttendanceCorrectionEntry,
+  AttendanceScheduleSnapshot,
+} from "./work-schedule.types";
 
 export type EmployeeStatus = 'active' | 'onboarding' | 'suspended' | 'terminated';
 export type LeaveType = 'vacation' | 'sick' | 'personal' | 'unpaid' | 'maternity' | 'paternity';
@@ -114,6 +118,21 @@ export interface Attendance {
    * used up their grace occurrences for the month (see AttendanceLatePolicy).
    */
   deductionMinutes?: number;
+  /**
+   * Author's uid, stamped on NEW check-ins so the security boundary can
+   * resolve "my own attendance" without reading the employee doc. Legacy
+   * rows simply don't carry it (never backfilled silently).
+   */
+  userId?: string;
+  /**
+   * Effective-schedule snapshot taken at check-in (schedule-resolved rows
+   * only). Historical rows without it keep their legacy cutoff semantics.
+   */
+  schedule?: AttendanceScheduleSnapshot | null;
+  /** Authorized corrections — reason + full before/after trail required. */
+  corrections?: AttendanceCorrectionEntry[];
+  /** Excusing note applied by an authorized corrector. */
+  excusedNote?: string | null;
 }
 
 /**

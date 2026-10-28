@@ -11,6 +11,9 @@ export const ALL_PORTAL_IDS: PortalId[] = [
   "projects",
   "facilities",
   "agency",
+  "real_estate",
+  "school",
+  "custom_modules",
 ];
 
 export function getRoleDefaultPortals(role: UserRole | undefined): PortalId[] {

@@ -42,6 +42,8 @@ import {
   Activity,
   Megaphone,
   Send,
+  GraduationCap,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,7 +52,7 @@ export interface PortalNavItem {
   path: string;
   icon: LucideIcon;
   end?: boolean;
-  namespace?: "common" | "crm" | "billing" | "chat" | "projects" | "facilities" | "marketing";
+  namespace?: "common" | "crm" | "billing" | "chat" | "projects" | "facilities" | "marketing" | "real_estate" | "school";
   /** If set, item is shown only when the user has this permission. */
   permission?: import("@/lib/permissions").Permission;
 }
@@ -59,7 +61,7 @@ export interface PortalNavTreeGroup {
   id: string;
   labelKey: string;
   icon?: LucideIcon;
-  namespace?: "common" | "crm" | "billing" | "chat" | "projects" | "facilities" | "marketing";
+  namespace?: "common" | "crm" | "billing" | "chat" | "projects" | "facilities" | "marketing" | "real_estate" | "school";
   items: PortalNavItem[];
 }
 
@@ -153,6 +155,34 @@ export const PEOPLE_NAV_TREE: PortalNavTreeGroup[] = [
       { labelKey: "nav.approvals", path: "/people/approvals", icon: CheckSquare },
       { labelKey: "nav.timesheets", path: "/people/timesheets", icon: Timer },
       { labelKey: "nav.daily_reports", path: "/people/daily-reports", icon: ClipboardCheck },
+    ],
+  },
+  {
+    id: "schedules_lateness",
+    labelKey: "nav.schedules_lateness",
+    icon: CalendarClock,
+    items: [
+      {
+        labelKey: "nav.work_schedules",
+        path: "/people/schedules",
+        icon: CalendarClock,
+        permission: "people.view_schedules",
+      },
+      {
+        labelKey: "nav.lateness_policies",
+        path: "/people/lateness-policies",
+        icon: Activity,
+        permission: "people.view_lateness",
+      },
+      // Unpermissioned on purpose: every user may open their OWN cases (the
+      // page self-gates to the privileged full list only for view_lateness).
+      { labelKey: "nav.deduction_cases", path: "/people/deduction-cases", icon: ClipboardCheck },
+      {
+        labelKey: "nav.lateness_report",
+        path: "/people/lateness-report",
+        icon: BarChart3,
+        permission: "people.view_lateness",
+      },
     ],
   },
   {
@@ -466,6 +496,223 @@ export const PROJECTS_NAV = PROJECTS_NAV_TREE.flatMap((g) => g.items);
 export const FACILITIES_NAV = FACILITIES_NAV_TREE.flatMap((g) => g.items);
 export const AGENCY_NAV = AGENCY_NAV_TREE.flatMap((g) => g.items);
 
+// REAL_ESTATE_MANAGEMENT nav grows with the shipped pages only — links for
+// sections that are not implemented yet stay out of the sidebar so the nav
+// never exposes an unfinished or denied route.
+export const REAL_ESTATE_NAV_TREE: PortalNavTreeGroup[] = [
+  {
+    id: "rem_overview",
+    labelKey: "nav.overview",
+    icon: LayoutDashboard,
+    namespace: "real_estate",
+    items: [
+      {
+        labelKey: "nav.dashboard",
+        path: "/real-estate",
+        icon: LayoutDashboard,
+        end: true,
+        namespace: "real_estate",
+        permission: "real_estate.view",
+      },
+      {
+        labelKey: "nav.reports",
+        path: "/real-estate/reports",
+        icon: BarChart3,
+        namespace: "real_estate",
+        permission: "real_estate.view",
+      },
+    ],
+  },
+  {
+    id: "rem_registry",
+    labelKey: "nav.registry",
+    icon: Building,
+    namespace: "real_estate",
+    items: [
+      {
+        labelKey: "nav.properties",
+        path: "/real-estate/properties",
+        icon: Building,
+        namespace: "real_estate",
+        permission: "real_estate.view",
+      },
+      {
+        labelKey: "nav.units",
+        path: "/real-estate/units",
+        icon: Layers,
+        namespace: "real_estate",
+        permission: "real_estate.view",
+      },
+    ],
+  },
+  {
+    id: "rem_leasing",
+    labelKey: "nav.leasing",
+    icon: ScrollText,
+    namespace: "real_estate",
+    items: [
+      {
+        labelKey: "nav.leases",
+        path: "/real-estate/leases",
+        icon: ScrollText,
+        namespace: "real_estate",
+        permission: "real_estate.view",
+      },
+    ],
+  },
+  {
+    id: "rem_finance",
+    labelKey: "nav.finance",
+    icon: Banknote,
+    namespace: "real_estate",
+    items: [
+      {
+        labelKey: "nav.collections",
+        path: "/real-estate/collections",
+        icon: Banknote,
+        namespace: "real_estate",
+        permission: "real_estate.view",
+      },
+      {
+        labelKey: "nav.deposits",
+        path: "/real-estate/deposits",
+        icon: HandCoins,
+        namespace: "real_estate",
+        permission: "real_estate.view",
+      },
+    ],
+  },
+  {
+    id: "rem_ops",
+    labelKey: "nav.operations",
+    icon: Wrench,
+    namespace: "real_estate",
+    items: [
+      {
+        labelKey: "nav.expenses",
+        path: "/real-estate/expenses",
+        icon: Wallet,
+        namespace: "real_estate",
+        permission: "real_estate.view",
+      },
+      {
+        labelKey: "nav.inspections",
+        path: "/real-estate/inspections",
+        icon: ClipboardCheck,
+        namespace: "real_estate",
+        permission: "real_estate.view",
+      },
+    ],
+  },
+];
+
+export const REAL_ESTATE_NAV = REAL_ESTATE_NAV_TREE.flatMap((g) => g.items);
+
+// SCHOOL_MANAGEMENT nav: only the v1 workflows that are actually shipped are
+// linked. Exams/results, timetables and fee collection have no routes yet, so
+// they stay out of the sidebar instead of exposing an unfinished page (the same
+// rule the REM tree follows).
+export const SCHOOL_NAV_TREE: PortalNavTreeGroup[] = [
+  {
+    id: "school_overview",
+    labelKey: "nav.overview",
+    icon: LayoutDashboard,
+    namespace: "school",
+    items: [
+      {
+        labelKey: "nav.dashboard",
+        path: "/school",
+        icon: LayoutDashboard,
+        end: true,
+        namespace: "school",
+        permission: "school.view",
+      },
+    ],
+  },
+  {
+    id: "school_academic",
+    labelKey: "nav.academic_setup",
+    icon: CalendarClock,
+    namespace: "school",
+    items: [
+      {
+        labelKey: "nav.academic_years",
+        path: "/school/academic-years",
+        icon: CalendarClock,
+        namespace: "school",
+        permission: "school.view",
+      },
+      {
+        labelKey: "nav.terms",
+        path: "/school/terms",
+        icon: Calendar,
+        namespace: "school",
+        permission: "school.view",
+      },
+      {
+        labelKey: "nav.grades",
+        path: "/school/grades",
+        icon: Layers,
+        namespace: "school",
+        permission: "school.view",
+      },
+      {
+        labelKey: "nav.sections",
+        path: "/school/sections",
+        icon: FolderOpen,
+        namespace: "school",
+        permission: "school.view",
+      },
+      {
+        labelKey: "nav.subjects",
+        path: "/school/subjects",
+        icon: BookA,
+        namespace: "school",
+        permission: "school.view",
+      },
+    ],
+  },
+  {
+    id: "school_roster",
+    labelKey: "nav.roster",
+    icon: Users,
+    namespace: "school",
+    items: [
+      {
+        labelKey: "nav.guardians",
+        path: "/school/guardians",
+        icon: UserRound,
+        namespace: "school",
+        permission: "school.view",
+      },
+      {
+        labelKey: "nav.students",
+        path: "/school/students",
+        icon: GraduationCap,
+        namespace: "school",
+        permission: "school.view",
+      },
+    ],
+  },
+  {
+    id: "school_daily",
+    labelKey: "nav.daily_operations",
+    icon: ClipboardCheck,
+    namespace: "school",
+    items: [
+      {
+        labelKey: "nav.attendance",
+        path: "/school/attendance",
+        icon: ClipboardCheck,
+        namespace: "school",
+        permission: "school.view",
+      },
+    ],
+  },
+];
+
+export const SCHOOL_NAV = SCHOOL_NAV_TREE.flatMap((g) => g.items);
+
 export function getNavForPortal(portal: PortalId): PortalNavItem[] {
   switch (portal) {
     case "tasks":
@@ -484,6 +731,10 @@ export function getNavForPortal(portal: PortalId): PortalNavItem[] {
       return FACILITIES_NAV;
     case "agency":
       return AGENCY_NAV;
+    case "real_estate":
+      return REAL_ESTATE_NAV;
+    case "school":
+      return SCHOOL_NAV;
     default:
       return [];
   }
@@ -507,6 +758,10 @@ export function getNavTreeForPortal(portal: PortalId): PortalNavTreeGroup[] {
       return FACILITIES_NAV_TREE;
     case "agency":
       return AGENCY_NAV_TREE;
+    case "real_estate":
+      return REAL_ESTATE_NAV_TREE;
+    case "school":
+      return SCHOOL_NAV_TREE;
     default:
       return [];
   }

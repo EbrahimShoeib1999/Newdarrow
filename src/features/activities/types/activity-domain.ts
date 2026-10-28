@@ -22,7 +22,10 @@
  * every existing tenant with zero regression.
  */
 
-import type { ActivityId } from "./activity.types";
+import {
+  ACTIVITY_IDS,
+  type ActivityId,
+} from "./activity.types";
 
 /** Reserved collection-name prefix → the activity that owns that namespace. */
 export const DOMAIN_COLLECTION_PREFIX = {
@@ -56,12 +59,54 @@ export function domainCollection(
   return `${DOMAIN_COLLECTION_PREFIX[activity]}${entity}`;
 }
 
+/**
+ * Custom Business Modules Engine — record-collection contract.
+ *
+ * Configurable (admin-defined) entities cannot use a fixed per-activity prefix,
+ * because their collection names are created at runtime. They use the reserved
+ * `mod_` namespace with the owning activity spelled INTO the name:
+ *
+ *   mod_<activity_lowercase>_rec_<moduleKey>
+ *
+ * The activity segment is derived from the tenant's authoritative activity at
+ * write time by the service layer, so the naming contract stays prefix-based
+ * exactly like the built-in domains: a forged `activity` field on the record
+ * remains inert, and the rules engine re-derives the owner from the NAME.
+ */
+export const MODULE_RECORD_NAMESPACE = "mod_";
+
+/** Underscore form of an activity id used inside a module collection name. */
+export function activityNameSlug(activity: ActivityId): string {
+  return activity.toLowerCase();
+}
+
+/** Collection name holding the records of one configurable module. */
+export function moduleRecordCollection(activity: ActivityId, moduleKey: string): string {
+  return `${MODULE_RECORD_NAMESPACE}${activityNameSlug(activity)}_rec_${moduleKey}`;
+}
+
+/** The activity a `mod_…_rec_…` collection belongs to, or null when malformed. */
+export function owningActivityOfModuleCollection(collection: string): ActivityId | null {
+  const m = /^mod_([a-z_]+)_rec_.+$/.exec(collection);
+  if (!m) return null;
+  const candidate = m[1].toUpperCase();
+  return (ACTIVITY_IDS as readonly string[]).includes(candidate)
+    ? (candidate as ActivityId)
+    : null;
+}
+
+/** The module key a record collection stores, or null when not a module collection. */
+export function moduleKeyOfCollection(collection: string): string | null {
+  const m = /^mod_[a-z_]+_rec_(.+)$/.exec(collection);
+  return m ? m[1] : null;
+}
+
 /** The activity that owns a given collection name, or null for shared data. */
 export function owningActivityOfCollection(collection: string): ActivityId | null {
   for (const [activity, prefix] of Object.entries(DOMAIN_COLLECTION_PREFIX)) {
     if (collection.startsWith(prefix)) return activity as ActivityId;
   }
-  return null;
+  return owningActivityOfModuleCollection(collection);
 }
 
 export function isDomainCollection(collection: string): boolean {

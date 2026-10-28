@@ -743,6 +743,154 @@ await check("domain switch away: MARKETING records stay durable but gated", asyn
   });
 });
 
+// --- Phase C: Custom Business Modules Engine boundary (§3/§7) --------------
+// Two server guarantees: (1) a module DEFINITION is writable only by an
+// authorized administrator (config management), never an ordinary member, and
+// is NEVER hard-deleted; (2) engine RECORDS live in activity-named
+// mod_<activity>_rec_<key> collections, so the SAME prefix-derived activity +
+// least-privilege gate applies, and permanent deletion is admin-only.
+const defVendors = (db) => doc(db, "companies", COMPANY, "module_definitions", "vendors");
+const mkVendor = (db) => doc(db, "companies", COMPANY, "mod_marketing_agency_rec_vendors", "v1");
+const clinicAppt = (db) => doc(db, "companies", COMPANY, "mod_medical_clinic_rec_appointments", "a1");
+const schoolRec = (db) => doc(db, "companies", COMPANY, "mod_school_management_rec_students", "s1");
+
+// Config management gate.
+await check("admin CAN create a module definition (config management)", () =>
+  assertSucceeds(
+    setDoc(defVendors(asUser("admin")), {
+      key: "vendors",
+      name: { ar: "الموردون", en: "Vendors" },
+      activity: "MARKETING_AGENCY",
+      lifecycle: "draft",
+    })
+  )
+);
+await check("any tenant member CAN read module definitions (workspace render)", () =>
+  assertSucceeds(getDoc(defVendors(asUser("emp1"))))
+);
+await check("ordinary employee CANNOT create a module definition", () =>
+  assertFails(
+    setDoc(doc(asUser("emp1"), "companies", COMPANY, "module_definitions", "hack"), { key: "hack" })
+  )
+);
+await check("manager WITHOUT the config capability CANNOT edit a definition", () =>
+  assertFails(updateDoc(defVendors(asUser("mgr")), { lifecycle: "active" }))
+);
+await check("employee CANNOT edit a module definition", () =>
+  assertFails(updateDoc(defVendors(asUser("emp1")), { lifecycle: "active" }))
+);
+await check("even an admin CANNOT hard-delete a definition (archive only)", () =>
+  assertFails(deleteDoc(defVendors(asUser("admin"))))
+);
+await check("outsider CANNOT read another company's definitions", () =>
+  assertFails(getDoc(defVendors(asUser("outsider"))))
+);
+
+// Engine records — ordinary (non-sensitive) activity namespace.
+await check("engine: tenant -> MARKETING_AGENCY for record CRUD", () => setActivity("MARKETING_AGENCY"));
+await check("engine: member CAN create a mod_marketing_agency record", () =>
+  assertSucceeds(setDoc(mkVendor(asUser("emp1")), { moduleKey: "vendors", values: { vendor_name: "Acme Supply" }, status: "open" }))
+);
+await check("engine: member CAN read the mod_marketing_agency record back", () =>
+  assertSucceeds(getDoc(mkVendor(asUser("emp1"))))
+);
+await check("engine: member CANNOT permanently delete a record (admin-only)", () =>
+  assertFails(deleteDoc(mkVendor(asUser("emp1"))))
+);
+await check("engine: admin CAN permanently delete a record", () =>
+  assertSucceeds(deleteDoc(mkVendor(asUser("admin"))))
+);
+await check("engine: cross-activity mod_school_management write DENIED while MARKETING active", () =>
+  assertFails(setDoc(schoolRec(asUser("admin")), { moduleKey: "students", values: {} }))
+);
+await check("engine: forged activity field CANNOT bypass the collection-name gate", () =>
+  assertFails(
+    setDoc(doc(asUser("admin"), "companies", COMPANY, "mod_school_management_rec_students", "s2"), {
+      activity: "MARKETING_AGENCY",
+      values: {},
+    })
+  )
+);
+await check("engine: outsider CANNOT write mod_ records", () =>
+  assertFails(setDoc(doc(asUser("outsider"), "companies", COMPANY, "mod_marketing_agency_rec_vendors", "h"), { values: {} }))
+);
+
+// Engine records — sensitive activity namespace keeps least-privilege.
+await check("engine: tenant -> MEDICAL_CLINIC for sensitive module gate", () => setActivity("MEDICAL_CLINIC"));
+await check("engine: privileged admin CAN create a mod_medical_clinic record", () =>
+  assertSucceeds(setDoc(clinicAppt(asUser("admin")), { moduleKey: "appointments", values: { patient_name: "Sara" }, status: "open" }))
+);
+await check("engine: plain employee CANNOT read a mod_medical_clinic record (least-privilege)", () =>
+  assertFails(getDoc(clinicAppt(asUser("emp1"))))
+);
+await check("engine: plain employee CANNOT write a mod_medical_clinic record (least-privilege)", () =>
+  assertFails(setDoc(doc(asUser("emp1"), "companies", COMPANY, "mod_medical_clinic_rec_appointments", "a2"), { values: {} }))
+);
+
+// --- Phase D: REM financial boundary regressions (§10: existing REM
+// functionality verified against the real rules). These are NEW checks over
+// the pre-existing rem_* blocks: lease state escalation, installment
+// status/money immutability for non-collectors, payment audit permanence and
+// the deposits permission gate, plus the activity gate flipping away. ---
+const remLease1 = (db) => doc(db, "companies", COMPANY, "rem_leases", "L1");
+const remInst1 = (db) => doc(db, "companies", COMPANY, "rem_rent_installments", "I1");
+const remPay1 = (db) => doc(db, "companies", COMPANY, "rem_rent_payments", "P1");
+const remDep1 = (db) => doc(db, "companies", COMPANY, "rem_security_deposits", "L1");
+
+await check("rem setup: tenant activity -> REAL_ESTATE_MANAGEMENT", () => setActivity("REAL_ESTATE_MANAGEMENT"));
+await check("rem setup: draft lease seeded by ordinary member", () =>
+  assertSucceeds(setDoc(remLease1(asUser("emp1")), { status: "draft", unitId: "u1", tenantContactId: "contact1", startDate: "2026-11-01", endDate: "2027-10-31", rentAmount: 1000 }))
+);
+await check("REM finance: ordinary employee CANNOT self-activate a lease (approve gate)", () =>
+  assertFails(updateDoc(remLease1(asUser("emp1")), { status: "active" }))
+);
+await check("REM finance: manager (approve privilege) CAN activate the lease", () =>
+  assertSucceeds(updateDoc(remLease1(asUser("mgr")), { status: "active" }))
+);
+await check("REM finance: lease is NEVER hard-deletable (financial history)", () =>
+  assertFails(deleteDoc(remLease1(asUser("admin"))))
+);
+await check("REM finance: installment seeded while active", () =>
+  assertSucceeds(setDoc(remInst1(asUser("emp1")), { leaseId: "L1", index: 1, dueDate: "2026-12-01", expectedAmount: 1000, paidAmount: 0, status: "due" }))
+);
+await check("REM finance: non-collector CANNOT move installment status", () =>
+  assertFails(updateDoc(remInst1(asUser("emp1")), { status: "paid", paidAmount: 1000 }))
+);
+await check("REM finance: non-collector CAN edit neutral metadata (not status/money)", () =>
+  assertSucceeds(updateDoc(remInst1(asUser("emp1")), { note: "reminder sent" }))
+);
+await check("REM finance: collector (manager) CAN record the allocation", () =>
+  assertSucceeds(updateDoc(remInst1(asUser("mgr")), { status: "paid", paidAmount: 1000 }))
+);
+await check("REM finance: installment is NEVER hard-deletable", () =>
+  assertFails(deleteDoc(remInst1(asUser("admin"))))
+);
+await check("REM finance: ordinary employee CANNOT record a rent payment (collect gate)", () =>
+  assertFails(setDoc(remPay1(asUser("emp1")), { leaseId: "L1", installmentId: "I1", amount: 1000, paymentDate: "2026-12-01" }))
+);
+await check("REM finance: collector CAN record a rent payment", () =>
+  assertSucceeds(setDoc(remPay1(asUser("mgr")), { leaseId: "L1", installmentId: "I1", amount: 1000, paymentDate: "2026-12-01" }))
+);
+await check("REM finance: recorded payment is NEVER hard-deletable (void keeps audit trail)", () =>
+  assertFails(deleteDoc(remPay1(asUser("admin"))))
+);
+await check("REM finance: expected-deposit row opens with the lease (domain write)", () =>
+  assertSucceeds(setDoc(remDep1(asUser("emp1")), { leaseId: "L1", expectedAmount: 2000, receivedAmount: 0, status: "expected" }))
+);
+await check("REM finance: non-collector CANNOT refund a deposit (deposits gate)", () =>
+  assertFails(updateDoc(remDep1(asUser("emp1")), { status: "refunded", receivedAmount: 2000 }))
+);
+await check("REM finance: admin CAN move the deposit liability", () =>
+  assertSucceeds(updateDoc(remDep1(asUser("admin")), { status: "received", receivedAmount: 2000, outstandingLiability: 2000 }))
+);
+await check("REM finance: deposit row is NEVER hard-deletable", () =>
+  assertFails(deleteDoc(remDep1(asUser("admin"))))
+);
+await check("rem teardown: tenant activity -> MARKETING_AGENCY", () => setActivity("MARKETING_AGENCY"));
+await check("REM finance: inactive domain blocks even the admin (fail-closed)", () =>
+  assertFails(getDoc(remLease1(asUser("admin"))))
+);
+
 await testEnv.cleanup();
 
 const failed = results.filter((r) => !r.ok);

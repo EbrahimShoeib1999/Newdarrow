@@ -6,6 +6,7 @@ import { LateCheckInAlertModal } from "@/features/people/components/LateCheckInA
 import { AssistantLauncher } from "@/features/assistant/components/AssistantLauncher";
 import { useAutomationScanner } from "@/features/automation/hooks/use-automation-scanner";
 import { useSyncLastPortal } from "@/features/portals/hooks/use-sync-last-portal";
+import { useRecordNavOrigin } from "@/features/portals/hooks/use-record-nav-origin";
 import { useMeetingReminders } from "@/features/meetings/hooks/use-meeting-reminders";
 import { getPortalFromPath } from "@/lib/portal-permissions";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,9 @@ import { useLayoutStore } from "@/stores/layout.store";
 
 export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
   useSyncLastPortal();
+  // Central smart-back origin tracker: observes every in-app PUSH so the
+  // registry-driven BackBar knows where the user came from (Phase 6b §4B).
+  useRecordNavOrigin();
   useMeetingReminders();
   useAutomationScanner();
   const { pathname } = useLocation();

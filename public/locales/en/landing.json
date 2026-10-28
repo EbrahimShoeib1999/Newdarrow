@@ -1,6 +1,7 @@
 {
   "nav": {
     "apps": "Apps",
+    "activities": "Industries",
     "features": "Features",
     "pricing": "Pricing",
     "signIn": "Sign in",
@@ -22,6 +23,13 @@
     "subtitle": "Modular apps that work together — install what you need, grow when you're ready.",
     "viewAll": "Explore all apps",
     "restricted": "Not available for your account or the company's active business activity"
+  },
+  "activities": {
+    "title": "Built for the way your business operates",
+    "subtitle": "A tailored workspace for each industry. Enable what fits your company today and request the rest.",
+    "available": "Available",
+    "comingSoon": "Coming soon",
+    "requestAccess": "Request access"
   },
   "modules": {
     "tasks": "Tasks & Projects",

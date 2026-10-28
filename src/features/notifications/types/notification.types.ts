@@ -8,6 +8,7 @@ export type NotificationType =
   | "chat_mention"
   | "chat_message"
   | "document_approval"
+  | "reminder"
   | "general";
 
 export interface AppNotification {
@@ -19,6 +20,14 @@ export interface AppNotification {
   isRead: boolean;
   link?: string;
   createdAt: string;
+  /**
+   * Machine keys written by activity generators (e.g. REAL_ESTATE reminders):
+   * fully-namespaced i18next keys + interpolation params. The raw title and
+   * message above remain the language-agnostic fallback.
+   */
+  titleKey?: string;
+  bodyKey?: string;
+  params?: Record<string, string>;
 }
 
 export interface CreateNotificationDTO {
