@@ -1,0 +1,173 @@
+{
+  "nav": {
+    "overview": "Overview",
+    "dashboard": "Dashboard",
+    "academic_setup": "Academic Setup",
+    "academic_years": "Academic Years",
+    "terms": "Terms",
+    "grades": "Grades",
+    "sections": "Sections",
+    "subjects": "Subjects",
+    "roster": "Roster",
+    "guardians": "Guardians",
+    "students": "Students",
+    "daily_operations": "Daily Operations",
+    "attendance": "Attendance"
+  },
+  "buttons": {
+    "new": "New",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "search": "Search…"
+  },
+  "fields": {
+    "name": "Name",
+    "code": "Code",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "status": "Status",
+    "notes": "Notes",
+    "level": "Level",
+    "grade": "Grade",
+    "section": "Section",
+    "teacher": "Homeroom Teacher",
+    "capacity": "Capacity",
+    "phone": "Phone",
+    "email": "Email",
+    "relationship": "Relationship",
+    "contact": "CRM Contact",
+    "identifier": "Student Number",
+    "guardian": "Guardian",
+    "enrollmentDate": "Enrollment Date",
+    "date": "Date",
+    "mark": "Mark",
+    "createdAt": "Created"
+  },
+  "validation": {
+    "nameRequired": "Name is required.",
+    "dateRequired": "Please enter a valid date (YYYY-MM-DD).",
+    "dateOrder": "Start date must be on or before end date.",
+    "yearRequired": "Academic year is required.",
+    "levelRange": "Level must be 1 or greater.",
+    "gradeRequired": "Grade is required.",
+    "sectionRequired": "Section is required.",
+    "guardianRequired": "Guardian is required.",
+    "phoneRequired": "Phone number is required.",
+    "phoneFormat": "Enter a valid phone number."
+  },
+  "status": {
+    "planned": "Planned",
+    "active": "Active",
+    "closed": "Closed"
+  },
+  "studentStatus": {
+    "pending": "Pending",
+    "enrolled": "Enrolled",
+    "withdrawn": "Withdrawn"
+  },
+  "attendanceMark": {
+    "present": "Present",
+    "absent": "Absent",
+    "late": "Late",
+    "excused": "Excused"
+  },
+  "guardianRelationship": {
+    "father": "Father",
+    "mother": "Mother",
+    "guardian": "Legal Guardian",
+    "other": "Other"
+  },
+  "dashboard": {
+    "title": "School Dashboard",
+    "subtitle": "Overview of your school's key figures",
+    "totalStudents": "Total Students",
+    "enrolledStudents": "Enrolled",
+    "pendingStudents": "Pending",
+    "totalSections": "Sections",
+    "totalSubjects": "Subjects",
+    "comingSoon": "Not yet available in School v1",
+    "examsResults": "Exams & Results",
+    "timetables": "Timetables",
+    "fees": "Fees & Invoicing"
+  },
+  "academicYearsPage": {
+    "title": "Academic Years",
+    "subtitle": "Plan and manage school years",
+    "empty": "No academic years yet. Add one to get started.",
+    "deleteConfirm": "This will permanently remove the year.",
+    "formNew": "New Academic Year",
+    "formEdit": "Edit Academic Year"
+  },
+  "termsPage": {
+    "title": "Terms",
+    "subtitle": "Manage school terms per academic year",
+    "empty": "No terms yet.",
+    "deleteConfirm": "This will permanently remove the term.",
+    "formNew": "New Term",
+    "formEdit": "Edit Term",
+    "academicYear": "Academic Year",
+    "allYears": "All Years"
+  },
+  "gradesPage": {
+    "title": "Grades",
+    "subtitle": "Grade levels (e.g. Grade 1, Grade 2…)",
+    "empty": "No grades yet.",
+    "deleteConfirm": "Deleting a grade will not affect existing sections.",
+    "formNew": "New Grade",
+    "formEdit": "Edit Grade"
+  },
+  "sectionsPage": {
+    "title": "Sections",
+    "subtitle": "Class sections within each grade",
+    "empty": "No sections yet.",
+    "deleteConfirm": "This will permanently remove the section.",
+    "formNew": "New Section",
+    "formEdit": "Edit Section",
+    "studentCount": "Students"
+  },
+  "subjectsPage": {
+    "title": "Subjects",
+    "subtitle": "Curriculum subjects",
+    "empty": "No subjects yet.",
+    "deleteConfirm": "This will permanently remove the subject.",
+    "formNew": "New Subject",
+    "formEdit": "Edit Subject"
+  },
+  "guardiansPage": {
+    "title": "Guardians",
+    "subtitle": "Parents and legal guardians",
+    "empty": "No guardians yet.",
+    "deleteConfirm": "This will permanently remove the guardian record.",
+    "formNew": "New Guardian",
+    "formEdit": "Edit Guardian",
+    "studentsCount": "Students"
+  },
+  "studentsPage": {
+    "title": "Students",
+    "subtitle": "Enrolled and pending students",
+    "empty": "No students yet.",
+    "deleteConfirm": "This will permanently remove the student record.",
+    "formNew": "New Student",
+    "formEdit": "Edit Student",
+    "enrollTitle": "Enroll Student",
+    "filterGrade": "Filter by Grade",
+    "filterSection": "Filter by Section",
+    "filterStatus": "Filter by Status",
+    "allGrades": "All Grades",
+    "allSections": "All Sections",
+    "allStatuses": "All Statuses"
+  },
+  "attendancePage": {
+    "title": "Attendance",
+    "subtitle": "Mark daily attendance per section",
+    "sectionLabel": "Section",
+    "dateLabel": "Date",
+    "noSectionSelected": "Select a section and date to start marking attendance.",
+    "noStudentsInSection": "No students are enrolled in this section.",
+    "saved": "Attendance saved",
+    "alreadyMarked": "(already marked — will be updated)"
+  }
+}

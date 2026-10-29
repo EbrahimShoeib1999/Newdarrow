@@ -25,6 +25,7 @@ import {
   setDoc,
   updateDoc,
   addDoc,
+  deleteDoc,
   collection,
   getDocs,
   query,
@@ -179,6 +180,276 @@ await check("employee: addDoc attendance check-in payload", async () => {
       lateMinutes: 0,
       deductionMinutes: 0,
       createdAt: serverTimestamp(),
+    })
+  );
+});
+
+// ================= work schedules / attendance / deduction cases ============
+// The hr_* boundary + attendance ownership rules introduced with the schedule
+// & lateness feature. Seeded fixtures (rules disabled — SETUP only):
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, "users", "admin-uid"), {
+    id: "admin-uid",
+    email: "admin@acme.test",
+    role: "admin",
+    companyId: COMPANY,
+  });
+  await setDoc(doc(db, "users", "mgr-uid"), {
+    id: "mgr-uid",
+    email: "mgr@acme.test",
+    role: "manager",
+    companyId: COMPANY,
+    portalSubRoles: { people: "manager" },
+  });
+  await setDoc(doc(db, "users", "decider-uid"), {
+    id: "decider-uid",
+    email: "decider@acme.test",
+    role: "employee",
+    companyId: COMPANY,
+    customPermissions: ["people.decide_deductions"],
+  });
+  // A second employee with a claimed account (owning att-e2).
+  await setDoc(doc(db, "users", "e2-uid"), {
+    id: "e2-uid",
+    email: "e2@acme.test",
+    role: "employee",
+    companyId: COMPANY,
+  });
+  await setDoc(doc(db, "companies", COMPANY, "employees", "e2"), {
+    firstName: "Samir",
+    lastName: "Nasser",
+    email: "e2@acme.test",
+    userId: "e2-uid",
+  });
+  // The employee's own OPEN session row and a foreign one.
+  await setDoc(doc(db, "companies", COMPANY, "attendance", "att-e1"), {
+    employeeId: "e1",
+    userId: EMP_UID,
+    date: "2026-10-27",
+    checkIn: new Date("2026-10-27T10:00:00Z"),
+    status: "present",
+    lateMinutes: 0,
+  });
+  await setDoc(doc(db, "companies", COMPANY, "attendance", "att-e2"), {
+    employeeId: "e2",
+    userId: "e2-uid",
+    date: "2026-10-27",
+    checkIn: new Date("2026-10-27T09:00:00Z"),
+    status: "present",
+    lateMinutes: 0,
+  });
+  const snapshot = {
+    policyName: "P1",
+    policyVersion: 1,
+    thresholdMinutes: 1440,
+    action: { kind: "propose_deduction", deductionDays: 3, basis: "calendar_30", fraction: null },
+    thresholdMode: "cumulative",
+    workingDaysPerMonth: 26,
+    legalBasisPresent: true,
+    currency: "SAR",
+  };
+  // The employee's OWN pending case …
+  await setDoc(doc(db, "companies", COMPANY, "hr_deduction_cases", "e1_2026-10_t1"), {
+    employeeId: "e1",
+    subjectUserId: EMP_UID,
+    periodKey: "2026-10",
+    accumulatedMinutes: 1500,
+    contributingAttendanceIds: ["att-e1"],
+    thresholdId: "t1",
+    policyId: "p1",
+    policySnapshot: snapshot,
+    kind: "propose_deduction",
+    status: "proposed",
+    amount: 300,
+    currency: "SAR",
+    proposedBy: "mgr-uid",
+    journalId: null,
+  });
+  // … and someone else's approved case.
+  await setDoc(doc(db, "companies", COMPANY, "hr_deduction_cases", "e2_2026-10_t1"), {
+    employeeId: "e2",
+    subjectUserId: "e2-uid",
+    periodKey: "2026-10",
+    accumulatedMinutes: 1500,
+    contributingAttendanceIds: ["att-e2"],
+    thresholdId: "t1",
+    policyId: "p1",
+    policySnapshot: snapshot,
+    kind: "propose_deduction",
+    status: "approved",
+    amount: 300,
+    currency: "SAR",
+    proposedBy: "mgr-uid",
+    decidedBy: "admin-uid",
+    journalId: null,
+  });
+});
+
+const admin = testEnv.authenticatedContext("admin-uid").firestore();
+const mgr = testEnv.authenticatedContext("mgr-uid").firestore();
+const decider = testEnv.authenticatedContext("decider-uid").firestore();
+
+await check("employee: CANNOT create a schedule template", async () => {
+  await assertFails(
+    setDoc(doc(emp, "companies", COMPANY, "hr_schedule_templates", "tX"), {
+      name: "X", mode: "custom", startTime: "09:00", endTime: "17:00",
+      workingDays: [0, 1, 2, 3, 4], breakMinutes: 0, breakCountsAsWork: true,
+      graceMinutes: 0, requiredDailyMinutes: null, flexibleStartWindow: null,
+      timezone: "Asia/Riyadh", overtime: null, isActive: true, version: 1, createdBy: EMP_UID,
+    })
+  );
+});
+
+await check("manager(people:manager): CAN create a schedule template", async () => {
+  await assertSucceeds(
+    setDoc(doc(mgr, "companies", COMPANY, "hr_schedule_templates", "tOffice"), {
+      name: "Office", mode: "office", startTime: "13:00", endTime: "20:00",
+      workingDays: [0, 1, 2, 3, 4], breakMinutes: 0, breakCountsAsWork: true,
+      graceMinutes: 0, requiredDailyMinutes: null, flexibleStartWindow: null,
+      timezone: "Asia/Riyadh", overtime: null, isActive: true, version: 1, createdBy: "mgr-uid",
+    })
+  );
+});
+
+await check("manager: CANNOT manage lateness policies (ROLE∩subRole gate)", async () => {
+  await assertFails(
+    setDoc(doc(mgr, "companies", COMPANY, "hr_lateness_policies", "p1"), {
+      name: "P1", thresholds: [{ id: "t1", afterMinutes: 1440, action: { kind: "propose_deduction" }, automatic: true }],
+      thresholdMode: "cumulative", workingDaysPerMonth: 26, isActive: true, version: 1, effectiveFrom: "2026-10-01",
+    })
+  );
+});
+
+await check("admin: CAN manage lateness policies", async () => {
+  await assertSucceeds(
+    setDoc(doc(admin, "companies", COMPANY, "hr_lateness_policies", "p1"), {
+      name: "P1", thresholds: [{ id: "t1", afterMinutes: 1440, action: { kind: "propose_deduction" }, automatic: true }],
+      thresholdMode: "cumulative", workingDaysPerMonth: 26, isActive: true, version: 1, effectiveFrom: "2026-10-01",
+    })
+  );
+});
+
+await check("employee: CANNOT rewrite the legacy company cutoff (settings/attendance)", async () => {
+  await assertFails(
+    setDoc(doc(emp, "companies", COMPANY, "settings", "attendance"), {
+      lateCutoffTime: "09:00", lateThreshold: 1,
+    })
+  );
+});
+
+await check("admin: CAN write settings/attendance", async () => {
+  await assertSucceeds(
+    setDoc(doc(admin, "companies", COMPANY, "settings", "attendance"), {
+      lateCutoffTime: "11:30", lateThreshold: 3,
+    })
+  );
+});
+
+await check("employee: CANNOT touch someone else's attendance row", async () => {
+  await assertFails(
+    updateDoc(doc(emp, "companies", COMPANY, "attendance", "att-e2"), {
+      checkOut: serverTimestamp(),
+    })
+  );
+});
+
+await check("employee: CAN close out own row (checkOut/totalHours only)", async () => {
+  await assertSucceeds(
+    updateDoc(doc(emp, "companies", COMPANY, "attendance", "att-e1"), {
+      checkOut: serverTimestamp(),
+      totalHours: 7.5,
+    })
+  );
+});
+
+await check("employee: CANNOT self-edit status/lateness on own row", async () => {
+  await assertFails(
+    updateDoc(doc(emp, "companies", COMPANY, "attendance", "att-e1"), {
+      status: "absent",
+    })
+  );
+});
+
+await check("any member: attendance rows are never deletable", async () => {
+  await assertFails(deleteDoc(doc(emp, "companies", COMPANY, "attendance", "att-e1")));
+  await assertFails(deleteDoc(doc(admin, "companies", COMPANY, "attendance", "att-e1")));
+});
+
+await check("employee: CANNOT create deduction cases for themselves", async () => {
+  await assertFails(
+    setDoc(doc(emp, "companies", COMPANY, "hr_deduction_cases", "e1_2026-10_t9"), {
+      employeeId: "e1", subjectUserId: EMP_UID, periodKey: "2026-10",
+      accumulatedMinutes: 1, thresholdId: "t9", policyId: "p1", kind: "warning",
+      status: "pending_review",
+    })
+  );
+});
+
+await check("employee: reads OWN case but NOT a colleague's case", async () => {
+  await assertSucceeds(getDoc(doc(emp, "companies", COMPANY, "hr_deduction_cases", "e1_2026-10_t1")));
+  await assertFails(getDoc(doc(emp, "companies", COMPANY, "hr_deduction_cases", "e2_2026-10_t1")));
+});
+
+await check("subject CANNOT approve their OWN case even with a decide grant", async () => {
+  // EMP gets an explicit custom grant — the self-decision guard must still win.
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "users", EMP_UID), {
+      id: EMP_UID, email: "lifecycle_emp@acme.test", role: "employee", companyId: COMPANY,
+      customPermissions: ["people.decide_deductions"],
+    }, { merge: true });
+  });
+  await assertFails(
+    updateDoc(doc(emp, "companies", COMPANY, "hr_deduction_cases", "e1_2026-10_t1"), {
+      status: "approved", decidedBy: EMP_UID,
+    })
+  );
+});
+
+await check("HR decider CAN approve the case (identity + snapshot stay fixed)", async () => {
+  await assertSucceeds(
+    updateDoc(doc(decider, "companies", COMPANY, "hr_deduction_cases", "e1_2026-10_t1"), {
+      status: "approved", decidedBy: "decider-uid", decidedAt: new Date().toISOString(), decisionNote: "reviewed",
+    })
+  );
+});
+
+await check("decider CANNOT tamper the frozen snapshot while deciding", async () => {
+  await assertFails(
+    updateDoc(doc(decider, "companies", COMPANY, "hr_deduction_cases", "e2_2026-10_t1"), {
+      status: "approved", decidedBy: "decider-uid", amount: 1,
+    })
+  );
+});
+
+await check("manager CANNOT post to payroll (admin-only atom)", async () => {
+  await assertFails(
+    updateDoc(doc(mgr, "companies", COMPANY, "hr_deduction_cases", "e2_2026-10_t1"), {
+      status: "posted", journalId: "je_payroll_e2_2026-10_t1",
+    })
+  );
+});
+
+await check("admin POSTS the approved case once (posted + journal stamp)", async () => {
+  await assertSucceeds(
+    updateDoc(doc(admin, "companies", COMPANY, "hr_deduction_cases", "e2_2026-10_t1"), {
+      status: "posted", journalId: "je_payroll_e2_2026-10_t1",
+    })
+  );
+});
+
+await check("admin CANNOT recalculate a POSTED case (history is immutable)", async () => {
+  await assertFails(
+    updateDoc(doc(admin, "companies", COMPANY, "hr_deduction_cases", "e2_2026-10_t1"), {
+      accumulatedMinutes: 99999,
+    })
+  );
+});
+
+await check("admin reverses the posted case through the reversal branch", async () => {
+  await assertSucceeds(
+    updateDoc(doc(admin, "companies", COMPANY, "hr_deduction_cases", "e2_2026-10_t1"), {
+      status: "reversed", reversedBy: "admin-uid", reversedAt: new Date().toISOString(), reversalNote: "grievance upheld",
     })
   );
 });

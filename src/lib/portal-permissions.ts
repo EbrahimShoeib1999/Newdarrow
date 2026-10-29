@@ -4,7 +4,7 @@ import {
   resolveUserPortals,
 } from "@/lib/permissions/portal-access";
 
-export type PortalId = "tasks" | "crm" | "people" | "billing" | "chat" | "projects" | "facilities" | "agency";
+export type PortalId = "tasks" | "crm" | "people" | "billing" | "chat" | "projects" | "facilities" | "agency" | "real_estate" | "school" | "custom_modules";
 
 export const PORTAL_PATHS: Record<PortalId, string> = {
   tasks: "/tasks",
@@ -15,6 +15,12 @@ export const PORTAL_PATHS: Record<PortalId, string> = {
   projects: "/projects",
   facilities: "/facilities",
   agency: "/agency",
+  real_estate: "/real-estate",
+  // Student records are a sensitive domain (sch_* collections): the Firestore
+  // rules only admit admin/manager, so the portal grant stops at manager too —
+  // an employee granted here would pass the nav and fail every write.
+  school: "/school",
+  custom_modules: "/modules",
 };
 
 /** @deprecated Use ROLE_PERMISSIONS from @/lib/permissions */
@@ -27,6 +33,9 @@ export const PORTAL_ACCESS: Record<PortalId, readonly UserRole[]> = {
   projects: ["super_admin", "admin", "manager", "employee"],
   facilities: ["super_admin", "admin", "manager", "employee"],
   agency: ["super_admin", "admin", "manager", "employee"],
+  real_estate: ["super_admin", "admin", "manager", "employee"],
+  school: ["super_admin", "admin", "manager"],
+  custom_modules: ["super_admin", "admin", "manager", "employee"],
 };
 
 export function canAccessPortal(
@@ -54,6 +63,9 @@ export function getPortalFromPath(pathname: string): PortalId | "picker" | "sett
   if (pathname.startsWith("/projects")) return "projects";
   if (pathname.startsWith("/facilities")) return "facilities";
   if (pathname.startsWith("/agency")) return "agency";
+  if (pathname.startsWith("/real-estate")) return "real_estate";
+  if (pathname.startsWith("/school")) return "school";
+  if (pathname.startsWith("/modules")) return "custom_modules";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname === "/profile" || pathname === "/notifications" || pathname === "/seed") return null;
   return null;

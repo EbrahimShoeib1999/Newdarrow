@@ -39,7 +39,11 @@ export function PortalSubNav({ portal }: PortalSubNavProps) {
               ? tChat(labelKey)
               : namespace === "projects"
                 ? tProjects(labelKey)
-                : t(labelKey)}
+                // Activity domains (facilities, marketing, real_estate, school)
+                // keep their nav copy in their own namespace file.
+                : namespace
+                  ? t(labelKey, { ns: namespace })
+                  : t(labelKey)}
           {path === "/chat" && (
             <ChatInboxBadge className="ms-0 h-4 min-w-4 px-1" />
           )}

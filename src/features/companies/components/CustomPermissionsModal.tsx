@@ -36,6 +36,17 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "people.manage_employees", titleAr: "إدارة الموظفين والتعيين والإنهاء", titleEn: "Manage Employee Hiring & Status", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
   { key: "people.approve_leave", titleAr: "الموافقة على طلبات الإجازات والاستئذان", titleEn: "Approve Leave & Time-off Requests", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
   { key: "people.view_performance", titleAr: "عرض واستعراض تقييمات الأداء", titleEn: "View Performance Reviews", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.view_all_reports", titleAr: "عرض تقارير جميع الموظفين", titleEn: "View All Members' Daily Reports", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.view_schedules", titleAr: "عرض جداول العمل", titleEn: "View Work Schedules", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.manage_schedules", titleAr: "إدارة قوالب وتعيينات جداول العمل", titleEn: "Manage Schedule Templates & Assignments", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.view_all_attendance", titleAr: "عرض حضور وانصراف جميع الموظفين", titleEn: "View Everyone's Attendance", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.correct_attendance", titleAr: "تصحيح سجلات الحضور مع التبرير", titleEn: "Correct Attendance Records (with reason)", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.view_lateness", titleAr: "عرض تقارير التأخير الشهري", titleEn: "View Monthly Lateness Reports", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.evaluate_lateness", titleAr: "تقييم التأخير الشهري وإنشاء الاقتراحات", titleEn: "Run Monthly Lateness Evaluation", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.manage_lateness_policies", titleAr: "إدارة سياسات حدود التأخير والخصم", titleEn: "Manage Lateness & Deduction Policies", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.decide_deductions", titleAr: "اعتماد أو رفض حالات الخصم", titleEn: "Approve / Reject Deduction Cases", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.post_deductions", titleAr: "ترحيل الخصم المعتمد إلى مسير الرواتب", titleEn: "Post Approved Deductions to Payroll", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
+  { key: "people.reverse_deductions", titleAr: "عكس الخصم المُرحّل", titleEn: "Reverse Posted Deductions", categoryAr: "الموارد البشرية والعمالة", categoryEn: "People & HR" },
 
   // CRM
   { key: "crm.view", titleAr: "الوصول لبوابة إدارة العملاء CRM", titleEn: "Access CRM Portal", categoryAr: "إدارة العلاقات والعملاء (CRM)", categoryEn: "CRM & Sales" },
@@ -58,6 +69,23 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: "company.manage", titleAr: "تعديل وإدارة بيانات الشركة والسجل التجاري", titleEn: "Manage Company Profile & Settings", categoryAr: "إدارات النظام والشركة", categoryEn: "Company & Admin" },
   { key: "users.manage_roles", titleAr: "إدارة أعضاء الفريق، التعيين، وتحديد الأدوار", titleEn: "Manage Team Roles & User Permissions", categoryAr: "إدارات النظام والشركة", categoryEn: "Company & Admin" },
   { key: "admin.seed", titleAr: "تهيئة وإعادة تعيين بيانات فايرستور", titleEn: "Seed System Data", categoryAr: "إدارات النظام والشركة", categoryEn: "Company & Admin" },
+
+  // Real Estate Management
+  { key: "portals.real_estate", titleAr: "الوصول لبوابة إدارة العقارات", titleEn: "Access Real Estate Portal", categoryAr: "إدارة العقارات والوحدات", categoryEn: "Real Estate & Units" },
+  { key: "real_estate.view", titleAr: "عرض العقارات والوحدات وعقود الإيجار", titleEn: "View Properties, Units & Leases", categoryAr: "إدارة العقارات والوحدات", categoryEn: "Real Estate & Units" },
+  { key: "real_estate.create", titleAr: "إنشاء وتعديل سجلات العقارات والإيجارات", titleEn: "Create & Edit Property and Lease Records", categoryAr: "إدارة العقارات والوحدات", categoryEn: "Real Estate & Units" },
+  { key: "real_estate.approve", titleAr: "اعتماد وتفعيل وإنهاء عقود الإيجار", titleEn: "Activate, Approve & Terminate Leases", categoryAr: "إدارة العقارات والوحدات", categoryEn: "Real Estate & Units" },
+  { key: "real_estate.collect", titleAr: "تسجيل تحصيلات الإيجار ومعالجتها", titleEn: "Record & Process Rent Collections", categoryAr: "إدارة العقارات والوحدات", categoryEn: "Real Estate & Units" },
+  { key: "real_estate.deposits", titleAr: "إدارة التأمينات: استرداد وخصم ومصادرة", titleEn: "Manage Security Deposits: Refunds & Deductions", categoryAr: "إدارة العقارات والوحدات", categoryEn: "Real Estate & Units" },
+  { key: "real_estate.export", titleAr: "تصدير تقارير العقارات والإيجارات", titleEn: "Export Real Estate Reports", categoryAr: "إدارة العقارات والوحدات", categoryEn: "Real Estate & Units" },
+  { key: "real_estate.delete", titleAr: "حذف وأرشفة سجلات العقارات", titleEn: "Delete & Archive Property Records", categoryAr: "إدارة العقارات والوحدات", categoryEn: "Real Estate & Units" },
+
+  // School Management
+  { key: "portals.school",           titleAr: "الوصول لبوابة إدارة المدرسة",                        titleEn: "Access School Portal",                  categoryAr: "إدارة المدرسة", categoryEn: "School Management" },
+  { key: "school.view",              titleAr: "عرض الطلاب والفصول والمواد والحضور",               titleEn: "View Students, Classes, Subjects & Attendance", categoryAr: "إدارة المدرسة", categoryEn: "School Management" },
+  { key: "school.manage",            titleAr: "إدارة الطلاب والتسجيلات والفصول الدراسية",         titleEn: "Manage Students, Enrollment & Classes",   categoryAr: "إدارة المدرسة", categoryEn: "School Management" },
+  { key: "school.mark_attendance",   titleAr: "تسجيل حضور وغياب الطلاب",                          titleEn: "Record Student Attendance",               categoryAr: "إدارة المدرسة", categoryEn: "School Management" },
+  { key: "school.delete",            titleAr: "حذف سجلات المدرسة",                                titleEn: "Delete School Records",                   categoryAr: "إدارة المدرسة", categoryEn: "School Management" },
 ];
 
 export function CustomPermissionsModal({ isOpen, onOpenChange, member }: CustomPermissionsModalProps) {

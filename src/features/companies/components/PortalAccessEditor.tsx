@@ -67,7 +67,7 @@ function pruneSubRoles(
 ): PortalSubRoles {
   const next: PortalSubRoles = {};
   for (const portal of portals) {
-    if (portal === "chat" || portal === "projects" || portal === "facilities" || portal === "agency") continue;
+    if (portal === "chat" || portal === "projects" || portal === "facilities" || portal === "agency" || portal === "real_estate" || portal === "custom_modules" || portal === "school") continue;
     const value = subRoles[portal];
     if (!value) continue;
     if (portal === "tasks") next.tasks = value as TasksSubRole;

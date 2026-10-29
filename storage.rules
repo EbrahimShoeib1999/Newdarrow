@@ -58,11 +58,36 @@ service firebase.storage {
         : collection.matches('^mkt_.*') ? 'MARKETING_AGENCY'
         : collection.matches('^cln_.*') ? 'MEDICAL_CLINIC'
         : collection.matches('^sch_.*') ? 'SCHOOL_MANAGEMENT'
+        // Custom Business Modules Engine attachments: the owning activity is
+        // spelled into the collection name (mod_<activity>_rec_<key>), so the
+        // gate stays prefix-derived like firestore.rules. Kept in sync.
+        : collection.matches('^mod_projects_rec_.*') ? 'PROJECTS'
+        : collection.matches('^mod_real_estate_management_rec_.*') ? 'REAL_ESTATE_MANAGEMENT'
+        : collection.matches('^mod_real_estate_brokerage_rec_.*') ? 'REAL_ESTATE_BROKERAGE'
+        : collection.matches('^mod_facilities_management_rec_.*') ? 'FACILITIES_MANAGEMENT'
+        : collection.matches('^mod_real_estate_development_rec_.*') ? 'REAL_ESTATE_DEVELOPMENT'
+        : collection.matches('^mod_marketing_agency_rec_.*') ? 'MARKETING_AGENCY'
+        : collection.matches('^mod_medical_clinic_rec_.*') ? 'MEDICAL_CLINIC'
+        : collection.matches('^mod_school_management_rec_.*') ? 'SCHOOL_MANAGEMENT'
         : '';
     }
 
     function isSensitiveDomainCollection(collection) {
-      return collection.matches('^cln_.*') || collection.matches('^sch_.*');
+      return collection.matches('^cln_.*') || collection.matches('^sch_.*')
+        || collection.matches('^mod_medical_clinic_rec_.*')
+        || collection.matches('^mod_school_management_rec_.*');
+    }
+
+    // Real-estate legal evidence (deeds, owner identification, signed
+    // contracts) uploads under a dedicated path collection so least-privilege
+    // can be enforced server-side on top of the activity gate: admin/manager
+    // only. Kept in sync with rem-ops.service.ts DocumentService.upload.
+    function isRemSensitiveFileCollection(collection) {
+      return collection == 'rem_sensitive_documents';
+    }
+
+    function isCompanyOfficer(companyId) {
+      return callerRole(companyId) in ['super_admin', 'admin', 'manager'];
     }
 
     // Missing company doc yields 'PROJECTS', which owns no prefix -> fail-closed.
@@ -88,7 +113,9 @@ service firebase.storage {
       return isMemberOf(companyId)
         && firestoreCompanyActivity(companyId) == domainOwnerActivity(collection)
         && (!isSensitiveDomainCollection(collection)
-            || hasSensitiveDomainPrivilege(companyId));
+            || hasSensitiveDomainPrivilege(companyId))
+        && (!isRemSensitiveFileCollection(collection)
+            || isCompanyOfficer(companyId));
     }
 
     // 1. User Avatars: strictly isolated to the user

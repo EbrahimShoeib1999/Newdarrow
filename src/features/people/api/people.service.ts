@@ -12,7 +12,7 @@ import {
   serverTimestamp,
   Timestamp
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import type { ApiResponse } from "@/types/api.types";
 import { withLogging } from "@/lib/service-utils";
 import type {
@@ -35,6 +35,18 @@ import {
   isOpenSessionForDay,
   pruneUndefinedFields,
 } from "../utils/geo";
+import type {
+  AttendanceCorrectionEntry,
+  AttendanceScheduleSnapshot,
+  ScheduleAssignment,
+  ScheduleValues,
+} from "../types/work-schedule.types";
+import {
+  countableLateMinutes,
+  effectiveValuesOf,
+  punctualityForCheckIn,
+} from "../lib/work-schedule-rules";
+import { WorkScheduleService } from "./work-schedule.service";
 
 const SERVICE_NAME = "PeopleService";
 
@@ -185,6 +197,73 @@ async function countLateOccurrencesThisMonth(
     }
   }
   return count;
+}
+
+/* --- Effective work schedule (hr_schedule_assignments) --------------------- */
+
+/** UTC calendar day of a stored Timestamp/Date/string, matching the rows' `date` convention. */
+function dayKeyOf(value: unknown): string {
+  if (value instanceof Timestamp) return value.toDate().toISOString().slice(0, 10);
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  return "";
+}
+
+/** Approved leave covering the punch day excuses ALL of that day's delay. */
+async function isDayExcusedByApprovedLeave(
+  companyId: string,
+  employeeId: string,
+  dateIso: string
+): Promise<boolean> {
+  const snap = await getDocs(
+    query(
+      collection(db, "companies", companyId, "leave_requests"),
+      where("employeeId", "==", employeeId),
+      where("status", "==", "approved")
+    )
+  );
+  return snap.docs.some((d) => {
+    const start = dayKeyOf(d.data().startDate);
+    const end = dayKeyOf(d.data().endDate);
+    return !!start && !!end && start <= dateIso && dateIso <= end;
+  });
+}
+
+/**
+ * Snapshot the effective schedule for THIS punch. Employees without an
+ * assignment get null and the legacy company-cutoff path continues
+ * untouched. Raw late minutes never round up and never exist for ambiguous
+ * cross-day punches; approved leave excuses the whole day.
+ */
+async function resolveScheduleSnapshotForPunch(
+  companyId: string,
+  employeeId: string,
+  department: string | undefined,
+  dateIso: string,
+  checkInAt: Date
+): Promise<AttendanceScheduleSnapshot | null> {
+  const assignment = await WorkScheduleService.resolveAssignment(
+    companyId,
+    employeeId,
+    department,
+    dateIso
+  );
+  if (!assignment) return null;
+  const punctuality = punctualityForCheckIn(effectiveValuesOf(assignment), checkInAt, dateIso);
+  const excused = punctuality.rawLateMinutes > 0
+    ? await isDayExcusedByApprovedLeave(companyId, employeeId, dateIso)
+    : false;
+  const excusedLateMinutes = excused ? punctuality.rawLateMinutes : 0;
+  return {
+    scheduleAssignmentId: assignment.id,
+    scheduledStart: punctuality.scheduledStart,
+    scheduleTimezone: punctuality.timezone,
+    graceMinutes: punctuality.graceMinutes,
+    rawLateMinutes: punctuality.rawLateMinutes,
+    excusedLateMinutes,
+    countableLateMinutes: countableLateMinutes(punctuality.rawLateMinutes, excused),
+    workMode: assignment.templateMode ?? null,
+  };
 }
 
 export const PeopleService = {
@@ -408,7 +487,29 @@ export const PeopleService = {
         lateMinutes,
         deductionMinutes,
         createdAt: serverTimestamp(),
+        // Author's uid for the security boundary (pruned when signed out).
+        userId: auth.currentUser?.uid,
       };
+
+      // Effective-schedule snapshot (new). When an assignment resolves, the
+      // punch carries its own frozen lateness basis; the legacy cutoff fields
+      // above stay untouched for display/compatibility. Without an
+      // assignment nothing changes at all — the company cutoff remains the
+      // documented fallback. A schedule read failure must NEVER block a
+      // check-in, so resolution errors degrade to the legacy behavior.
+      try {
+        const empSnap = await getDoc(doc(db, "companies", companyId, "employees", employeeId));
+        const schedule = await resolveScheduleSnapshotForPunch(
+          companyId,
+          employeeId,
+          (empSnap.data() as Employee | undefined)?.department,
+          date,
+          now
+        );
+        if (schedule) payload.schedule = schedule;
+      } catch (e) {
+        console.warn("[checkIn] schedule resolution failed — legacy cutoff policy applies", e);
+      }
       // Optional geo facts are merged key-by-key: a flexible check-in with a
       // working GPS but no configured work locations resolves locationName to
       // undefined, and Firestore rejects explicit undefined values outright.
@@ -532,6 +633,199 @@ export const PeopleService = {
       return {
         data: records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
         message: "Success",
+      };
+    })());
+  },
+
+  /**
+   * Authorized correction of an attendance row. A reason is mandatory, every
+   * changed field is recorded before/after in the row's `corrections` trail,
+   * and all derived values (lateness, worked hours) are RECALCULATED — never
+   * hand-edited. Employees never correct their own rows: the actor being the
+   * row's subject (or the linked employee's account) is refused here and at
+   * the database boundary; the fine-grained role capability lives in
+   * firestore.rules.
+   */
+  async correctAttendance(
+    companyId: string,
+    attendanceId: string,
+    actorUid: string,
+    reason: string,
+    changes: {
+      checkIn?: Date;
+      checkOut?: Date;
+      status?: Attendance["status"];
+      excusedNote?: string | null;
+    }
+  ): Promise<ApiResponse<Attendance>> {
+    return withLogging(SERVICE_NAME, "correctAttendance", (async () => {
+      if (!reason || !reason.trim()) {
+        return { data: null as unknown as Attendance, message: "schedules.validation.reasonRequired" };
+      }
+      const ref = doc(db, "companies", companyId, "attendance", attendanceId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return { data: null as unknown as Attendance, message: "Attendance row not found" };
+      const row = { id: snap.id, ...snap.data() } as Attendance & { checkIn?: Timestamp | string };
+
+      // Self-correction guard: neither the stamped author nor the employee's
+      // linked account may match the actor.
+      if (actorUid) {
+        if (row.userId && row.userId === actorUid) {
+          return { data: null as unknown as Attendance, message: "people.attendance.selfCorrectionNotAllowed" };
+        }
+        const empSnap = await getDoc(doc(db, "companies", companyId, "employees", row.employeeId));
+        if (String((empSnap.data() as Employee | undefined)?.userId || "") === actorUid) {
+          return { data: null as unknown as Attendance, message: "people.attendance.selfCorrectionNotAllowed" };
+        }
+      }
+
+      const toDay = (v: unknown): Date | null =>
+        v instanceof Timestamp ? v.toDate() : v ? new Date(String(v)) : null;
+      const audit: Record<string, { from: unknown; to: unknown }> = {};
+      const update: Record<string, unknown> = { updatedAt: serverTimestamp() };
+      const entry: AttendanceCorrectionEntry = {
+        at: new Date().toISOString(),
+        by: actorUid,
+        reason: reason.trim(),
+        changes: {},
+      };
+
+      const oldIn = toDay(row.checkIn);
+      const oldOut = toDay(row.checkOut);
+      const newIn = changes.checkIn ?? oldIn;
+      const newOut = changes.checkOut ?? oldOut;
+
+      if (changes.checkIn && oldIn) {
+        audit.checkIn = { from: oldIn.toISOString(), to: changes.checkIn.toISOString() };
+        update.checkIn = Timestamp.fromDate(changes.checkIn);
+      }
+      if (changes.checkOut && oldOut !== (changes.checkOut ?? null)) {
+        audit.checkOut = { from: oldOut ? oldOut.toISOString() : null, to: changes.checkOut.toISOString() };
+        update.checkOut = Timestamp.fromDate(changes.checkOut);
+      }
+      if (newIn && newOut) {
+        const totalHours = Math.round(((newOut.getTime() - newIn.getTime()) / 3600000) * 100) / 100;
+        if (totalHours !== row.totalHours) {
+          audit.totalHours = { from: row.totalHours ?? null, to: totalHours };
+          update.totalHours = totalHours;
+        }
+      }
+
+      if (changes.excusedNote !== undefined) {
+        audit.excusedNote = { from: row.excusedNote ?? null, to: changes.excusedNote };
+        update.excusedNote = changes.excusedNote;
+      }
+
+      const excusedNow =
+        typeof changes.excusedNote === "string" && changes.excusedNote.trim().length > 0;
+
+      if (row.schedule) {
+        // Schedule-resolved row: recompute the lateness triple from the
+        // frozen assignment's effective values (never from the mutable
+        // template). Without the assignment doc the basis cannot be
+        // re-derived, so punch-time edits there are refused instead of
+        // guessed.
+        const prev = row.schedule;
+        let rawLate = prev.rawLateMinutes;
+        if (changes.checkIn) {
+          const aSnap = await getDoc(
+            doc(db, "companies", companyId, "hr_schedule_assignments", prev.scheduleAssignmentId)
+          );
+          if (!aSnap.exists()) {
+            return { data: null as unknown as Attendance, message: "schedules.assignmentMissingCannotRecalc" };
+          }
+          const assignment = {
+            snapshot: aSnap.data().snapshot as ScheduleValues,
+            overrides: (aSnap.data().overrides as Partial<ScheduleValues> | null) ?? null,
+          } as ScheduleAssignment;
+          const punctuality = punctualityForCheckIn(effectiveValuesOf(assignment), changes.checkIn, row.date);
+          rawLate = punctuality.rawLateMinutes;
+        }
+        let excusedMin = excusedNow ? rawLate : changes.excusedNote === null || changes.excusedNote === "" ? 0 : prev.excusedLateMinutes;
+        if (
+          (changes.excusedNote === null || changes.excusedNote === "" || changes.checkIn) &&
+          !excusedNow
+        ) {
+          // Un-excusing re-checks approved leave rather than assuming 0.
+          const onLeave = await isDayExcusedByApprovedLeave(companyId, row.employeeId, row.date);
+          excusedMin = onLeave ? rawLate : 0;
+        }
+        const countable = countableLateMinutes(rawLate, excusedMin > 0);
+        if (
+          rawLate !== prev.rawLateMinutes ||
+          excusedMin !== prev.excusedLateMinutes ||
+          countable !== prev.countableLateMinutes
+        ) {
+          audit.schedule = { from: prev, to: { ...prev, rawLateMinutes: rawLate, excusedLateMinutes: excusedMin, countableLateMinutes: countable } };
+          update.schedule = { ...prev, rawLateMinutes: rawLate, excusedLateMinutes: excusedMin, countableLateMinutes: countable };
+        }
+        const derivedStatus = countable > 0 || rawLate > 0 ? "late" : row.status === "late" ? "present" : row.status;
+        const nextStatus = changes.status ?? (rawLate !== prev.rawLateMinutes ? derivedStatus : row.status);
+        if (nextStatus !== row.status) {
+          audit.status = { from: row.status, to: nextStatus };
+          update.status = nextStatus;
+        }
+      } else {
+        // Legacy row: the ONLY documented basis is the CURRENT company
+        // cutoff (same rule check-in used). Excusing via a note zeroes the
+        // day's late/deduction minutes; un-excusing a previously excused
+        // legacy row requires the corrected check-in to re-derive them.
+        const policy = await getAttendanceLatePolicy(companyId);
+        let lateMinutes = row.lateMinutes ?? 0;
+        let deductionMinutes = row.deductionMinutes ?? 0;
+        if (changes.checkIn && oldIn) {
+          lateMinutes = computeLateMinutes(changes.checkIn, policy.lateCutoffTime);
+          deductionMinutes = lateMinutes > 0 ? deductionMinutes : 0;
+        }
+        if (excusedNow) {
+          lateMinutes = 0;
+          deductionMinutes = 0;
+        }
+        if (lateMinutes !== (row.lateMinutes ?? 0)) {
+          audit.lateMinutes = { from: row.lateMinutes ?? 0, to: lateMinutes };
+          update.lateMinutes = lateMinutes;
+        }
+        if (deductionMinutes !== (row.deductionMinutes ?? 0)) {
+          audit.deductionMinutes = { from: row.deductionMinutes ?? 0, to: deductionMinutes };
+          update.deductionMinutes = deductionMinutes;
+        }
+        const nextStatus = changes.status ?? (changes.checkIn ? (lateMinutes > 0 ? "late" : row.status === "late" ? "present" : row.status) : row.status);
+        if (nextStatus !== row.status) {
+          audit.status = { from: row.status, to: nextStatus };
+          update.status = nextStatus;
+        }
+      }
+
+      if (changes.status && changes.status !== update.status) {
+        audit.status = { from: row.status, to: changes.status };
+        update.status = changes.status;
+      }
+
+      if (Object.keys(audit).length === 0) {
+        return { data: null as unknown as Attendance, message: "people.attendance.nothingToCorrect" };
+      }
+      entry.changes = audit;
+      update.corrections = [...(row.corrections ?? []), entry];
+
+      await updateDoc(ref, pruneUndefinedFields(update));
+
+      // Corrections change the month's derived totals — refresh the still
+      // UNDECIDED cases so reviewers never see a stale proposal. Approved/
+      // posted history is never mutated (reversal is the official path).
+      try {
+        await WorkScheduleService.recalculateUndecidedCases(
+          companyId,
+          row.employeeId,
+          row.date.slice(0, 7)
+        );
+      } catch (e) {
+        console.warn("[correctAttendance] case recalculation failed", e);
+      }
+
+      const after = await getDoc(ref);
+      return {
+        data: { id: after.id, ...after.data() } as Attendance,
+        message: "Attendance corrected and recalculated",
       };
     })());
   },

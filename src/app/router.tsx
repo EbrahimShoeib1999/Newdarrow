@@ -49,6 +49,10 @@ import { ApprovalsPage } from "@/features/people/pages/ApprovalsPage";
 import PerformancePage from "@/features/people/pages/PerformancePage";
 import AttendanceSettingsPage from "@/features/people/pages/AttendanceSettingsPage";
 import HrSettingsHubPage from "@/features/people/pages/HrSettingsHubPage";
+import WorkSchedulesPage from "@/features/people/pages/WorkSchedulesPage";
+import LatenessPoliciesPage from "@/features/people/pages/LatenessPoliciesPage";
+import DeductionCasesPage from "@/features/people/pages/DeductionCasesPage";
+import LatenessReportPage from "@/features/people/pages/LatenessReportPage";
 import TimesheetsPage from "@/features/people/pages/TimesheetsPage";
 import DailyReportsPage from "@/features/people/pages/DailyReportsPage";
 import TaskDailyReportsPage from "@/features/tasks/pages/TaskDailyReportsPage";
@@ -95,6 +99,47 @@ import {
   BriefsPage,
   AgencyReportsPage,
 } from "@/features/agency/routes/lazy-pages";
+// The REAL_ESTATE_MANAGEMENT activity domain pages load lazily the same way.
+import {
+  RealEstateLayout,
+  RemDashboardPage,
+  RemReportsPage,
+  PropertiesListPage,
+  PropertyDetailPage,
+  UnitsListPage,
+  UnitDetailPage,
+  LeasesListPage,
+  LeaseDetailPage,
+  RentCollectionsPage,
+  DepositsListPage,
+  ExpensesListPage,
+  InspectionsListPage,
+} from "@/features/real-estate/routes/lazy-pages";
+// The SCHOOL_MANAGEMENT activity domain pages load lazily the same way.
+import {
+  SchoolLayout,
+  SchoolDashboardPage,
+  AcademicYearsPage,
+  TermsPage,
+  GradesPage,
+  SectionsPage,
+  SubjectsPage,
+  GuardiansPage,
+  StudentsPage,
+  AttendancePage,
+} from "@/features/school/routes/lazy-pages";
+// The Custom Business Modules Engine is a SHARED surface (present for every
+// activity), so it mounts without an ActivityRouteGuard — its own PortalGuard
+// enforces the portal, and each module definition carries its activity binding.
+import {
+  ModulesLayout,
+  ModulesWorkspacePage,
+  ModuleRecordsListPage,
+  ModuleRecordDetailPage,
+  ModuleRecordFormPage,
+  ModuleConfigListPage,
+  ModuleConfigEditorPage,
+} from "@/features/custom-modules/routes/lazy-pages";
 
 /** Route-level Suspense fallback — a loader, never protected content. */
 function routeSuspense(node: React.ReactNode) {
@@ -255,6 +300,10 @@ export const router = createBrowserRouter([
               { path: "timesheets", element: <TimesheetsPage /> },
               { path: "daily-reports", element: <DailyReportsPage /> },
               { path: "attendance-settings", element: <AttendanceSettingsPage /> },
+              { path: "schedules", element: <WorkSchedulesPage /> },
+              { path: "lateness-policies", element: <LatenessPoliciesPage /> },
+              { path: "deduction-cases", element: <DeductionCasesPage /> },
+              { path: "lateness-report", element: <LatenessReportPage /> },
               { path: "team", element: <TeamMembersPage /> },
               { path: "roles", element: <RolesPermissionsPage /> },
               { path: "company-settings", element: <CompanySettingsPage /> },
@@ -377,6 +426,70 @@ export const router = createBrowserRouter([
               { path: "deliverables", element: routeSuspense(<DeliverablesListPage />) },
               { path: "content", element: routeSuspense(<ContentCalendarPage />) },
               { path: "briefs", element: routeSuspense(<BriefsPage />) },
+            ],
+          },
+          {
+            path: "real-estate",
+            // Activity-aware mount (same contract as facilities): the guard
+            // denies the namespace when REAL_ESTATE_MANAGEMENT is not the
+            // tenant's active activity, then renders the lazy REM pages.
+            element: (
+              <ActivityRouteGuard>
+                {routeSuspense(<RealEstateLayout />)}
+              </ActivityRouteGuard>
+            ),
+            children: [
+              { index: true, element: routeSuspense(<RemDashboardPage />) },
+              { path: "properties", element: routeSuspense(<PropertiesListPage />) },
+              { path: "properties/:id", element: routeSuspense(<PropertyDetailPage />) },
+              { path: "units", element: routeSuspense(<UnitsListPage />) },
+              { path: "units/:id", element: routeSuspense(<UnitDetailPage />) },
+              { path: "leases", element: routeSuspense(<LeasesListPage />) },
+              { path: "leases/:id", element: routeSuspense(<LeaseDetailPage />) },
+              { path: "collections", element: routeSuspense(<RentCollectionsPage />) },
+              { path: "deposits", element: routeSuspense(<DepositsListPage />) },
+              { path: "expenses", element: routeSuspense(<ExpensesListPage />) },
+              { path: "inspections", element: routeSuspense(<InspectionsListPage />) },
+              { path: "reports", element: routeSuspense(<RemReportsPage />) },
+            ],
+          },
+          {
+            path: "school",
+            // Activity-aware mount (same contract as facilities/REM): the guard
+            // denies the namespace when SCHOOL_MANAGEMENT is not the tenant's
+            // active activity, then renders the lazy School pages.
+            element: (
+              <ActivityRouteGuard>
+                {routeSuspense(<SchoolLayout />)}
+              </ActivityRouteGuard>
+            ),
+            children: [
+              { index: true, element: routeSuspense(<SchoolDashboardPage />) },
+              { path: "academic-years", element: routeSuspense(<AcademicYearsPage />) },
+              { path: "terms", element: routeSuspense(<TermsPage />) },
+              { path: "grades", element: routeSuspense(<GradesPage />) },
+              { path: "sections", element: routeSuspense(<SectionsPage />) },
+              { path: "subjects", element: routeSuspense(<SubjectsPage />) },
+              { path: "guardians", element: routeSuspense(<GuardiansPage />) },
+              { path: "students", element: routeSuspense(<StudentsPage />) },
+              { path: "attendance", element: routeSuspense(<AttendancePage />) },
+            ],
+          },
+          {
+            path: "modules",
+            // Custom Business Modules Engine — shared across activities (no
+            // ActivityRouteGuard). ModulesLayout owns the PortalGuard; each
+            // module is scoped to an activity through its own definition.
+            element: routeSuspense(<ModulesLayout />),
+            children: [
+              { index: true, element: routeSuspense(<ModulesWorkspacePage />) },
+              { path: "manage", element: routeSuspense(<ModuleConfigListPage />) },
+              { path: "manage/new", element: routeSuspense(<ModuleConfigEditorPage />) },
+              { path: "manage/:moduleKey", element: routeSuspense(<ModuleConfigEditorPage />) },
+              { path: ":moduleKey", element: routeSuspense(<ModuleRecordsListPage />) },
+              { path: ":moduleKey/new", element: routeSuspense(<ModuleRecordFormPage />) },
+              { path: ":moduleKey/:recordId", element: routeSuspense(<ModuleRecordDetailPage />) },
+              { path: ":moduleKey/:recordId/edit", element: routeSuspense(<ModuleRecordFormPage />) },
             ],
           },
           // Inactive-activity namespaces (registry-generated).

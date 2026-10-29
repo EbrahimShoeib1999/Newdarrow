@@ -52,6 +52,7 @@ export const SHARED_ROUTE_PREFIXES: readonly string[] = [
   "/people",
   "/billing",
   "/chat",
+  "/modules",
   "/settings",
   "/meetings",
   "/profile",
@@ -60,9 +61,21 @@ export const SHARED_ROUTE_PREFIXES: readonly string[] = [
 ];
 
 /**
+ * Core product modules that must stay available under EVERY activity, even
+ * though `PROJECTS` also appears in the activity registry as the default
+ * tenant activity. Their route namespace is resolved as SHARED ahead of the
+ * activity-routeBase pass, so switching activity can never hide or deny them
+ * (the reported "Projects disappeared" regression). Role/portal permissions
+ * still apply on top — being core only removes the activity gate.
+ */
+export const CORE_ROUTE_PREFIXES: readonly string[] = ["/projects"];
+
+/**
  * Activity-owned route namespaces. Each activity reserves exactly one base
  * prefix; nested domain routes (`/clinic/patients/:id`, …) inherit ownership
- * automatically. PROJECTS additionally claims the legacy `/projects` module.
+ * automatically. The default PROJECTS activity still reserves `/projects`,
+ * but `CORE_ROUTE_PREFIXES` reclaims that namespace as shared so Projects
+ * stays reachable for every tenant.
  */
 export const ACTIVITY_ROUTE_PREFIXES: readonly string[] = Object.values(
   ACTIVITY_REGISTRY,
@@ -70,9 +83,16 @@ export const ACTIVITY_ROUTE_PREFIXES: readonly string[] = Object.values(
 
 /** Which activity owns a portal app; unlisted portals are shared. */
 export const PORTAL_ACTIVITY: Partial<Record<PortalId, ActivityId>> = {
-  projects: "PROJECTS",
+  // Real Estate is activity-specific: without this mapping the picker/sidebar
+  // (portalAllowedForActivity) treats it as shared and shows it for every
+  // activity, diverging from the route guard that already denies it.
+  real_estate: "REAL_ESTATE_MANAGEMENT",
   facilities: "FACILITIES_MANAGEMENT",
   agency: "MARKETING_AGENCY",
+  school: "SCHOOL_MANAGEMENT",
+  // NOTE: `projects` is intentionally absent — Projects is a core module (see
+  // CORE_ROUTE_PREFIXES), not an activity-gated one, so it must remain
+  // visible and reachable no matter which specialised activity is selected.
 };
 
 /** Map an activity to the portal id whose page tree it owns (reverse lookup). */
@@ -101,6 +121,9 @@ export function matchRouteOwner(pathname: string): RouteOwner {
   const segments = prefixOf(pathname);
   if (segments.length === 0) return { kind: "shared" }; // "/" handled by the public routes
   const first = `/${segments[0]}`;
+  // Core modules win over the registry pass: `/projects` is claimed by the
+  // PROJECTS activity base, yet must stay shared for every tenant.
+  if (CORE_ROUTE_PREFIXES.includes(first)) return { kind: "shared" };
   for (const activityId of Object.keys(ACTIVITY_REGISTRY) as ActivityId[]) {
     if (ACTIVITY_REGISTRY[activityId].routeBase === first) {
       return { kind: "activity", activity: activityId };

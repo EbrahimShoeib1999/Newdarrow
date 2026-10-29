@@ -19,6 +19,20 @@ export type Permission =
   | "people.view_performance"
   /** See daily reports of every member; everyone can always see their own. */
   | "people.view_all_reports"
+  /** Work schedules & attendance portal capabilities (fine-grained by design). */
+  | "people.view_schedules"
+  | "people.manage_schedules"
+  | "people.view_all_attendance"
+  /** Correct others' punches — never one's own (enforced in service + rules). */
+  | "people.correct_attendance"
+  | "people.view_lateness"
+  /** Run the monthly lateness evaluation and file proposals/review items. */
+  | "people.evaluate_lateness"
+  | "people.manage_lateness_policies"
+  /** Approve/reject deduction cases — the subject can never decide their own. */
+  | "people.decide_deductions"
+  | "people.post_deductions"
+  | "people.reverse_deductions"
   | "crm.view"
   | "crm.manage_leads"
   | "crm.manage_contacts"
@@ -42,7 +56,34 @@ export type Permission =
   | "portals.agency"
   | "marketing.view"
   | "marketing.manage"
-  | "marketing.delete";
+  | "marketing.delete"
+  | "portals.real_estate"
+  | "real_estate.view"
+  | "real_estate.create"
+  | "real_estate.approve"
+  | "real_estate.collect"
+  | "real_estate.deposits"
+  | "real_estate.export"
+  | "real_estate.delete"
+  /** School Management — a SENSITIVE domain: the `sch_*` collections are
+   * readable/writable only for admin- or manager-role users (firestore.rules
+   * `hasSensitiveDomainPrivilege`), so no atom below is granted to employee or
+   * viewer. The portal grant stops at the same line to keep UI and rules in
+   * agreement (an under-privileged grant would pass nav and fail writes). */
+  | "portals.school"
+  | "school.view"
+  | "school.manage"
+  | "school.mark_attendance"
+  | "school.delete"
+  | "portals.custom_modules"
+  /** Custom Business Modules Engine — record actions are additionally
+   * narrowed per-module by the definition's roleGrants (module-engine.ts). */
+  | "custom_modules.view"
+  | "custom_modules.create"
+  | "custom_modules.update"
+  | "custom_modules.archive"
+  /** Creating/editing module DEFINITIONS (the configuration UI) only. */
+  | "custom_modules.manage_config";
 
 export const ROLE_LABELS: Record<UserRole, { en: string; ar: string }> = {
   super_admin: { en: "Super Admin", ar: "مدير عام" },
@@ -70,6 +111,16 @@ const ALL_PERMISSIONS: Permission[] = [
   "people.approve_leave",
   "people.view_performance",
   "people.view_all_reports",
+  "people.view_schedules",
+  "people.manage_schedules",
+  "people.view_all_attendance",
+  "people.correct_attendance",
+  "people.view_lateness",
+  "people.evaluate_lateness",
+  "people.manage_lateness_policies",
+  "people.decide_deductions",
+  "people.post_deductions",
+  "people.reverse_deductions",
   "crm.view",
   "crm.manage_leads",
   "crm.manage_contacts",
@@ -94,6 +145,25 @@ const ALL_PERMISSIONS: Permission[] = [
   "marketing.view",
   "marketing.manage",
   "marketing.delete",
+  "portals.real_estate",
+  "real_estate.view",
+  "real_estate.create",
+  "real_estate.approve",
+  "real_estate.collect",
+  "real_estate.deposits",
+  "real_estate.export",
+  "real_estate.delete",
+  "portals.school",
+  "school.view",
+  "school.manage",
+  "school.mark_attendance",
+  "school.delete",
+  "portals.custom_modules",
+  "custom_modules.view",
+  "custom_modules.create",
+  "custom_modules.update",
+  "custom_modules.archive",
+  "custom_modules.manage_config",
 ];
 
 export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
@@ -116,6 +186,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "people.approve_leave",
     "people.view_performance",
     "people.view_all_reports",
+    "people.view_schedules",
+    "people.manage_schedules",
+    "people.view_all_attendance",
+    "people.correct_attendance",
+    "people.view_lateness",
+    "people.evaluate_lateness",
+    "people.decide_deductions",
     "crm.view",
     "crm.manage_leads",
     "crm.manage_contacts",
@@ -137,6 +214,24 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "marketing.view",
     "marketing.manage",
     "marketing.delete",
+    "portals.real_estate",
+    "real_estate.view",
+    "real_estate.create",
+    "real_estate.approve",
+    "real_estate.collect",
+    "real_estate.deposits",
+    "real_estate.export",
+    "real_estate.delete",
+    "portals.school",
+    "school.view",
+    "school.manage",
+    "school.mark_attendance",
+    "school.delete",
+    "portals.custom_modules",
+    "custom_modules.view",
+    "custom_modules.create",
+    "custom_modules.update",
+    "custom_modules.archive",
   ],
   employee: [
     "portals.tasks",
@@ -161,6 +256,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "portals.agency",
     "marketing.view",
     "marketing.manage",
+    "portals.real_estate",
+    "real_estate.view",
+    "real_estate.create",
+    "portals.custom_modules",
+    "custom_modules.view",
+    "custom_modules.create",
+    "custom_modules.update",
   ],
   viewer: [
     "portals.crm",
@@ -194,17 +296,30 @@ export function isManagerRole(role: UserRole | undefined): boolean {
   return isAdminRole(role) || role === "manager";
 }
 
+export type AccessiblePortal =
+  | "tasks"
+  | "crm"
+  | "people"
+  | "billing"
+  | "chat"
+  | "projects"
+  | "facilities"
+  | "agency"
+  | "real_estate"
+  | "school"
+  | "custom_modules";
+
 export function canAccessPortal(
   role: UserRole | undefined,
-  portal: "tasks" | "crm" | "people" | "billing" | "chat" | "projects" | "facilities" | "agency"
+  portal: AccessiblePortal
 ): boolean {
   return hasPermission(role, `portals.${portal}` as Permission);
 }
 
 export function getAccessiblePortals(
   role: UserRole | undefined
-): Array<"tasks" | "crm" | "people" | "billing" | "chat" | "projects" | "facilities" | "agency"> {
-  return (["tasks", "crm", "people", "billing", "chat", "projects", "facilities", "agency"] as const).filter((p) =>
+): AccessiblePortal[] {
+  return (["tasks", "crm", "people", "billing", "chat", "projects", "facilities", "agency", "real_estate", "school", "custom_modules"] as const).filter((p) =>
     canAccessPortal(role, p)
   );
 }

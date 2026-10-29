@@ -81,6 +81,18 @@ export function getLocalizedNotification(
           message,
         }),
       };
+    case "reminder": {
+      // Activity generators store fully-namespaced i18next keys alongside the
+      // raw English fallback text; render from keys whenever they are present.
+      const { titleKey, bodyKey, params } = notification;
+      if (titleKey && bodyKey) {
+        return {
+          title: t(titleKey, params ?? {}),
+          message: t(bodyKey, params ?? {}),
+        };
+      }
+      break;
+    }
   }
 
   return { title, message };

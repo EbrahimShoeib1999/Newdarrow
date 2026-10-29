@@ -1,0 +1,173 @@
+{
+  "nav": {
+    "overview": "نظرة عامة",
+    "dashboard": "لوحة المعلومات",
+    "academic_setup": "الإعداد الأكاديمي",
+    "academic_years": "الأعوام الدراسية",
+    "terms": "الفصول الدراسية",
+    "grades": "المراحل",
+    "sections": "الشُّعب",
+    "subjects": "المواد",
+    "roster": "السجل",
+    "guardians": "أولياء الأمر",
+    "students": "الطلاب",
+    "daily_operations": "العمليات اليومية",
+    "attendance": "الحضور"
+  },
+  "buttons": {
+    "new": "جديد",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "save": "حفظ",
+    "saving": "جارٍ الحفظ…",
+    "cancel": "إلغاء",
+    "search": "بحث…"
+  },
+  "fields": {
+    "name": "الاسم",
+    "code": "الرمز",
+    "startDate": "تاريخ البداية",
+    "endDate": "تاريخ النهاية",
+    "status": "الحالة",
+    "notes": "ملاحظات",
+    "level": "المستوى",
+    "grade": "المرحلة",
+    "section": "الشُّعبة",
+    "teacher": "معلم الفصل",
+    "capacity": "الطاقة الاستيعابية",
+    "phone": "الهاتف",
+    "email": "البريد الإلكتروني",
+    "relationship": "صلة القرابة",
+    "contact": "جهة اتصال CRM",
+    "identifier": "الرقم الدراسي",
+    "guardian": "ولي الأمر",
+    "enrollmentDate": "تاريخ التسجيل",
+    "date": "التاريخ",
+    "mark": "العلامة",
+    "createdAt": "تاريخ الإنشاء"
+  },
+  "validation": {
+    "nameRequired": "الاسم مطلوب.",
+    "dateRequired": "يرجى إدخال تاريخ صالح (YYYY-MM-DD).",
+    "dateOrder": "يجب أن يكون تاريخ البداية قبل أو مساوياً لتاريخ النهاية.",
+    "yearRequired": "العام الدراسي مطلوب.",
+    "levelRange": "المستوى يجب أن يكون 1 أو أعلى.",
+    "gradeRequired": "المرحلة مطلوبة.",
+    "sectionRequired": "الشُّعبة مطلوبة.",
+    "guardianRequired": "ولي الأمر مطلوب.",
+    "phoneRequired": "رقم الهاتف مطلوب.",
+    "phoneFormat": "أدخل رقم هاتف صالح."
+  },
+  "status": {
+    "planned": "مُخطط",
+    "active": "نشط",
+    "closed": "مغلق"
+  },
+  "studentStatus": {
+    "pending": "قيد الانتظار",
+    "enrolled": "مسجّل",
+    "withdrawn": "منسحب"
+  },
+  "attendanceMark": {
+    "present": "حاضر",
+    "absent": "غائب",
+    "late": "متأخر",
+    "excused": "بعذر"
+  },
+  "guardianRelationship": {
+    "father": "الأب",
+    "mother": "الأم",
+    "guardian": "وصي قانوني",
+    "other": "أخرى"
+  },
+  "dashboard": {
+    "title": "لوحة المدرسة",
+    "subtitle": "نظرة عامة على أرقام مدرستك الأساسية",
+    "totalStudents": "إجمالي الطلاب",
+    "enrolledStudents": "المسجلون",
+    "pendingStudents": "قيد الانتظار",
+    "totalSections": "الشُّعب",
+    "totalSubjects": "المواد",
+    "comingSoon": "غير متاح بعد في الإصدار الأول",
+    "examsResults": "الاختبارات والنتائج",
+    "timetables": "الجداول الدراسية",
+    "fees": "الرسوم والفواتير"
+  },
+  "academicYearsPage": {
+    "title": "الأعوام الدراسية",
+    "subtitle": "التخطيط وإدارة الأعوام الدراسية",
+    "empty": "لا توجد أعوام دراسية بعد. أضف عاماً للبدء.",
+    "deleteConfirm": "سيؤدي هذا إلى حذف العام الدراسي نهائياً.",
+    "formNew": "عام دراسي جديد",
+    "formEdit": "تعديل العام الدراسي"
+  },
+  "termsPage": {
+    "title": "الفصول الدراسية",
+    "subtitle": "إدارة فصول كل عام دراسي",
+    "empty": "لا توجد فصول دراسية بعد.",
+    "deleteConfirm": "سيؤدي هذا إلى حذف الفصل الدراسي نهائياً.",
+    "formNew": "فصل دراسي جديد",
+    "formEdit": "تعديل الفصل الدراسي",
+    "academicYear": "العام الدراسي",
+    "allYears": "كل الأعوام"
+  },
+  "gradesPage": {
+    "title": "المراحل الدراسية",
+    "subtitle": "المراحل (الصف الأول، الصف الثاني…)",
+    "empty": "لا توجد مراحل بعد.",
+    "deleteConfirm": "لن يؤثر حذف المرحلة على الشُّعب الموجودة.",
+    "formNew": "مرحلة جديدة",
+    "formEdit": "تعديل المرحلة"
+  },
+  "sectionsPage": {
+    "title": "الشُّعب",
+    "subtitle": "شُّعب داخل كل مرحلة",
+    "empty": "لا توجد شُّعب بعد.",
+    "deleteConfirm": "سيؤدي هذا إلى حذف الشعبة نهائياً.",
+    "formNew": "شعبة جديدة",
+    "formEdit": "تعديل الشعبة",
+    "studentCount": "عدد الطلاب"
+  },
+  "subjectsPage": {
+    "title": "المواد الدراسية",
+    "subtitle": "مواد المنهج الدراسي",
+    "empty": "لا توجد مواد بعد.",
+    "deleteConfirm": "سيؤدي هذا إلى حذف المادة نهائياً.",
+    "formNew": "مادة جديدة",
+    "formEdit": "تعديل المادة"
+  },
+  "guardiansPage": {
+    "title": "أولياء الأمور",
+    "subtitle": "الآباء والأوصياء القانونيون",
+    "empty": "لا يوجد أولياء أمور بعد.",
+    "deleteConfirm": "سيؤدي هذا إلى حذف سجل ولي الأمر نهائياً.",
+    "formNew": "ولي أمر جديد",
+    "formEdit": "تعديل ولي الأمر",
+    "studentsCount": "عدد الطلاب"
+  },
+  "studentsPage": {
+    "title": "الطلاب",
+    "subtitle": "الطلاب المسجلون وقيد الانتظار",
+    "empty": "لا يوجد طلاب بعد.",
+    "deleteConfirm": "سيؤدي هذا إلى حذف سجل الطالب نهائياً.",
+    "formNew": "طالب جديد",
+    "formEdit": "تعديل بيانات الطالب",
+    "enrollTitle": "تسجيل طالب",
+    "filterGrade": "تصفية حسب المرحلة",
+    "filterSection": "تصفية حسب الشعبة",
+    "filterStatus": "تصفية حسب الحالة",
+    "allGrades": "جميع المراحل",
+    "allSections": "جميع الشُّعب",
+    "allStatuses": "جميع الحالات"
+  },
+  "attendancePage": {
+    "title": "الحضور",
+    "subtitle": "تسجيل الحضور اليومي لكل شعبة",
+    "sectionLabel": "الشعبة",
+    "dateLabel": "التاريخ",
+    "noSectionSelected": "اختر شعبة وتاريخاً لبدء تسجيل الحضور.",
+    "noStudentsInSection": "لا يوجد طلاب مسجلون في هذه الشعبة.",
+    "saved": "تم حفظ الحضور",
+    "alreadyMarked": "(مسجّل مسبقاً — سيتم تحديثه)"
+  }
+}

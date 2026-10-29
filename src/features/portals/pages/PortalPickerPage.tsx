@@ -23,6 +23,9 @@ const PORTAL_ICON_GRADIENTS: Record<PortalId, string> = {
   projects: "from-blue-500 to-indigo-600",
   facilities: "from-cyan-500 to-teal-600",
   agency: "from-pink-500 to-rose-600",
+  real_estate: "from-amber-500 to-orange-600",
+  school: "from-teal-500 to-emerald-700",
+  custom_modules: "from-slate-500 to-zinc-700",
 };
 
 function PortalCard({ portal }: { portal: PortalId }) {
