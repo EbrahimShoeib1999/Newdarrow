@@ -25,7 +25,7 @@ export function useAllUsers() {
         );
         const querySnapshot = await getDocs(q);
         
-        let users: User[] = querySnapshot.docs.map((docSnap) =>
+        const users: User[] = querySnapshot.docs.map((docSnap) =>
           mapFirestoreUser(docSnap.id, docSnap.data() as Record<string, unknown>)
         );
 

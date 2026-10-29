@@ -12,7 +12,7 @@ function daysFromNow(n: number): string {
   return d.toISOString();
 }
 
-export let mockSprints: Sprint[] = [
+export const mockSprints: Sprint[] = [
   {
     id: "spr-001",
     name: "Sprint 1: Dashboard Foundation",

@@ -673,12 +673,12 @@ try {
     await pressBack();
     const url = await expectUrl(/\/facilities($|\?)/, "back stays in the facilities portal");
 
-    await waitForRenderedPage("/projects/mine", "projects route (facility tenant)");
+    await waitForRenderedPage("/agency/campaigns", "agency route (facility tenant)");
     const denied = await evalJs(`!!document.querySelector('svg.lucide-shield-alert, svg.lucide-construction')`);
     const barOnDenied = (await barState()).present;
-    if (!denied) { await dump("fac-projects"); throw new Error("inactive-activity route did not render its denied state"); }
+    if (!denied) { await dump("fac-agency"); throw new Error("inactive-activity route did not render its denied state"); }
     if (barOnDenied) throw new Error("the bar must not offer navigation on a denied activity page");
-    return `assets -> ${url}; /projects denied and bar-free`;
+    return `assets -> ${url}; /agency denied and bar-free`;
   });
 
   // ---------- permission boundary ----------

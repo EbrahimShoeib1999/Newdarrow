@@ -12,7 +12,7 @@ function daysFromNow(n: number): string {
   return d.toISOString();
 }
 
-export let mockTasks: Task[] = [
+export const mockTasks: Task[] = [
   {
     id: "task-001",
     title: "Design new dashboard layout",

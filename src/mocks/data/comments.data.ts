@@ -6,7 +6,7 @@ function daysAgo(n: number): string {
   return d.toISOString();
 }
 
-export let mockComments: Comment[] = [
+export const mockComments: Comment[] = [
   { id: "cmt-001", taskId: "task-001", authorId: "usr-001", content: "Let's use a card-based layout for the dashboard. Make sure to include KPI widgets at the top.", createdAt: daysAgo(8) },
   { id: "cmt-002", taskId: "task-001", authorId: "usr-002", content: "I've started with the wireframes. Will share the Figma link by tomorrow.", createdAt: daysAgo(7) },
   { id: "cmt-003", taskId: "task-001", authorId: "usr-001", content: "Looks great! One suggestion — add a quick-actions section below the stats.", createdAt: daysAgo(5) },

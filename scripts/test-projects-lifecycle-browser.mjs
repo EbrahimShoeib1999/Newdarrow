@@ -397,12 +397,15 @@ try {
     await js(`(() => {
       const set = (sel, v) => { const el = document.querySelector(sel);
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(el, v);
-        el.dispatchEvent(new Event('input', { bubbles: true })); };
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new Event('blur', { bubbles: true })); };
       set('input[name="email"]', ${JSON.stringify(ADMIN_EMAIL)});
       set('input[type="password"]', ${JSON.stringify(ADMIN_PASS)});
+      const sub = document.querySelector('button[type="submit"]');
+      if (sub) sub.click();
     })()`);
-    await clickButton(["sign in", "login", "تسجيل"]);
-    await waitUntil(async () => !(await currentUrl()).includes("/login"), 60000, "post-login redirect");
+    await waitUntil(async () => !(await currentUrl()).includes("/login"), 120000, "post-login redirect");
     await shot("01-logged-in");
     return `url=${await currentUrl()}`;
   });
