@@ -321,7 +321,7 @@ export function UnitFormModal({ isOpen, onOpenChange, unit, lockedPropertyId }: 
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Textarea label={t("fields.amenities")} value={amenities} onValueChange={setAmenities} minRows={1} />
-                <Switch selected={furnished} onValueChange={setFurnished}>
+                <Switch isSelected={furnished} onValueChange={setFurnished}>
                   {t("fields.furnished")}
                 </Switch>
               </div>
