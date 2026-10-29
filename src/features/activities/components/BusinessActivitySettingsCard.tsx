@@ -66,6 +66,9 @@ export function BusinessActivitySettingsCard() {
                 type="button"
                 onClick={() => setDraft(meta.id)}
                 aria-pressed={selected}
+                // Stable automation hook: browser E2E selects a card by its
+                // registry id instead of the rendered (translated) label.
+                data-activity-id={meta.id}
                 className={cn(
                   "flex items-start gap-3 rounded-2xl border p-4 text-start transition-all",
                   selected
@@ -104,6 +107,8 @@ export function BusinessActivitySettingsCard() {
               onPress={onSave}
               isLoading={mutation.isPending}
               className="font-bold"
+              // Stable automation hook for the activity-switch E2E.
+              data-slot="activity-save"
             >
               {t("activity.save", { name: ACTIVITY_ID_LIST.find((m) => m.id === draft)!.labels[lang] })}
             </Button>

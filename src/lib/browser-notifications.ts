@@ -32,7 +32,7 @@ export function showBrowserNotification(options: {
     const notification = new Notification(options.title, {
       body: options.body,
       tag: options.tag,
-      icon: "/favicon.ico",
+      icon: "/droo-icon-light.png",
     });
     notification.onclick = () => {
       window.focus();

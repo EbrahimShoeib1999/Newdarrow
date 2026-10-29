@@ -2,9 +2,10 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const ASSETS = {
-  full: "/DR_LOGO__2_-2-01-removebg-preview.png",
-  iconLight: "/sm-logo-light.png",
-  iconDark: "/sm-logo.png",
+  fullLight: "/droo-logo-light.png",
+  fullDark: "/droo-logo.png",
+  iconLight: "/droo-icon-light.png",
+  iconDark: "/droo-icon-dark.png",
 } as const;
 
 interface LogoProps {
@@ -37,7 +38,7 @@ export function Logo({
       <div className={cn("flex items-center justify-center shrink-0", !to && className)}>
         <img
           src={ASSETS.iconLight}
-          alt="D-Arrow"
+          alt="Droo"
           className={cn(
             "object-contain dark:hidden transition-all duration-200 filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.08)] group-hover:drop-shadow-[0_2px_8px_rgba(249,115,22,0.25)]",
             heightBySize[size]
@@ -45,7 +46,7 @@ export function Logo({
         />
         <img
           src={ASSETS.iconDark}
-          alt="D-Arrow"
+          alt="Droo"
           className={cn(
             "object-contain hidden dark:block transition-all duration-200 filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)] group-hover:drop-shadow-[0_2px_8px_rgba(249,115,22,0.35)]",
             heightBySize[size]
@@ -55,10 +56,18 @@ export function Logo({
     ) : (
       <div className={cn("flex items-center shrink-0", !to && className)}>
         <img
-          src={ASSETS.full}
-          alt="D-Arrow Marketing"
+          src={ASSETS.fullLight}
+          alt="Droo Marketing"
           className={cn(
-            "w-auto max-w-full object-contain transition-all duration-200 filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.08)] group-hover:drop-shadow-[0_3px_10px_rgba(249,115,22,0.2)]",
+            "w-auto max-w-full object-contain dark:hidden transition-all duration-200 filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.08)] group-hover:drop-shadow-[0_3px_10px_rgba(249,115,22,0.2)]",
+            heightBySize[size]
+          )}
+        />
+        <img
+          src={ASSETS.fullDark}
+          alt="Droo Marketing"
+          className={cn(
+            "w-auto max-w-full object-contain hidden dark:block transition-all duration-200 filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)] group-hover:drop-shadow-[0_3px_10px_rgba(249,115,22,0.35)]",
             heightBySize[size]
           )}
         />
@@ -71,7 +80,7 @@ export function Logo({
     <Link
       to={to}
       title={title}
-      aria-label={title ?? "D-Arrow"}
+      aria-label={title ?? "Droo"}
       onClick={onClick}
       className={cn(
         "group inline-flex items-center justify-center rounded-xl outline-none transition-all duration-200 hover:scale-[1.04] active:scale-95 hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2",

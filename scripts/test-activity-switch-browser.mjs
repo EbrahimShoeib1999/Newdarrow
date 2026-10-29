@@ -302,68 +302,161 @@ try {
   // Step 3: Open internal Settings (/settings/company)
   await step("3. Open internal Settings (/settings/company) and verify Activity Card presence", async () => {
     await goto(`http://localhost:${VITE_PORT}/settings/company`);
-    await waitUntil(async () => {
-      const txt = await bodyText();
-      return /business activity|النشاط التجاري|general projects|المشاريع العامة/i.test(txt);
-    }, 40000, "Business Activity card mounted");
+    await waitSettingsReady(40000);
     await shot("03-company-settings-card");
     const txt = await bodyText();
     if (!/general projects|المشاريع العامة/i.test(txt)) throw new Error("Initial activity not displayed as General Projects");
     return "BusinessActivitySettingsCard mounted in CompanySettingsPage";
   });
 
-  // Helper function to switch activity in Settings
-  async function selectAndSaveActivity(labelTarget, expectedActivityId, shotName) {
-    // Diagnostic: log all buttons currently in DOM
-    const initialBtns = await js(`Array.from(document.querySelectorAll('button')).map(b => ({
-      text: (b.innerText || '').replace(/\\s+/g, ' ').trim(),
-      ariaPressed: b.getAttribute('aria-pressed'),
-      type: b.getAttribute('type'),
-    }))`);
-    log(`   [DEBUG] Buttons before click (${initialBtns.length}):`, JSON.stringify(initialBtns.slice(0, 15)));
-
-    // Scroll card into view and click
-    const clicked = await js(`(() => {
-      const buttons = Array.from(document.querySelectorAll('button[aria-pressed]'));
-      const target = buttons.find(b => (b.innerText || '').toLowerCase().includes(${JSON.stringify(labelTarget.toLowerCase())}));
-      if (!target) return false;
-      target.scrollIntoView({ block: 'center' });
-      target.click();
-      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      return true;
+  // Real trusted mouse click on the centre of the first element matching a
+  // JS predicate expression. HeroUI/React-aria controls (the Activate button)
+  // respond to genuine pointer input far more reliably than .click(), which
+  // the earlier draft-reset race made look like a missing button.
+  async function trustedClickMatching(predicateBody) {
+    const rect = await js(`(() => {
+      const el = (${predicateBody})();
+      if (!el) return null;
+      el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
     })()`);
-    if (!clicked) throw new Error(`Could not click activity button for "${labelTarget}"`);
-    await sleep(1000);
+    if (!rect) return false;
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: rect.x, y: rect.y, button: "left", clickCount: 1, pointerType: "mouse" });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: rect.x, y: rect.y, button: "left", clickCount: 1, pointerType: "mouse" });
+    return true;
+  }
 
-    // Diagnostic: log buttons after click
-    const afterBtns = await js(`Array.from(document.querySelectorAll('button')).map(b => ({
-      text: (b.innerText || '').replace(/\\s+/g, ' ').trim(),
-      ariaPressed: b.getAttribute('aria-pressed'),
-      type: b.getAttribute('type'),
-    }))`);
-    log(`   [DEBUG] Buttons after click (${afterBtns.length}):`, JSON.stringify(afterBtns.slice(0, 15)));
-
-    // Click the activation button (which appears once draft is dirty)
-    await waitUntil(async () => {
-      return js(`(() => {
-        const btns = Array.from(document.querySelectorAll('button'));
-        const actBtn = btns.find(b => !b.hasAttribute('aria-pressed') && ((b.innerText || '').toLowerCase().includes(${JSON.stringify(labelTarget.toLowerCase())}) || /activate|تفعيل/i.test(b.innerText || '')));
-        if (!actBtn) return false;
-        actBtn.scrollIntoView({ block: 'center' });
-        actBtn.click();
-        actBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-        return true;
+  // Helper function to switch activity in Settings. Selection is driven by
+  // the card's data-activity-id hook (never by translated text): headless
+  // font rendering can silently drop glyphs from innerText, and the app
+  // language may differ from the test's expectation.
+  async function selectAndSaveActivity(_labelTarget, activityId, shotName) {
+    // Ensure the authoritative config has resolved BEFORE selecting, otherwise
+    // the card's render-time draft sync (current !== prevCurrent) silently
+    // resets a draft chosen while the profile query was still loading.
+    // If nothing resolves to a pressed card, dump what the page actually
+    // rendered so a real UI regression is distinguishable from a slow query.
+    const pressedProbe = `document.querySelector('button[data-activity-id][aria-pressed="true"]')`;
+    try {
+      await waitUntil(() => js(`!!(${pressedProbe})`), 30000, `current activity card resolved to a pressed state`);
+    } catch (e) {
+      const said = await js(`(() => {
+        const pressed = document.querySelectorAll('button[aria-pressed]').length;
+        const head = (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 400);
+        return JSON.stringify({ url: location.href, pressedCards: pressed, head });
       })()`);
-    }, 20000, `Activation button for ${labelTarget}`);
+      await shot("diag-no-pressed-card");
+      throw new Error(`${e?.message} — page state: ${said}`);
+    }
 
-    // Verify Firestore persistence
+    // Pick the target activity card (trusted click, re-verified).
+    await waitUntil(() => trustedClickMatching(
+      `() => document.querySelector('button[data-activity-id=${JSON.stringify(activityId)}]')`
+    ), 15000, `Select ${activityId} card`);
+
+    // The draft must stick: the Activate button only renders while the draft
+    // differs from the authoritative value. Re-press until it registers.
     await waitUntil(async () => {
+      await trustedClickMatching(
+        `() => document.querySelector('button[data-activity-id=${JSON.stringify(activityId)}]')`
+      );
+      return js(`(() => { const b = document.querySelector('button[data-activity-id=${JSON.stringify(activityId)}]');
+        return !!b && b.getAttribute('aria-pressed') === 'true'; })()`);
+    }, 10000, `${activityId} card to stay pressed`);
+
+    // Press the save/activate button for real (data-slot hook, not text).
+    // Cover both render paths: HeroUI spreading the attribute onto its own
+    // <button>, or wrapping a native <button> inside the attributed node.
+    const saveSelector = 'button[data-slot="activity-save"], [data-slot="activity-save"] button, [data-slot="activity-save"]';
+    const firestoreSaved = async () => {
       const doc = await fsGet(`companies/${COMPANY_ID}`, adminIdToken);
-      return doc?.primaryActivity === expectedActivityId;
-    }, 25000, `Firestore primaryActivity == ${expectedActivityId}`);
+      return doc?.primaryActivity === activityId;
+    };
+    await waitUntil(() => trustedClickMatching(
+      `() => document.querySelector(${JSON.stringify(saveSelector)})`
+    ), 20000, `Activation button for ${activityId}`);
+
+    // Verify Firestore persistence through the authorized data-access layer.
+    // On the SECOND switch within one mounted page the press can be swallowed
+    // while React Query is invalidating caches; retry the whole pick+save
+    // gesture (idempotent — the target card's Activate is always the same)
+    // instead of declaring a timeout on the first missed click.
+    let saved = false;
+    try {
+      await waitUntil(firestoreSaved, 15000, `Firestore primaryActivity == ${activityId}`);
+      saved = true;
+    } catch { /* fall through to one full retry */ }
+    if (!saved) {
+      await waitUntil(() => trustedClickMatching(
+        `() => document.querySelector('button[data-activity-id=${JSON.stringify(activityId)}]')`
+      ), 10000, `re-select ${activityId} card`);
+      await waitUntil(() => trustedClickMatching(
+        `() => document.querySelector(${JSON.stringify(saveSelector)})`
+      ), 10000, `re-press Activation button for ${activityId}`);
+      try {
+        await waitUntil(firestoreSaved, 20000, `Firestore primaryActivity == ${activityId} (after retry)`);
+        saved = true;
+      } catch (e2) {
+        // Capture the exact UI truth at failure time: button state, visible
+        // toast copy, language, and which card is pressed — so a rules/SDK
+        // write rejection is distinguishable from a missed click.
+        const said = await js(`(() => {
+          const btn = document.querySelector(${JSON.stringify(saveSelector)});
+          const btnInfo = btn ? { text: (btn.innerText || '').slice(0, 60), disabled: !!btn.disabled,
+            ariaDisabled: btn.getAttribute('aria-disabled'), cls: (btn.className || '').slice(0, 120) } : null;
+          const toasts = Array.from(document.querySelectorAll('[data-sonner-toast],[role="status"],[role="alert"]'))
+            .map(x => (x.innerText || '').trim().slice(0, 140)).filter(Boolean).slice(0, 4);
+          const pressed = Array.from(document.querySelectorAll('button[data-activity-id][aria-pressed="true"]'))
+            .map(x => x.getAttribute('data-activity-id'));
+          return JSON.stringify({ url: location.href, lang: document.documentElement.lang,
+            dir: document.documentElement.dir, saveBtn: btnInfo, pressed, toasts });
+        })()`);
+        await shot(`12-diag-save-stuck-${activityId}`);
+        throw new Error(`${e2?.message} — UI state: ${said}`);
+      }
+    }
 
     await sleep(1000);
     await shot(shotName);
+  }
+
+  // Deterministic mount check driven by DOM attributes, not rendered copy: in
+  // a headless browser the settings page can paint with a subsetted font that
+  // silently drops characters from innerText, which made text waits flaky.
+  async function waitSettingsReady(timeoutMs = 30000) {
+    await waitUntil(() => js(
+      `!!document.querySelector('button[data-activity-id][aria-pressed="true"]')`
+    ), timeoutMs, `business-activity card mounted (pressed card resolved)`);
+  }
+
+  // Navigates to a path and asserts the activity guard DENIES it. Polls for
+  // the denial surface (the shield page is the only guarded surface rendering
+  // an /apps link) instead of a fixed sleep, because the profile cache can
+  // lag a just-saved activity switch by a few seconds.
+  async function assertRouteDenied(path, shotName) {
+    await goto(`http://localhost:${VITE_PORT}${path}`);
+    let denied = false;
+    try {
+      await waitUntil(async () => {
+        const backLink = await js(`!!document.querySelector('a[href="/apps"]')`);
+        const icon = await js(`!!document.querySelector('svg.lucide-shield-alert, svg.lucide-construction')`);
+        const txt = await bodyText();
+        return backLink || icon || /section not available|not enabled for your company|access restricted|القسم غير متاح|غير مفعل/i.test(txt);
+      }, 20000, `guard denial for ${path} to render`);
+      denied = true;
+    } catch {
+      // Only a genuine module render reaches here — fall back to one final read.
+      const txt = await bodyText();
+      const backLink = await js(`!!document.querySelector('a[href="/apps"]')`);
+      const icon = await js(`!!document.querySelector('svg.lucide-shield-alert, svg.lucide-construction')`);
+      denied = backLink || icon || /section not available|not enabled for your company|access restricted|القسم غير متاح|غير مفعل/i.test(txt);
+    }
+    if (!denied) {
+      await shot(shotName);
+      throw new Error(`Direct entry to ${path} was not denied! page=${(await bodyText()).slice(0, 300)}`);
+    }
   }
 
   // Step 4: Switch to FACILITIES_MANAGEMENT and save
@@ -414,14 +507,7 @@ try {
 
   // Step 7: Verify School route is DENIED while on Facilities activity
   await step("7. Inactive activity route (/school/students) is strictly DENIED", async () => {
-    await goto(`http://localhost:${VITE_PORT}/school/students`);
-    await sleep(2000);
-    const denied = await js(`!!document.querySelector('svg.lucide-shield-alert, svg.lucide-construction')`);
-    const txt = await bodyText();
-    const hasDeniedText = /section not available|not enabled for your company|access restricted|القسم غير متاح|غير مفعل/i.test(txt);
-    if (!denied && !hasDeniedText) {
-      throw new Error("Direct entry to /school/students was not denied for facilities company!");
-    }
+    await assertRouteDenied("/school/students", "07-school-not-denied-dump");
     await shot("07-school-denied-for-facilities");
     return "inactive activity route successfully denied with shield alert";
   });
@@ -429,10 +515,7 @@ try {
   // Step 8: Switch to SCHOOL_MANAGEMENT in Settings
   await step("8. Switch to SCHOOL_MANAGEMENT in Settings and save", async () => {
     await goto(`http://localhost:${VITE_PORT}/settings/company`);
-    await waitUntil(async () => {
-      const txt = await bodyText();
-      return /business activity|النشاط التجاري|facilities management|school management/i.test(txt);
-    }, 30000, "settings mounted");
+    await waitSettingsReady();
     await selectAndSaveActivity("School Management", "SCHOOL_MANAGEMENT", "08-switched-to-school");
 
     // Seed school student now that primaryActivity == SCHOOL_MANAGEMENT (rules allow)
@@ -462,12 +545,7 @@ try {
     await shot("09a-school-allowed");
 
     // Facilities should now be denied
-    await goto(`http://localhost:${VITE_PORT}/facilities/assets`);
-    await sleep(2000);
-    const denied = await js(`!!document.querySelector('svg.lucide-shield-alert, svg.lucide-construction')`);
-    const facTxt = await bodyText();
-    const hasDenied = denied || /section not available|not enabled for your company|access restricted|القسم غير متاح|غير مفعل/i.test(facTxt);
-    if (!hasDenied) throw new Error("Old activity route /facilities/assets was not denied!");
+    await assertRouteDenied("/facilities/assets", "09b-facilities-now-not-denied");
     await shot("09b-facilities-now-denied");
     return "school allowed, facilities denied";
   });
@@ -517,10 +595,7 @@ try {
   await step("12. Verify switching through MARKETING_AGENCY and REAL_ESTATE_MANAGEMENT", async () => {
     // Switch to Marketing Agency
     await goto(`http://localhost:${VITE_PORT}/settings/company`);
-    await waitUntil(async () => {
-      const txt = await bodyText();
-      return /business activity|النشاط التجاري|primary business activity|facilities management/i.test(txt);
-    }, 30000, "settings mounted");
+    await waitSettingsReady();
     await selectAndSaveActivity("Marketing Agency", "MARKETING_AGENCY", "12a-marketing-selected");
     
     // Verify Agency route allowed
@@ -532,10 +607,7 @@ try {
 
     // Switch to Real Estate Management
     await goto(`http://localhost:${VITE_PORT}/settings/company`);
-    await waitUntil(async () => {
-      const txt = await bodyText();
-      return /business activity|النشاط التجاري|marketing agency/i.test(txt);
-    }, 30000, "settings mounted");
+    await waitSettingsReady();
     await selectAndSaveActivity("Real Estate Management", "REAL_ESTATE_MANAGEMENT", "12c-real-estate-selected");
 
     // Verify Real Estate route allowed
