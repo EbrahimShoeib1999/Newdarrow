@@ -5,7 +5,7 @@
  * pushes ONE balanced journal through BillingService. Employees see only
  * their OWN cases (readable by design — people may inspect what judges them).
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Chip,
@@ -33,7 +33,7 @@ import { useTranslation } from "react-i18next";
 import { selectFieldProps } from "@/components/shared/select-field";
 import { useAppPermissions } from "@/features/companies/hooks/use-app-permissions";
 import { useAuthStore } from "@/stores/auth.store";
-import { useEmployeesQuery } from "../hooks/use-people";
+import { useEmployeesQuery, useAttendanceLatePolicyQuery } from "../hooks/use-people";
 import {
   useDecideCaseMutation,
   useDeductionCasesQuery,
@@ -42,7 +42,7 @@ import {
   usePostCaseMutation,
   useReverseCaseMutation,
 } from "../hooks/use-work-schedule";
-import { formatDurationHM } from "../lib/work-schedule-rules";
+import { formatDurationHM, periodKeyOf } from "../lib/work-schedule-rules";
 import type { DeductionCase, DeductionCaseStatus } from "../types/work-schedule.types";
 
 const STATUS_COLORS: Record<DeductionCaseStatus, "default" | "warning" | "primary" | "success" | "danger"> = {
@@ -216,8 +216,16 @@ function EvaluatePanel() {
   const { can } = useAppPermissions();
   const { data: employees } = useEmployeesQuery();
   const evaluate = useEvaluateMonthMutation();
+  // Default evaluation period follows the company period zone, not the browser
+  // clock; a manually chosen period is never overwritten.
+  const { data: latePolicyRes } = useAttendanceLatePolicyQuery();
+  const companyTz = latePolicyRes?.data?.timezone;
   const [employeeId, setEmployeeId] = useState<string>("");
-  const [periodKey, setPeriodKey] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [periodKey, setPeriodKey] = useState<string>(periodKeyOf(Date.now(), null));
+  const [periodTouched, setPeriodTouched] = useState(false);
+  useEffect(() => {
+    if (!periodTouched && companyTz) setPeriodKey(periodKeyOf(Date.now(), companyTz));
+  }, [companyTz, periodTouched]);
 
   if (!can("people.evaluate_lateness")) return null;
 
@@ -248,7 +256,10 @@ function EvaluatePanel() {
         label={t("cases.col_period")}
         type="month"
         value={periodKey}
-        onValueChange={setPeriodKey}
+        onValueChange={(v) => {
+          setPeriodTouched(true);
+          setPeriodKey(v);
+        }}
         className="w-44"
       />
       <Button

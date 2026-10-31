@@ -80,6 +80,13 @@ await testEnv.withSecurityRulesDisabled(async (ctx) => {
   });
   await setDoc(doc(db, "users", "outsider"), { companyId: "other-co", role: "manager" });
   await setDoc(doc(db, "users", "admin"), { companyId: COMPANY, role: "admin" });
+  // Platform super admin (a member of COMPANY) — the only role allowed to
+  // reconcile tenant-less orphan accounts.
+  await setDoc(doc(db, "users", "superadmin"), { companyId: COMPANY, role: "super_admin" });
+  // Unassigned orphans: the empty companyId written once login() stopped
+  // fabricating a tenant. These are invisible to the company-scoped roster.
+  await setDoc(doc(db, "users", "orphan1"), { companyId: "", role: "employee", email: "orphan1@test.io" });
+  await setDoc(doc(db, "users", "orphan2"), { companyId: "", name: "Orphan Two" });
 
   await setDoc(doc(db, "companies", COMPANY, "conversations", "pub1"), {
     type: "public",
@@ -889,6 +896,40 @@ await check("REM finance: deposit row is NEVER hard-deletable", () =>
 await check("rem teardown: tenant activity -> MARKETING_AGENCY", () => setActivity("MARKETING_AGENCY"));
 await check("REM finance: inactive domain blocks even the admin (fail-closed)", () =>
   assertFails(getDoc(remLease1(asUser("admin"))))
+);
+
+// ---- Account reconciliation (Bug 1): super-admin-only, orphan-only --------
+const unassignedQuery = (db) =>
+  query(collection(db, "users"), where("companyId", "==", ""));
+
+await check("reconcile: teammate GET still allowed (get rule not narrowed)", () =>
+  assertSucceeds(getDoc(doc(asUser("emp1"), "users", "admin")))
+);
+await check("reconcile: ordinary employee CANNOT GET an orphan doc (get not widened)", () =>
+  assertFails(getDoc(doc(asUser("emp1"), "users", "orphan1")))
+);
+await check("reconcile: super_admin LISTs unassigned accounts (orphan-only)", async () => {
+  const snap = await assertSucceeds(getDocs(unassignedQuery(asUser("superadmin"))));
+  if (snap.size !== 2) throw new Error(`expected 2 orphans, got ${snap.size}`);
+});
+await check("reconcile: ordinary admin CANNOT list unassigned accounts", () =>
+  assertFails(getDocs(unassignedQuery(asUser("admin"))))
+);
+await check("reconcile: employee CANNOT list unassigned accounts", () =>
+  assertFails(getDocs(unassignedQuery(asUser("emp1"))))
+);
+await check("reconcile: super_admin ASSIGNS an orphan to a company", () =>
+  assertSucceeds(
+    updateDoc(doc(asUser("superadmin"), "users", "orphan1"), {
+      companyId: COMPANY,
+      companyName: "Acme",
+    })
+  )
+);
+await check("reconcile: ordinary admin CANNOT assign an orphan (no tenant claim)", () =>
+  assertFails(
+    updateDoc(doc(asUser("admin"), "users", "orphan2"), { companyId: COMPANY })
+  )
 );
 
 await testEnv.cleanup();

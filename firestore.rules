@@ -27,6 +27,13 @@ service cloud.firestore {
         && userDoc().get('role', '') in ['super_admin', 'admin'];
     }
 
+    // Platform super admin, independent of any single tenant. Used only by the
+    // account-reconciliation list gate below, which is pinned to unassigned
+    // (empty-companyId) profiles so it exposes no tenant's roster.
+    function isSuperAdmin() {
+      return signedIn() && hasUserDoc() && userDoc().get('role', '') == 'super_admin';
+    }
+
     // Effective People sub-role; empty string means "fall back to the global role".
     // Guarded with `is map` because a null/absent field would make .get() error out,
     // which rules treat as a denial.
@@ -190,7 +197,7 @@ service cloud.firestore {
       // that predates `companyId`, or was written by an interrupted signup)
       // yields a clean FALSE instead of a hard "Property is undefined" rules
       // ERROR, which would otherwise break the whole team-roster listener.
-      allow read: if signedIn() && (
+      allow get: if signedIn() && (
         request.auth.uid == userId
         || (
           hasUserDoc()
@@ -199,12 +206,36 @@ service cloud.firestore {
         )
       );
 
+      // Roster listing inside the caller's own company (unchanged), plus a
+      // deliberate account-reconciliation capability: a platform super_admin may
+      // list ONLY unassigned accounts (companyId == '') — the orphans surfaced
+      // once login() stopped grafting a fabricated tenant — so they can be
+      // reviewed and assigned. Pinned to the empty-tenant docs and the
+      // super_admin role, so no tenant roster is newly exposed.
+      allow list: if signedIn() && (
+        (
+          hasUserDoc()
+          && resource.data.get('companyId', '') != ''
+          && resource.data.get('companyId', '') == userDoc().get('companyId', '')
+        )
+        || (isSuperAdmin() && resource.data.get('companyId', '') == '')
+      );
+
       // New account (register / invite accept / Google)
       allow create: if signedIn() && request.auth.uid == userId;
 
-      // Self update (without privilege escalation), or company admin updating teammates
+      // Self update (without privilege escalation), or company admin updating teammates.
+      // Plus reconciliation assignment: a platform super_admin may attach an
+      // UNASSIGNED (companyId == '') profile to a real company — the write must
+      // set a non-empty companyId, so this branch can only consume orphans, never
+      // move an existing tenant's member.
       allow update: if signedIn() && (
         (hasUserDoc() && isCompanyAdmin(resource.data.get('companyId', '')))
+        || (
+          isSuperAdmin()
+          && resource.data.get('companyId', '') == ''
+          && request.resource.data.get('companyId', '') != ''
+        )
         || (
           request.auth.uid == userId
           && request.resource.data.get('role', '') == resource.data.get('role', '')

@@ -4,7 +4,7 @@
  * stored aggregate, so a correction can't leave a stale number behind. The
  * legacy minutes column keeps the old cutoff basis honestly labeled.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Chip,
@@ -21,13 +21,26 @@ import { Download, BarChart3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAppPermissions } from "@/features/companies/hooks/use-app-permissions";
 import { useLatenessReportQuery } from "../hooks/use-work-schedule";
-import { formatDurationHM } from "../lib/work-schedule-rules";
+import { useAttendanceLatePolicyQuery } from "../hooks/use-people";
+import { formatDurationHM, periodKeyOf } from "../lib/work-schedule-rules";
 
 export default function LatenessReportPage() {
   const { t } = useTranslation("people");
   const { can } = useAppPermissions();
   const allowed = can("people.view_lateness") || can("people.view_all_attendance");
-  const [periodKey, setPeriodKey] = useState<string>(new Date().toISOString().slice(0, 7));
+  // Default period follows the COMPANY period zone (Settings → Attendance),
+  // not the browser clock, so "this month" agrees with the timesheets grid.
+  // Stays UTC-derived until the policy loads; a manually chosen period is
+  // never overwritten.
+  const { data: latePolicyRes } = useAttendanceLatePolicyQuery();
+  const companyTz = latePolicyRes?.data?.timezone;
+  const [periodKey, setPeriodKey] = useState<string>(periodKeyOf(Date.now(), null));
+  const [periodTouched, setPeriodTouched] = useState(false);
+  useEffect(() => {
+    if (!periodTouched && companyTz) {
+      setPeriodKey(periodKeyOf(Date.now(), companyTz));
+    }
+  }, [companyTz, periodTouched]);
   const [search, setSearch] = useState("");
 
   const { data: rows, isLoading } = useLatenessReportQuery(allowed ? periodKey : "");
@@ -90,7 +103,10 @@ export default function LatenessReportPage() {
           type="month"
           label={t("cases.col_period")}
           value={periodKey}
-          onValueChange={setPeriodKey}
+          onValueChange={(v) => {
+            setPeriodTouched(true);
+            setPeriodKey(v);
+          }}
           className="w-44"
         />
         <Input

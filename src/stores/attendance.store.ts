@@ -17,6 +17,10 @@ import {
 } from "firebase/firestore";
 import { useAuthStore } from "./auth.store";
 import { AttendanceNotificationService } from "@/features/people/api/attendance-notifications.service";
+import {
+  FALLBACK_TIMEZONE,
+  zonedDayKeyOf,
+} from "@/features/people/lib/work-schedule-rules";
 import { captureAttendanceGeo } from "@/features/people/utils/attendance-geo-check";
 import { AttendanceGeoError, classifyAttendanceError } from "@/features/people/utils/geo";
 import i18n from "@/lib/i18n";
@@ -303,16 +307,27 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       set({ employeeId, isInitialized: true });
 
       const res = await PeopleService.getAttendance(companyId, employeeId);
-      const today = new Date().toISOString().split("T")[0];
-      
+      // A row's `date` is its punch day IN ITS OWN EFFECTIVE ZONE (the
+      // schedule's zone, else the company zone, else the documented fallback),
+      // so "today" is judged per row rather than by the browser's clock. A
+      // UTC+3 shift opened at 00:30 local would otherwise stop restoring after
+      // a refresh while the UTC day is still yesterday. The row's own stamped
+      // `attendanceTimezone` is the authoritative zone; rows without it (and
+      // legacy snapshots) keep their prior semantics exactly.
+      const nowMs = Date.now();
+      const isCurrentDayRow = (a: Attendance): boolean =>
+        typeof a.date === "string" &&
+        a.date ===
+          zonedDayKeyOf(nowMs, a.attendanceTimezone ?? a.schedule?.scheduleTimezone ?? FALLBACK_TIMEZONE);
+
       const isGlobalOnBreak = employeeData.shiftStatus === "on-break";
       set({ isOnBreak: isGlobalOnBreak });
 
-      const finishedToday = res.data.filter((a) => a.date === today && a.checkOut);
+      const finishedToday = res.data.filter((a) => isCurrentDayRow(a) && a.checkOut);
       const totalAccumulated = finishedToday.reduce((acc: number, curr) => acc + (curr.totalHours || 0), 0);
       set({ accumulatedSeconds: Math.floor(totalAccumulated * 3600) });
 
-      const activeRecord = res.data.find((a) => a.date === today && !a.checkOut);
+      const activeRecord = res.data.find((a) => isCurrentDayRow(a) && !a.checkOut);
       if (activeRecord && !isGlobalOnBreak) {
         set({ todayAttendance: activeRecord });
         get().startTimer();

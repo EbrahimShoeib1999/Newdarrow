@@ -6,6 +6,8 @@ import {
   CardBody,
   Chip,
   Input,
+  Select,
+  SelectItem,
   Tab,
   Tabs,
 } from "@heroui/react";
@@ -24,6 +26,8 @@ import {
 } from "../hooks/use-people";
 import { WorkLocationFormModal } from "../components/WorkLocationFormModal";
 import { AssignAttendanceLocationModal } from "../components/AssignAttendanceLocationModal";
+import { selectFieldProps } from "@/components/shared/select-field";
+import { TIMEZONE_OPTIONS } from "../lib/work-schedule-rules";
 import type { Employee, WorkLocation } from "../types/people.types";
 import { employeeDisplayName, osmEmbedUrl } from "../utils/geo";
 
@@ -50,28 +54,36 @@ export default function AttendanceSettingsPage() {
   const [search, setSearch] = useState("");
 
   const serverLatePolicy = latePolicyRes?.data;
+  const serverTimezone = serverLatePolicy?.timezone ?? "";
   const [latePolicyDraft, setLatePolicyDraft] = useState<{
     lateCutoffTime: string;
     lateThreshold: string;
+    timezone: string;
   } | null>(null);
 
   const lateCutoffTime = latePolicyDraft?.lateCutoffTime ?? serverLatePolicy?.lateCutoffTime ?? "11:30";
   const lateThreshold = latePolicyDraft?.lateThreshold ?? String(serverLatePolicy?.lateThreshold ?? 3);
+  // "" means no company zone is configured → punches with no schedule fall
+  // back to the documented UTC zone.
+  const companyTimezone = latePolicyDraft?.timezone ?? serverTimezone;
 
   const setLateCutoffTime = (value: string) =>
-    setLatePolicyDraft({ lateCutoffTime: value, lateThreshold });
+    setLatePolicyDraft({ lateCutoffTime: value, lateThreshold, timezone: companyTimezone });
   const setLateThreshold = (value: string) =>
-    setLatePolicyDraft({ lateCutoffTime, lateThreshold: value });
+    setLatePolicyDraft({ lateCutoffTime, lateThreshold: value, timezone: companyTimezone });
+  const setCompanyTimezone = (value: string) =>
+    setLatePolicyDraft({ lateCutoffTime, lateThreshold, timezone: value });
 
   const thresholdNumber = Math.max(1, parseInt(lateThreshold, 10) || 3);
   const latePolicyDirty =
     !!serverLatePolicy &&
     (serverLatePolicy.lateCutoffTime !== lateCutoffTime ||
-      serverLatePolicy.lateThreshold !== thresholdNumber);
+      serverLatePolicy.lateThreshold !== thresholdNumber ||
+      serverTimezone !== companyTimezone);
 
   const handleSaveLatePolicy = () => {
     updateLatePolicy.mutate(
-      { lateCutoffTime, lateThreshold: thresholdNumber },
+      { lateCutoffTime, lateThreshold: thresholdNumber, timezone: companyTimezone || null },
       { onSuccess: () => setLatePolicyDraft(null) }
     );
   };
@@ -225,6 +237,26 @@ export default function AttendanceSettingsPage() {
                       onValueChange={setLateThreshold}
                       className="max-w-xs"
                     />
+
+                    <Select
+                      {...selectFieldProps()}
+                      label={t("attendance_settings.timezone_label")}
+                      description={t("attendance_settings.timezone_hint")}
+                      selectedKeys={[companyTimezone || "__utc_fallback__"]}
+                      onSelectionChange={(k) => {
+                        const key = Array.from(k)[0];
+                        setCompanyTimezone(key === "__utc_fallback__" ? "" : String(key));
+                      }}
+                      className="max-w-xs"
+                    >
+                      {["__utc_fallback__", ...TIMEZONE_OPTIONS].map((tz) => (
+                        <SelectItem key={tz}>
+                          {tz === "__utc_fallback__"
+                            ? t("attendance_settings.timezone_use_fallback")
+                            : tz}
+                        </SelectItem>
+                      ))}
+                    </Select>
 
                     <div className="flex items-center gap-3 pt-1">
                       <Button

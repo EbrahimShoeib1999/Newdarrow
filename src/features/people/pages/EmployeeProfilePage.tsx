@@ -62,6 +62,7 @@ import { AssignAttendanceLocationModal } from "../components/AssignAttendanceLoc
 import { DailyReportsService } from "../api/daily-reports.service";
 import type { DailyReport } from "../types/daily-report.types";
 import type { Attendance } from "../types/people.types";
+import { FALLBACK_TIMEZONE, zonedMonthKeyOf } from "../lib/work-schedule-rules";
 import { useTranslation } from "react-i18next";
 import { useCompany } from "@/features/companies/context/company-context";
 import { useAppPermissions } from "@/features/companies/hooks/use-app-permissions";
@@ -190,10 +191,19 @@ export default function EmployeeProfilePage() {
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
 
   const monthStats = useMemo(() => {
-    const now = new Date();
+    const nowMs = Date.now();
+    // Which month a row belongs to is decided in the ROW's own effective zone
+    // (its stamped zone, else its schedule's zone, else the documented
+    // fallback) — the same window the late-occurrence count and the lateness
+    // report use, so the profile can never disagree with them about a boundary
+    // punch.
     const monthLogs = attendanceLogs.filter((log) => {
-      const date = toDate(log.date) || toDate(log.checkIn);
-      return date?.getMonth() === now.getMonth() && date?.getFullYear() === now.getFullYear();
+      const zone = log.attendanceTimezone ?? log.schedule?.scheduleTimezone ?? FALLBACK_TIMEZONE;
+      if (typeof log.date === "string" && /^\d{4}-\d{2}/.test(log.date)) {
+        return log.date.slice(0, 7) === zonedMonthKeyOf(nowMs, zone);
+      }
+      const date = toDate(log.checkIn);
+      return !!date && zonedMonthKeyOf(date.getTime(), zone) === zonedMonthKeyOf(nowMs, zone);
     });
     const days = new Set(monthLogs.map((log) => log.date)).size;
     const hours = monthLogs.reduce((sum, log) => sum + (typeof log.totalHours === "number" ? log.totalHours : 0), 0);

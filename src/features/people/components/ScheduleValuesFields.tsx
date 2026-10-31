@@ -8,7 +8,7 @@ import { Input, Select, SelectItem, Switch, Checkbox } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { selectFieldProps } from "@/components/shared/select-field";
 import type { ScheduleValues } from "../types/work-schedule.types";
-import { formatDurationHM, scheduleDurationMinutes } from "../lib/work-schedule-rules";
+import { formatDurationHM, scheduleDurationMinutes, TIMEZONE_OPTIONS } from "../lib/work-schedule-rules";
 
 const WEEKDAY_KEYS = [
   "common.weekday_sun",
@@ -157,7 +157,7 @@ export function ScheduleValuesFields({ value, onChange, compact = false }: Props
           selectedKeys={[value.timezone]}
           onSelectionChange={(k) => set("timezone", String(k))}
         >
-          {["Asia/Riyadh", "Asia/Dubai", "Asia/Karachi", "Europe/London", "UTC"].map((tz) => (
+          {TIMEZONE_OPTIONS.map((tz) => (
             <SelectItem key={tz}>{tz}</SelectItem>
           ))}
         </Select>

@@ -12,6 +12,8 @@ export interface User {
   role: UserRole;
   companyId: string;
   companyName: string;
+  /** True when the authenticated uid has no `users/{uid}` profile document yet. */
+  profileMissing?: boolean;
   /** Custom portal subset assigned by super admin; falls back to role defaults when empty. */
   portalAccess?: PortalId[];
   /** Per-portal sub-roles (Tasks / CRM / People). */

@@ -13,14 +13,22 @@ export async function captureAttendanceGeo(
 ): Promise<AttendanceGeoPayload | undefined> {
   const empRes = await PeopleService.getEmployee(companyId, employeeId);
   const employee = empRes.data;
-  const mode = employee.attendanceCheckMode ?? "geofence";
+  // A worker explicitly authorized to be off-site must not be trapped by the
+  // office geofence. Such employees default to flexible capture, and even when
+  // left in geofence mode are never hard-blocked for having no assigned
+  // location — there is simply no fence to enforce for them (Saudi-labor /
+  // remote-work requirement: no office GPS for remote-authorized staff).
+  const remoteAuthorized =
+    employee.workType === "remote" || employee.allowRemoteTimer === true;
+  const mode =
+    employee.attendanceCheckMode ?? (remoteAuthorized ? "flexible" : "geofence");
 
   const locRes = await PeopleService.getWorkLocations(companyId);
   const assigned = (employee.attendanceLocationIds ?? [])
     .map((id) => locRes.data.find((l) => l.id === id))
     .filter((l): l is WorkLocation => !!l && l.isActive);
 
-  if (mode === "flexible") {
+  if (mode === "flexible" || (remoteAuthorized && assigned.length === 0)) {
     try {
       const coords = await getCurrentCoordinates();
       const nearest = nearestWorkLocation(coords, assigned.length ? assigned : locRes.data);

@@ -1,0 +1,60 @@
+{
+  "project": "test-attendance-lifecycle",
+  "results": [
+    {
+      "name": "A. Office geofence check-in → refresh → restore → check-out",
+      "ok": true,
+      "detail": "uid=Ap81gpun… langDir=ltr before=0 record=vQOGQKIl3MnW75ngkJ6D coords=24.7136,46.6753 locId=hq distance=0m successToast=\"Shift started!\" restoredAfterRefresh=yes(vQOGQKIl3MnW75ngkJ6D) checkOut=2026-10-31T16:49:22.953Z totalHours=0.0019930555555555556 offDuty=late uiOffDuty=true"
+    },
+    {
+      "name": "B. Remote/flexible check-in with GPS DENIED",
+      "ok": true,
+      "detail": "uid=cRIXnbvr… DERIVED: remote no-GPS check-in ALLOWED; record=suaoZ3Mv4TV2RDBYpXqU hasCoords=false restoredAfterRefresh=yes checkOut=persisted(totalHours=0.0017688888888888889)"
+    },
+    {
+      "name": "C-EN. Geofence WITHOUT assigned location → localized error, no record",
+      "ok": true,
+      "detail": "lang=en dir=ltr no record created (before=0 after=0); toast=\"No attendance location is assigned to you. Ask your manager to set it.\"; usable=true"
+    },
+    {
+      "name": "C-AR. Geofence WITHOUT assigned location → localized error, no record",
+      "ok": true,
+      "detail": "lang=ar dir=rtl no record created (before=0 after=0); toast=\"لم يُعيَّن لك موقع حضور. اطلب من مديرك تحديد المكان.\"; usable=true"
+    },
+    {
+      "name": "D. Ordinary employee cannot read another tenant / privileged data",
+      "ok": true,
+      "detail": "9 employees isolated in acme-co; no cross-project documents; shiftStatus={\"e-office\":\"off-duty\",\"e-remote\":\"off-duty\",\"e-noassign\":\"off-duty\"}"
+    },
+    {
+      "name": "E1. Valid assigned shift, punch before scheduled start ⇒ on time, no late modal",
+      "ok": true,
+      "detail": "record=1o49wUFI2Eo5MXMfmiXm status=present lateMinutes=0 schedule={\"scheduleAssignmentId\":\"asg-ontime\",\"scheduledStart\":\"17:17\",\"scheduleTimezone\":\"UTC\",\"graceMinutes\":0,\"rawLateMinutes\":0,\"excusedLateMinutes\":0,\"countableLateMinutes\":0,\"workMode\":\"office\"} modal=open:false titleHits:0"
+    },
+    {
+      "name": "E2. Valid assigned shift, punch AFTER the configured grace ⇒ late on the schedule's own minutes + alert",
+      "ok": true,
+      "detail": "record=l1GSFgnIPA2XkYP05CnQ scheduleRaw=48m grace=15 status=late lateMinutes=48 alert=48m (== row) dismissed=yes"
+    },
+    {
+      "name": "E3. No schedule configured ⇒ NOT classified late by itself",
+      "ok": true,
+      "detail": "record=RnymCFs1fbwkHoGoJfUD schedule=absent status=present lateMinutes=0 modal=open:false → missing schedule is NOT classified late"
+    },
+    {
+      "name": "E4. Schedule-late alert: modal appears once, blocks nothing extra, dismiss + refresh keep the session",
+      "ok": true,
+      "detail": "lateMinutes=48 (== schedule countable=48) status=late scheduleRaw=48m cutoff=23:59(legacy on-time) modal once(titleHits=1,blocking=true) ack=\"Got it\" copy=\"Late check-in You checked in 48 min late. Got it…\" dismiss→session 6X80aqiPjOyqzEclaMtk preserved; refresh→no re-alert, classification identical ({\"status\":\"late\",\"lateMinutes\":48}); checkOut=2026-10-31T16:50:54.468Z"
+    },
+    {
+      "name": "E5. Late beyond the monthly threshold ⇒ deducted copy of the alert",
+      "ok": true,
+      "detail": "record=2M8Wx3ENrv0BOtuD2NVf lateMinutes=1011 deductionMinutes=1011 copy=\"Late check-in You checked in 1011 min late — this occurrence will be d…\" dismissed=yes"
+    },
+    {
+      "name": "E6. Cutoff EARLIER than the assigned shift ⇒ schedule wins: punctual, silent, not late",
+      "ok": true,
+      "detail": "record=U1Y6HRlBh3SdTxvUxJCV cutoff=00:00(aggressive) shift=17:17 status=present lateMinutes=0 deduction=0 modal=open:false → cutoff cannot override an assigned shift"
+    }
+  ]
+}

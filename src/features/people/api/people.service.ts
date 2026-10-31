@@ -42,9 +42,16 @@ import type {
   ScheduleValues,
 } from "../types/work-schedule.types";
 import {
+  canonicalLateness,
   countableLateMinutes,
+  cutoffLateMinutes,
+  effectivePunchTimezone,
   effectiveValuesOf,
+  FALLBACK_TIMEZONE,
+  isValidTimezone,
   punctualityForCheckIn,
+  resolveEffectiveTimezone,
+  zonedDayKeyOf,
 } from "../lib/work-schedule-rules";
 import { WorkScheduleService } from "./work-schedule.service";
 
@@ -167,31 +174,30 @@ async function getAttendanceLatePolicy(companyId: string): Promise<AttendanceLat
       Number.isFinite(data.lateThreshold) && (data.lateThreshold as number) >= 1
         ? (data.lateThreshold as number)
         : DEFAULT_ATTENDANCE_LATE_POLICY.lateThreshold,
+    // Echo the stored zone as-is; the canonical layer validates it on use, so
+    // an unsupported/legacy value simply falls through to the UTC fallback and
+    // the UI still shows what the tenant picked.
+    timezone: typeof data.timezone === "string" && data.timezone.trim() ? data.timezone : null,
   };
-}
-
-/** Minutes `checkInAt` falls past "HH:mm" on the same local day, or 0 if on time. */
-function computeLateMinutes(checkInAt: Date, cutoffTime: string): number {
-  const [hh, mm] = cutoffTime.split(":").map((n) => parseInt(n, 10));
-  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return 0;
-  const cutoff = new Date(checkInAt);
-  cutoff.setHours(hh, mm, 0, 0);
-  const diffMs = checkInAt.getTime() - cutoff.getTime();
-  return diffMs > 0 ? Math.round(diffMs / 60000) : 0;
 }
 
 /** How many of this employee's attendance days were already "late" so far this calendar month. */
 async function countLateOccurrencesThisMonth(
   companyId: string,
   employeeId: string,
-  monthKey: string // "YYYY-MM"
+  monthKey: string, // "YYYY-MM" — the punch's OWN zoned month window
+  excludeAttendanceId?: string
 ): Promise<number> {
   const attendanceRef = collection(db, "companies", companyId, "attendance");
   const q = query(attendanceRef, where("employeeId", "==", employeeId));
   const snapshot = await getDocs(q);
   let count = 0;
   for (const docSnap of snapshot.docs) {
+    if (excludeAttendanceId && docSnap.id === excludeAttendanceId) continue;
     const data = docSnap.data() as Attendance;
+    // Rows carry their zoned `date`, so a zoned month key matches exactly —
+    // the old local-clock key against UTC dates could miss (or double-count)
+    // month-boundary punches.
     if (data.status === "late" && typeof data.date === "string" && data.date.startsWith(monthKey)) {
       count += 1;
     }
@@ -200,6 +206,48 @@ async function countLateOccurrencesThisMonth(
 }
 
 /* --- Effective work schedule (hr_schedule_assignments) --------------------- */
+
+/**
+ * Re-derive the canonical row numbers for an already-persisted punch after an
+ * authorized correction. The basis is the SAME one check-in used (schedule
+ * countable when the row carries a snapshot, company cutoff otherwise) and so
+ * is the monthly grace/threshold rule — the row being corrected is excluded
+ * from the occurrence scan and then counted once through its own new state.
+ */
+async function canonicalForCorrection(opts: {
+  companyId: string;
+  employeeId: string;
+  monthKey: string;
+  excludeAttendanceId: string;
+  schedule: { countableLateMinutes: number; timezone: string } | null;
+  checkInAt: Date;
+  cutoffTime: string;
+  companyTimezone?: string | null;
+  lateThreshold: number;
+}): Promise<{ lateMinutes: number; isLate: boolean; deductionMinutes: number }> {
+  const preliminary = canonicalLateness({
+    nowMs: opts.checkInAt.getTime(),
+    schedule: opts.schedule,
+    cutoffTime: opts.cutoffTime,
+    companyTimezone: opts.companyTimezone,
+    priorLateOccurrences: 0,
+    lateThreshold: opts.lateThreshold,
+  });
+  if (!preliminary.isLate) {
+    return { lateMinutes: 0, isLate: false, deductionMinutes: 0 };
+  }
+  const others = await countLateOccurrencesThisMonth(
+    opts.companyId,
+    opts.employeeId,
+    opts.monthKey,
+    opts.excludeAttendanceId
+  );
+  return {
+    lateMinutes: preliminary.lateMinutes,
+    isLate: true,
+    deductionMinutes: others + 1 >= opts.lateThreshold ? preliminary.lateMinutes : 0,
+  };
+}
 
 /** UTC calendar day of a stored Timestamp/Date/string, matching the rows' `date` convention. */
 function dayKeyOf(value: unknown): string {
@@ -230,39 +278,72 @@ async function isDayExcusedByApprovedLeave(
 }
 
 /**
- * Snapshot the effective schedule for THIS punch. Employees without an
- * assignment get null and the legacy company-cutoff path continues
- * untouched. Raw late minutes never round up and never exist for ambiguous
- * cross-day punches; approved leave excuses the whole day.
+ * Snapshot the effective schedule for THIS punch and the calendar day it
+ * belongs to. The assignment is first probed on the fallback (UTC) day, then
+ * re-probed on the schedule-zone day when the two differ, so a 00:30 punch in
+ * a UTC+3 zone is judged against the day the employee actually started — and
+ * `punctualityForCheckIn` never sees a spurious cross-day mismatch.
+ * Employees without an assignment get `schedule: null` and fall back to the
+ * documented company cutoff; a resolution failure is logged by the caller and
+ * degrades the SAME way — a missing schedule is never classified as late.
+ * Approved leave still excuses the whole day.
  */
 async function resolveScheduleSnapshotForPunch(
   companyId: string,
   employeeId: string,
   department: string | undefined,
-  dateIso: string,
-  checkInAt: Date
-): Promise<AttendanceScheduleSnapshot | null> {
-  const assignment = await WorkScheduleService.resolveAssignment(
+  checkInAt: Date,
+  companyTimezone?: string | null
+): Promise<{ schedule: AttendanceScheduleSnapshot | null; punchDate: string; timezone: string }> {
+  // The first probe day is taken in the company zone (else UTC), so an
+  // unscheduled or boundary punch starts on the tenant's real calendar day
+  // rather than the UTC one; the schedule's own zone still overrides below.
+  const probeZone = effectivePunchTimezone(companyTimezone);
+  const probeDate = zonedDayKeyOf(checkInAt.getTime(), probeZone);
+  let assignment = await WorkScheduleService.resolveAssignment(
     companyId,
     employeeId,
     department,
-    dateIso
+    probeDate
   );
-  if (!assignment) return null;
-  const punctuality = punctualityForCheckIn(effectiveValuesOf(assignment), checkInAt, dateIso);
+  let punchDate = probeDate;
+  if (assignment) {
+    punchDate = zonedDayKeyOf(checkInAt.getTime(), effectiveValuesOf(assignment).timezone);
+    if (punchDate !== probeDate) {
+      // The employee's own calendar day differs from the probe day — re-probe
+      // the effective ranges with the real punch day.
+      assignment = await WorkScheduleService.resolveAssignment(
+        companyId,
+        employeeId,
+        department,
+        punchDate
+      );
+      if (!assignment) punchDate = probeDate; // unscheduled on that day after all
+    }
+  }
+  if (!assignment) {
+    // No schedule: the effective zone is the company zone (or UTC), which the
+    // caller's canonical resolution re-derives identically.
+    return { schedule: null, punchDate, timezone: probeZone };
+  }
+  const punctuality = punctualityForCheckIn(effectiveValuesOf(assignment), checkInAt, punchDate);
   const excused = punctuality.rawLateMinutes > 0
-    ? await isDayExcusedByApprovedLeave(companyId, employeeId, dateIso)
+    ? await isDayExcusedByApprovedLeave(companyId, employeeId, punchDate)
     : false;
   const excusedLateMinutes = excused ? punctuality.rawLateMinutes : 0;
   return {
-    scheduleAssignmentId: assignment.id,
-    scheduledStart: punctuality.scheduledStart,
-    scheduleTimezone: punctuality.timezone,
-    graceMinutes: punctuality.graceMinutes,
-    rawLateMinutes: punctuality.rawLateMinutes,
-    excusedLateMinutes,
-    countableLateMinutes: countableLateMinutes(punctuality.rawLateMinutes, excused),
-    workMode: assignment.templateMode ?? null,
+    punchDate,
+    timezone: punctuality.timezone,
+    schedule: {
+      scheduleAssignmentId: assignment.id,
+      scheduledStart: punctuality.scheduledStart,
+      scheduleTimezone: punctuality.timezone,
+      graceMinutes: punctuality.graceMinutes,
+      rawLateMinutes: punctuality.rawLateMinutes,
+      excusedLateMinutes,
+      countableLateMinutes: countableLateMinutes(punctuality.rawLateMinutes, excused),
+      workMode: assignment.templateMode ?? null,
+    },
   };
 }
 
@@ -281,6 +362,16 @@ export const PeopleService = {
       updatedBy?: string
     ): Promise<ApiResponse<AttendanceLatePolicy>> {
       return withLogging(SERVICE_NAME, "attendanceSettings.update", (async () => {
+        // A company zone, when supplied, must be a valid IANA id — never a
+        // silently-truncated string, never a browser-derived guess.
+        if (patch.timezone !== undefined && patch.timezone !== null && patch.timezone !== "") {
+          if (!isValidTimezone(patch.timezone)) {
+            return {
+              data: await getAttendanceLatePolicy(companyId),
+              message: "people.attendance_settings.invalid_timezone",
+            };
+          }
+        }
         const current = await getAttendanceLatePolicy(companyId);
         const next: AttendanceLatePolicy = {
           lateCutoffTime: patch.lateCutoffTime?.trim() || current.lateCutoffTime,
@@ -288,6 +379,15 @@ export const PeopleService = {
             Number.isFinite(patch.lateThreshold) && (patch.lateThreshold as number) >= 1
               ? (patch.lateThreshold as number)
               : current.lateThreshold,
+          // Only touched when the caller explicitly sends it, so an unrelated
+          // cutoff/threshold save never clears a configured company zone. An
+          // empty string or null clears it back to the UTC fallback.
+          timezone:
+            patch.timezone === undefined
+              ? current.timezone
+              : patch.timezone && patch.timezone.trim() && isValidTimezone(patch.timezone)
+                ? patch.timezone.trim()
+                : null,
         };
         await setDoc(
           ATTENDANCE_SETTINGS_DOC(companyId),
@@ -461,55 +561,88 @@ export const PeopleService = {
     return withLogging(SERVICE_NAME, "checkIn", (async () => {
       const attendanceRef = collection(db, "companies", companyId, "attendance");
       const now = new Date();
-      const date = now.toISOString().split('T')[0];
 
-      // Lateness: compare against the company's late-checkin cutoff (Settings
-      // → Attendance → Late Policy). The first (threshold - 1) late check-ins
-      // in a calendar month are grace; from the threshold-th one onward, each
-      // is deducted (in minutes late that day).
+      // ONE canonical lateness decision (see `canonicalLateness`). Order
+      // matters: the effective schedule is resolved FIRST because its timezone
+      // defines the punch's calendar day, the month window the late-occurrence
+      // count runs in, and the lateness itself. Precedence is schedule zone →
+      // the tenant's company zone → the documented UTC fallback; the browser's
+      // clock is never consulted.
       const policy = await getAttendanceLatePolicy(companyId);
-      const lateMinutes = computeLateMinutes(now, policy.lateCutoffTime);
-      let deductionMinutes = 0;
-      if (lateMinutes > 0) {
-        const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const priorLateCount = await countLateOccurrencesThisMonth(companyId, employeeId, monthKey);
-        const occurrenceNumber = priorLateCount + 1; // this check-in counts too
-        if (occurrenceNumber >= policy.lateThreshold) {
-          deductionMinutes = lateMinutes;
-        }
+      const unscheduledZone = resolveEffectiveTimezone(null, policy.timezone).timezone;
+      let schedule: AttendanceScheduleSnapshot | null = null;
+      let punchDate = zonedDayKeyOf(now.getTime(), unscheduledZone);
+      try {
+        const empSnap = await getDoc(doc(db, "companies", companyId, "employees", employeeId));
+        const resolved = await resolveScheduleSnapshotForPunch(
+          companyId,
+          employeeId,
+          (empSnap.data() as Employee | undefined)?.department,
+          now,
+          policy.timezone
+        );
+        schedule = resolved.schedule;
+        punchDate = resolved.punchDate;
+      } catch (e) {
+        // A schedule read failure must NEVER block a check-in and must NEVER
+        // classify the punch as late by itself: degrade to the cutoff fallback.
+        console.warn("[checkIn] schedule resolution failed — company cutoff fallback applies", e);
+        schedule = null;
+      }
+
+      const date = punchDate;
+      // Pre-check on the same primitives `canonicalLateness` uses, purely to
+      // skip the occurrence scan for punches that are on time (as before).
+      const latenessSoFar = schedule
+        ? Math.max(0, Math.round(schedule.countableLateMinutes))
+        : cutoffLateMinutes(now.getTime(), policy.lateCutoffTime, unscheduledZone);
+      const priorLateOccurrences =
+        latenessSoFar > 0
+          ? await countLateOccurrencesThisMonth(companyId, employeeId, date.slice(0, 7))
+          : 0;
+      const canonical = canonicalLateness({
+        nowMs: now.getTime(),
+        schedule: schedule
+          ? { countableLateMinutes: schedule.countableLateMinutes, timezone: schedule.scheduleTimezone }
+          : null,
+        cutoffTime: policy.lateCutoffTime,
+        companyTimezone: policy.timezone,
+        priorLateOccurrences,
+        lateThreshold: policy.lateThreshold,
+      });
+      if (canonical.usedUtcFallback) {
+        // Explicit diagnostic for the last-resort case: neither a schedule nor
+        // a configured company zone was available, so this punch is bucketed
+        // in UTC. Tenant owners should set Settings → Attendance → company zone.
+        console.warn(
+          `[checkIn] no schedule/company timezone resolved — punch classified in the ${FALLBACK_TIMEZONE} fallback (employee ${employeeId})`
+        );
+      }
+      if (canonical.punchDate !== date) {
+        // Defensive: the day key comes from the same inputs as above, so a
+        // divergence would mean a second clock crept back in. Never silent.
+        console.warn(`[checkIn] punch day divergence (${date} vs ${canonical.punchDate})`);
       }
 
       const payload: Record<string, unknown> = {
         employeeId,
         date,
+        attendanceTimezone: canonical.timezone,
         checkIn: serverTimestamp(),
-        status: lateMinutes > 0 ? "late" : "present",
-        lateMinutes,
-        deductionMinutes,
+        status: canonical.isLate ? "late" : "present",
+        lateMinutes: canonical.lateMinutes,
+        deductionMinutes: canonical.deductionMinutes,
         createdAt: serverTimestamp(),
         // Author's uid for the security boundary (pruned when signed out).
         userId: auth.currentUser?.uid,
       };
 
-      // Effective-schedule snapshot (new). When an assignment resolves, the
-      // punch carries its own frozen lateness basis; the legacy cutoff fields
-      // above stay untouched for display/compatibility. Without an
-      // assignment nothing changes at all — the company cutoff remains the
-      // documented fallback. A schedule read failure must NEVER block a
-      // check-in, so resolution errors degrade to the legacy behavior.
-      try {
-        const empSnap = await getDoc(doc(db, "companies", companyId, "employees", employeeId));
-        const schedule = await resolveScheduleSnapshotForPunch(
-          companyId,
-          employeeId,
-          (empSnap.data() as Employee | undefined)?.department,
-          date,
-          now
-        );
-        if (schedule) payload.schedule = schedule;
-      } catch (e) {
-        console.warn("[checkIn] schedule resolution failed — legacy cutoff policy applies", e);
-      }
+      // The frozen snapshot rides along as the audit trail — raw / excused /
+      // countable keep their distinct meanings — but the row-level numbers
+      // above now come from the SAME basis, so the alert, Timesheets, the
+      // lateness report and payroll can no longer disagree about a new punch.
+      // Without an assignment the company cutoff remains the documented basis.
+      if (schedule) payload.schedule = schedule;
       // Optional geo facts are merged key-by-key: a flexible check-in with a
       // working GPS but no configured work locations resolves locationName to
       // undefined, and Firestore rejects explicit undefined values outright.
@@ -751,35 +884,71 @@ export const PeopleService = {
           excusedMin = onLeave ? rawLate : 0;
         }
         const countable = countableLateMinutes(rawLate, excusedMin > 0);
+        let snapshotChanged = false;
         if (
           rawLate !== prev.rawLateMinutes ||
           excusedMin !== prev.excusedLateMinutes ||
           countable !== prev.countableLateMinutes
         ) {
+          snapshotChanged = true;
           audit.schedule = { from: prev, to: { ...prev, rawLateMinutes: rawLate, excusedLateMinutes: excusedMin, countableLateMinutes: countable } };
           update.schedule = { ...prev, rawLateMinutes: rawLate, excusedLateMinutes: excusedMin, countableLateMinutes: countable };
         }
-        const derivedStatus = countable > 0 || rawLate > 0 ? "late" : row.status === "late" ? "present" : row.status;
-        const nextStatus = changes.status ?? (rawLate !== prev.rawLateMinutes ? derivedStatus : row.status);
-        if (nextStatus !== row.status) {
-          audit.status = { from: row.status, to: nextStatus };
-          update.status = nextStatus;
+        // Canonical row numbers follow the corrected snapshot, so the alert
+        // basis, Timesheets, the report and payroll stay welded to one value.
+        if (snapshotChanged) {
+          const policy = await getAttendanceLatePolicy(companyId);
+          const derived = await canonicalForCorrection({
+            companyId,
+            employeeId: row.employeeId,
+            monthKey: row.date.slice(0, 7),
+            excludeAttendanceId: attendanceId,
+            schedule: { countableLateMinutes: countable, timezone: prev.scheduleTimezone },
+            checkInAt: changes.checkIn ?? oldIn ?? new Date(),
+            cutoffTime: policy.lateCutoffTime,
+            companyTimezone: policy.timezone,
+            lateThreshold: policy.lateThreshold,
+          });
+          if (derived.lateMinutes !== (row.lateMinutes ?? 0)) {
+            audit.lateMinutes = { from: row.lateMinutes ?? 0, to: derived.lateMinutes };
+            update.lateMinutes = derived.lateMinutes;
+          }
+          if (derived.deductionMinutes !== (row.deductionMinutes ?? 0)) {
+            audit.deductionMinutes = { from: row.deductionMinutes ?? 0, to: derived.deductionMinutes };
+            update.deductionMinutes = derived.deductionMinutes;
+          }
+          const derivedStatus = derived.isLate ? "late" : row.status === "late" ? "present" : row.status;
+          if (derivedStatus !== row.status) {
+            audit.status = { from: row.status, to: derivedStatus };
+            update.status = derivedStatus;
+          }
         }
       } else {
         // Legacy row: the ONLY documented basis is the CURRENT company
-        // cutoff (same rule check-in used). Excusing via a note zeroes the
+        // cutoff — evaluated in the documented fallback zone, exactly like
+        // check-in (never the browser's clock). Excusing via a note zeroes the
         // day's late/deduction minutes; un-excusing a previously excused
         // legacy row requires the corrected check-in to re-derive them.
         const policy = await getAttendanceLatePolicy(companyId);
         let lateMinutes = row.lateMinutes ?? 0;
         let deductionMinutes = row.deductionMinutes ?? 0;
-        if (changes.checkIn && oldIn) {
-          lateMinutes = computeLateMinutes(changes.checkIn, policy.lateCutoffTime);
-          deductionMinutes = lateMinutes > 0 ? deductionMinutes : 0;
-        }
         if (excusedNow) {
           lateMinutes = 0;
           deductionMinutes = 0;
+        } else if (changes.checkIn && oldIn) {
+          const derived = await canonicalForCorrection({
+            companyId,
+            employeeId: row.employeeId,
+            monthKey: row.date.slice(0, 7),
+            excludeAttendanceId: attendanceId,
+            schedule: null,
+            checkInAt: changes.checkIn,
+            cutoffTime: policy.lateCutoffTime,
+            companyTimezone: policy.timezone,
+            lateThreshold: policy.lateThreshold,
+          });
+          lateMinutes = derived.lateMinutes;
+          deductionMinutes = derived.deductionMinutes;
         }
         if (lateMinutes !== (row.lateMinutes ?? 0)) {
           audit.lateMinutes = { from: row.lateMinutes ?? 0, to: lateMinutes };

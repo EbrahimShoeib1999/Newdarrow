@@ -500,7 +500,11 @@
     "save_policy": "Save policy",
     "unsaved_changes": "Unsaved changes",
     "late_policy_saved": "Late policy saved",
-    "late_policy_save_failed": "Failed to save late policy"
+    "late_policy_save_failed": "Failed to save late policy",
+    "timezone_label": "Company timezone",
+    "timezone_hint": "Timezone used for the punch date and the late cutoff when an employee has no assigned schedule. A scheduled punch always uses its own schedule timezone; this setting is the fallback for everyone else. The browser's local clock is never used.",
+    "timezone_use_fallback": "No timezone (UTC fallback)",
+    "invalid_timezone": "That timezone is not recognized."
   },
   "daily_report": {
     "title": "Daily Work Report",

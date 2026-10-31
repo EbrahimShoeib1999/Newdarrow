@@ -43,6 +43,10 @@ export interface Employee {
    * flexible: check-in allowed from anywhere (remote / field).
    */
   attendanceCheckMode?: "geofence" | "flexible";
+  /** Auto-provisioned/hire marker for remote workers (read by check-in geo). */
+  workType?: string;
+  /** True for employees authorized to run their timer off-site. */
+  allowRemoteTimer?: boolean;
   salary?: number;
   currency?: string;
   onboardingTasks?: ChecklistItem[];
@@ -91,7 +95,15 @@ export type AttendanceStatus = 'present' | 'late' | 'absent' | 'half-day';
 export interface Attendance {
   id: string;
   employeeId: string;
-  date: string; // ISO Date YYYY-MM-DD
+  date: string; // Zoned day key "YYYY-MM-DD" in the row's effective timezone
+  /**
+   * The effective IANA zone this row's `date` was derived in (schedule zone →
+   * company zone → UTC fallback). Stamped on NEW check-ins so the store's
+   * "is today" restore, Timesheets bucketing and the profile window all agree
+   * with what was persisted without re-resolving the schedule. Legacy rows
+   * simply omit it and keep their prior UTC-day semantics (never backfilled).
+   */
+  attendanceTimezone?: string;
   checkIn: string | Timestamp; // ISO Date or Firebase Timestamp
   checkOut?: string | Timestamp;
   status: AttendanceStatus;
@@ -111,7 +123,12 @@ export interface Attendance {
   hasDailyReport?: boolean;
   dailyReportId?: string;
   skippedReport?: boolean;
-  /** Minutes past the company's late-checkin cutoff. 0/absent when on time. */
+  /**
+   * Canonical lateness minutes for this punch: the frozen schedule's countable
+   * lateness when an assignment resolved, otherwise minutes past the company's
+   * late-checkin cutoff. 0/absent when on time. The alert, Timesheets, the
+   * lateness report and payroll all read this one value.
+   */
   lateMinutes?: number;
   /**
    * Minutes deducted for this day's lateness. Only set once the employee has
@@ -140,12 +157,25 @@ export interface Attendance {
  * Late Policy). The first `lateThreshold - 1` late check-ins in a calendar
  * month are grace — no deduction. From the `lateThreshold`-th late check-in
  * of the month onward, each one is deducted (in minutes late that day).
+ * The cutoff is the documented FALLBACK basis: it is only consulted for
+ * punches with no effective schedule. Employees with an assigned shift are
+ * judged by that shift (start + grace) in the schedule's own timezone.
  */
 export interface AttendanceLatePolicy {
-  /** 24h "HH:mm", compared in the browser's local time (same convention the rest of attendance uses). */
+  /** 24h "HH:mm", evaluated in the punch's effective timezone (never the browser's). */
   lateCutoffTime: string;
   /** How many late check-ins in a month before deductions start. */
   lateThreshold: number;
+  /**
+   * Tenant-configured company IANA zone (Settings → Attendance → Late Policy).
+   * Second in the timezone precedence chain: a valid assigned schedule zone
+   * wins, else this zone, else the documented UTC fallback (never browser-
+   * local). Left UNSET by default so existing tenants keep their current UTC
+   * behavior until an admin explicitly picks a zone — the setting is never
+   * silently overwritten. A stored value is only honored when it is a valid
+   * IANA id (validated on read and write).
+   */
+  timezone?: string | null;
   updatedAt?: Date | Timestamp;
   updatedBy?: string;
 }
@@ -153,6 +183,10 @@ export interface AttendanceLatePolicy {
 export const DEFAULT_ATTENDANCE_LATE_POLICY: AttendanceLatePolicy = {
   lateCutoffTime: "11:30",
   lateThreshold: 3,
+  // No company zone by default: unscheduled punches keep the UTC fallback
+  // until an admin configures one, so enabling this feature changes nothing
+  // for tenants that opt out.
+  timezone: null,
 };
 
 export type AttendanceCheckMode = "geofence" | "flexible";

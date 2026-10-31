@@ -31,7 +31,7 @@ import {
   MapPin,
   Timer,
 } from "lucide-react";
-import { useEmployeesQuery, useAllAttendanceQuery } from "../hooks/use-people";
+import { useEmployeesQuery, useAllAttendanceQuery, useAttendanceLatePolicyQuery } from "../hooks/use-people";
 import { useAllUsers } from "@/features/users/hooks/use-users";
 import { useTranslation } from "react-i18next";
 import { TimeTrackerWidget } from "../components/TimeTrackerWidget";
@@ -40,6 +40,11 @@ import { selectFieldProps } from "@/components/shared/select-field";
 import { initialsFromName } from "@/lib/localized-name";
 import { avatarSrc } from "@/lib/image-utils";
 import { dayToneByKey } from "@/lib/day-tone-by-key";
+import {
+  periodDayKeyOf,
+  resolveEffectiveTimezone,
+  zonedDayKeyOf,
+} from "../lib/work-schedule-rules";
 import type { Attendance, Employee } from "../types/people.types";
 
 const ROWS_PER_PAGE = 25;
@@ -77,20 +82,22 @@ interface TimesheetRow extends Person {
 }
 
 /**
- * `YYYY-MM-DD` from the local calendar date. Attendance documents store `date`
- * as a UTC day, which lands on the previous day for any positive UTC offset, so
- * both sides of the lookup are rebuilt from local time instead.
+ * Day-key arithmetic on the persisted "YYYY-MM-DD" convention. A calendar day
+ * key is a fixed date, so these helpers never consult the browser clock — the
+ * grid and the day keys come from the SAME effective/period timezone the row
+ * was written in (see `periodDayKeyOf`/`zonedDayKeyOf` at the call sites).
  */
-function toDayKey(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** Add `delta` months to a (year, 1-based month) pair. */
+function shiftMonth(year: number, month1: number, delta: number): { year: number; month1: number } {
+  const idx = year * 12 + (month1 - 1) + delta;
+  return { year: Math.floor(idx / 12), month1: (idx % 12) + 1 };
 }
 
-/** Reads a day key back as a local calendar date so it never shifts a day. */
-function fromDayKey(key: string): Date {
-  const [year, month, day] = key.split("-").map(Number);
-  return new Date(year, (month ?? 1) - 1, day ?? 1);
+/** Last calendar day of a (year, 1-based month). */
+function daysInMonth(year: number, month1: number): number {
+  return new Date(Date.UTC(year, month1, 0)).getUTCDate();
 }
 
 function toMillis(value: unknown): number | null {
@@ -171,6 +178,11 @@ export default function TimesheetsPage() {
   const { data: attendanceResponse, isLoading: isAttendanceLoading } = useAllAttendanceQuery();
 
   const { data: allUsers } = useAllUsers();
+  // The company period zone (Settings → Attendance) the whole grid aligns to:
+  // today marker, absent-day generation, month window and the report default
+  // period all read this one clock instead of the browser's.
+  const { data: latePolicyRes } = useAttendanceLatePolicyQuery();
+  const periodTz = resolveEffectiveTimezone(null, latePolicyRes?.data?.timezone).timezone;
 
   const [searchQuery, setSearchQuery] = useState("");
   // Real punches by default; absent days are a deliberate opt-in because they
@@ -205,23 +217,24 @@ export default function TimesheetsPage() {
   );
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
 
-  const targetDate = useMemo(() => {
-    const date = new Date();
-    date.setDate(1);
-    date.setMonth(date.getMonth() + monthOffset);
-    return date;
-  }, [monthOffset]);
+  // Everything below is expressed as "YYYY-MM-DD" day keys in the company
+  // period zone, so no Date object leaks the browser clock into the grid.
+  const period = useMemo(() => {
+    const todayKey = periodDayKeyOf(nowMs, periodTz);
+    const [baseY, baseM] = todayKey.split("-").map(Number);
+    const { year, month1 } = shiftMonth(baseY, baseM, monthOffset);
+    const startKey = `${year}-${pad2(month1)}-01`;
+    const endKey = `${year}-${pad2(month1)}-${pad2(daysInMonth(year, month1))}`;
+    // A live month shows through today; a past month shows fully; the window
+    // never reaches into the future.
+    const lastShownKey = endKey > todayKey ? todayKey : endKey;
+    return { year, month1, startKey, endKey, todayKey, lastShownKey };
+  }, [nowMs, periodTz, monthOffset]);
 
-  const monthRange = useMemo(() => {
-    const today = new Date();
-    const startOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
-    const endOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
-    return {
-      startOfMonth,
-      lastDay: endOfMonth > today ? today : endOfMonth,
-      todayKey: toDayKey(today),
-    };
-  }, [targetDate]);
+  const targetDate = useMemo(
+    () => new Date(period.year, period.month1 - 1, 1),
+    [period]
+  );
 
   const localizeDepartment = useCallback(
     (raw?: string) => {
@@ -270,18 +283,27 @@ export default function TimesheetsPage() {
   /** Rows built from real punches. Never dropped, even when unlinked. */
   const attendanceRows = useMemo<TimesheetRow[]>(() => {
     const allLogs: Attendance[] = attendanceResponse?.data ?? [];
-    const { startOfMonth, lastDay, todayKey } = monthRange;
+    const { startKey, lastShownKey, todayKey } = period;
 
-    // One bucket per owner-day, keyed by the local day the shift started.
+    // One bucket per owner-day. A row is grouped by the `date` it was persisted
+    // with — that string already IS the punch day in the row's own effective
+    // timezone (schedule zone → company zone → UTC) — so the day grid can never
+    // disagree with the lateness report about which day a punch was. Only a row
+    // without a usable date falls back to the check-in instant, re-derived in
+    // the row's stamped zone (or the company period zone), never the browser's.
     const sessionsByDay = new Map<string, { ownerId: string; dayKey: string; sessions: Attendance[] }>();
     for (const log of allLogs) {
       if (!log.employeeId) continue;
       const startedAt = toMillis(log.checkIn);
-      const dayKey = startedAt !== null ? toDayKey(new Date(startedAt)) : log.date;
+      const storedDay = /^\d{4}-\d{2}-\d{2}$/.test(String(log.date ?? "")) ? String(log.date) : "";
+      const dayKey =
+        storedDay ||
+        (startedAt !== null
+          ? zonedDayKeyOf(startedAt, log.attendanceTimezone ?? periodTz)
+          : log.date);
       if (!dayKey) continue;
 
-      const day = fromDayKey(dayKey);
-      if (day < startOfMonth || day > lastDay) continue;
+      if (dayKey < startKey || dayKey > lastShownKey) continue;
 
       const key = `${log.employeeId}_${dayKey}`;
       const bucket = sessionsByDay.get(key);
@@ -305,29 +327,33 @@ export default function TimesheetsPage() {
         ...summarizeDay(sessions, dayKey, todayKey, nowMs),
       };
     });
-  }, [attendanceResponse, monthRange, nowMs, peopleById, t]);
+  }, [attendanceResponse, period, periodTz, nowMs, peopleById, t]);
 
   /** Days an employee never punched. Built only when they are actually shown. */
   const absentRows = useMemo<TimesheetRow[]>(() => {
     const employees: Employee[] = employeesResponse?.data ?? [];
-    const { startOfMonth, lastDay } = monthRange;
+    const { startKey, lastShownKey } = period;
     const punchedDays = new Set(attendanceRows.map((row) => row.id));
     const built: TimesheetRow[] = [];
 
     for (const employee of employees) {
       const joinedAt = toMillis(employee.joiningDate);
-      const joiningDate = joinedAt !== null ? new Date(joinedAt) : startOfMonth;
-      const start = startOfMonth > joiningDate ? startOfMonth : joiningDate;
-      // Start from local midnight so every generated key is a clean local day.
-      const firstDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      if (firstDay > lastDay) continue;
+      // Joining day placed in the same period zone the grid runs on, so a
+      // pre-join day is never (mis)generated as an absence.
+      const joiningKey = joinedAt !== null
+        ? zonedDayKeyOf(joinedAt, periodTz)
+        : startKey;
+      const firstKey = joiningKey > startKey ? joiningKey : startKey;
+      if (firstKey > lastShownKey) continue;
 
       const person = peopleById.get(employee.id);
       if (!person) continue;
 
-      for (const cursor = new Date(firstDay); cursor <= lastDay; cursor.setDate(cursor.getDate() + 1)) {
-        if (WEEKEND_DAYS.has(cursor.getDay())) continue;
-        const dayKey = toDayKey(cursor);
+      const [fy, fm, fd] = firstKey.split("-").map(Number);
+      for (const cursor = new Date(Date.UTC(fy, fm - 1, fd)); ; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+        const dayKey = `${cursor.getUTCFullYear()}-${pad2(cursor.getUTCMonth() + 1)}-${pad2(cursor.getUTCDate())}`;
+        if (dayKey > lastShownKey) break;
+        if (WEEKEND_DAYS.has(cursor.getUTCDay())) continue;
         if (punchedDays.has(`${employee.id}-${dayKey}`)) continue;
         if (employee.userId && punchedDays.has(`${employee.userId}-${dayKey}`)) continue;
 
@@ -347,7 +373,7 @@ export default function TimesheetsPage() {
     }
 
     return built;
-  }, [attendanceRows, employeesResponse, monthRange, peopleById]);
+  }, [attendanceRows, employeesResponse, period, periodTz, peopleById]);
 
   const filteredRows = useMemo(() => {
     const pool =
@@ -473,7 +499,7 @@ export default function TimesheetsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `timesheet_${toDayKey(new Date())}.csv`);
+    link.setAttribute("download", `timesheet_${period.todayKey}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -719,7 +745,10 @@ export default function TimesheetsPage() {
               </TableHeader>
               <TableBody>
                 {pageRows.map((row, index) => {
-                  const rowDate = fromDayKey(row.date);
+                  // Render label from the fixed calendar day key (a date is a
+                  // date), so the weekday/day never shift with the browser zone.
+                  const [ry, rm, rd] = row.date.split("-").map(Number);
+                  const rowDate = new Date(ry, (rm ?? 1) - 1, rd ?? 1);
                   const meta = statusMeta[row.status];
                   const startsNewDay = index > 0 && row.date !== pageRows[index - 1].date;
 

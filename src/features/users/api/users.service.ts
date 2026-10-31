@@ -1,6 +1,7 @@
 import { doc, updateDoc, getDocs, collection, query, where, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { UserRole } from "@/features/auth/types/auth.types";
+import type { User, UserRole } from "@/features/auth/types/auth.types";
+import { mapFirestoreUser } from "@/features/auth/utils/map-user";
 import type { PortalId } from "@/lib/portal-permissions";
 import type { PortalSubRoles } from "@/lib/permissions/sub-roles";
 import { withLogging } from "@/lib/service-utils";
@@ -211,6 +212,56 @@ export const UsersService = {
       }
 
       return deletedCount;
+    })());
+  },
+
+  /**
+   * Reconciliation read (mission 1.3): list accounts that carry NO tenant.
+   * Once login() stopped grafting the fabricated "default-company" tenant, such
+   * orphans are written with an empty companyId and become invisible to the
+   * company-scoped roster query — this surfaces them so a platform super admin
+   * can review/assign them. Never deletes or recreates; read-only.
+   */
+  async listUnassignedAccounts(actorRole: UserRole): Promise<User[]> {
+    return withLogging(SERVICE_NAME, "listUnassignedAccounts", (async () => {
+      if (actorRole !== "super_admin") {
+        throw new Error("Only a super admin can reconcile unassigned accounts");
+      }
+      const usersRef = collection(db, "users");
+      // The `companyId == ""` constraint mirrors the firestore.rules
+      // reconciliation list gate, so the query is provably allowed.
+      const q = query(usersRef, where("companyId", "==", ""));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) =>
+        mapFirestoreUser(d.id, d.data() as Record<string, unknown>)
+      );
+    })());
+  },
+
+  /**
+   * Reconciliation write: attach an unassigned profile to a real company.
+   * Super-admin only, and the Firestore rule requires the target doc's
+   * companyId to currently be empty — so this can only consume an orphan, never
+   * move an existing tenant's member.
+   */
+  async assignUnassignedAccount(
+    actorRole: UserRole,
+    targetUserId: string,
+    companyId: string,
+    companyName: string
+  ): Promise<void> {
+    return withLogging(SERVICE_NAME, "assignUnassignedAccount", (async () => {
+      if (actorRole !== "super_admin") {
+        throw new Error("Only a super admin can assign unassigned accounts");
+      }
+      if (!companyId) {
+        throw new Error("A target company is required");
+      }
+      await updateDoc(doc(db, "users", targetUserId), {
+        companyId,
+        companyName,
+        updatedAt: new Date().toISOString(),
+      });
     })());
   },
 };

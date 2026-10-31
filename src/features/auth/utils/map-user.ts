@@ -20,31 +20,31 @@ export function parseCustomPermissions(raw: unknown): import("@/lib/permissions"
   return raw as import("@/lib/permissions").Permission[];
 }
 
-import { mockUsers } from "@/mocks/data/users.data";
-
 export function mapFirestoreUser(
   id: string,
   data: Record<string, unknown> | undefined,
   fallbacks: Partial<User> = {}
 ): User {
-  const email = ((data?.email as string) || fallbacks.email || "").toLowerCase();
-  const matched = mockUsers.find((u) => u.email.toLowerCase() === email);
-
   return {
     id,
     email: (data?.email as string) || fallbacks.email || "",
     name:
       (data?.name as string) ||
-      matched?.name ||
       fallbacks.name ||
       fallbacks.email?.split("@")[0] ||
       "User",
-    nameAr: (data?.nameAr as string) || matched?.nameAr || fallbacks.nameAr || "",
+    nameAr: (data?.nameAr as string) || fallbacks.nameAr || "",
     avatar: (data?.avatar as string) || fallbacks.avatar || "",
-    role: (data?.role as User["role"]) || matched?.role || fallbacks.role || "employee",
-    companyId: (data?.companyId as string) || matched?.companyId || fallbacks.companyId || "d-arrow",
+    role: (data?.role as User["role"]) || fallbacks.role || "employee",
+    // No fabricated tenant: when the profile document is missing (or predates
+    // `companyId`) the user maps to an EMPTY company with `profileMissing`.
+    // Demo mock-user matching used to silently graft a real login onto the
+    // seeded "d-arrow" workspace, which made orphan accounts invisible in the
+    // Users page instead of surfacing them for reconciliation.
+    companyId: (data?.companyId as string) || fallbacks.companyId || "",
     companyName:
-      (data?.companyName as string) || matched?.companyName || fallbacks.companyName || "D-Arrow Business",
+      (data?.companyName as string) || fallbacks.companyName || "",
+    profileMissing: data === undefined,
     portalAccess: parsePortalAccess(data?.portalAccess),
     portalSubRoles: parsePortalSubRoles(data?.portalSubRoles),
     customPermissions: parseCustomPermissions(data?.customPermissions),

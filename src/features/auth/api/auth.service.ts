@@ -75,13 +75,20 @@ export const AuthService = {
         userData = userDoc.data() as Record<string, unknown> | undefined;
 
         if (!userDoc.exists()) {
+          // Provision a placeholder profile, but do NOT graft a fabricated
+          // tenant. The old hardcoded `companyId: "default-company"` silently
+          // stranded these accounts in a fake workspace that never matched the
+          // company-scoped `users` query, so they were invisible instead of
+          // surfacing for reconciliation. An EMPTY companyId keeps the account
+          // honest and findable by the reconciliation query (use-orphan-accounts).
           const defaultUserData: Partial<User> = {
             email: firebaseUser.email || "",
             name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "User",
             nameAr: "",
             avatar: firebaseUser.photoURL || `https://avatar.vercel.sh/${firebaseUser.uid}`,
             role: "employee",
-            companyId: "default-company",
+            companyId: "",
+            companyName: "",
           };
           await setDoc(userDocRef, {
             ...defaultUserData,

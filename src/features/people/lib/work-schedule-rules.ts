@@ -147,6 +147,11 @@ export function overtimeMinutes(v: ScheduleValues, workedMinutes: number): numbe
 /* Lateness (punctuality)                                                      */
 /* -------------------------------------------------------------------------- */
 
+/** Clock boundary (minutes since local midnight) separating a morning-shift
+ *  end from an afternoon one; a shift ending at/after this is treated as a
+ *  same-day window, never as an overnight tail (see punctualityForCheckIn). */
+const MIDDAY_MINUTES = 12 * 60;
+
 export interface PunctualityResult {
   scheduledStart: string;
   timezone: string;
@@ -157,14 +162,19 @@ export interface PunctualityResult {
 }
 
 /**
- * Lateness of a check-in against the EFFECTIVE schedule for the date:
- * arrival minutes (in the schedule's zone) past the start anchor, where the
- * anchor is the end of the flexible window when configured, plus grace.
- * A check-in BEFORE the anchor is simply on time (never negative, never
- * rounded up). A check-in whose zoned day differs from the punch day is
- * flagged and contributes 0 — the punch date is the attendance row's own
- * `date`, and inventing a lateness for an ambiguous midnight case would be
- * fabricating data.
+ * Lateness of a check-in against the EFFECTIVE schedule for the date, measured
+ * from the scheduled START INSTANT rather than a bare minutes-of-day compare.
+ * The anchor is the end of the flexible window when configured, plus grace; a
+ * check-in BEFORE the anchor is simply on time (never negative, never rounded
+ * up). Overnight shifts (end at/before start on the clock) run past midnight:
+ * a punch whose wall-clock minutes fall in that early-morning tail is measured
+ * against the shift that STARTED THE PREVIOUS EVENING, so a 00:15 arrival on a
+ * 22:00 shift is genuinely late rather than silently zeroed. Early arrival
+ * before a night shift, and any punch that cannot be attributed to a start, is
+ * NOT marked late — after-midnight punches are never assumed guilty. A punch
+ * on a non-overnight schedule whose zoned day differs from the row's `date`
+ * stays flagged `crossDayCheckIn` and contributes 0 (the ambiguous-midnight
+ * data-invention guard is preserved exactly).
  */
 export function punctualityForCheckIn(
   values: ScheduleValues,
@@ -172,21 +182,39 @@ export function punctualityForCheckIn(
   punchDayKey: string
 ): PunctualityResult {
   const startMin = parseHHmm(values.startTime) ?? 0;
-  const zone = values.timezone || "UTC";
+  const endMin = parseHHmm(values.endTime) ?? startMin;
+  const zone = effectivePunchTimezone(values.timezone);
+  const grace = Math.max(0, values.graceMinutes || 0);
   const anchor =
     values.flexibleStartWindow != null
       ? Math.max(startMin, parseHHmm(values.flexibleStartWindow[1]) ?? startMin)
       : startMin;
   const inZone = zonedMoment(checkIn.getTime(), zone);
   const crossDay = inZone.dayKey !== punchDayKey;
-  const raw =
-    crossDay || inZone.minutes <= anchor + Math.max(0, values.graceMinutes || 0)
-      ? 0
-      : Math.round(inZone.minutes - anchor - Math.max(0, values.graceMinutes || 0));
+  // A shift is genuinely OVERNIGHT only when it runs past midnight and so ENDS
+  // in the early hours (before midday). Requiring `endMin < startMin` alone
+  // would misread a same-day window whose (later) start merely follows an
+  // afternoon end — e.g. a 17:08 start on a 17:00 end — as overnight and
+  // wrongly attribute an EARLY arrival before the scheduled start to the
+  // previous evening's tail, inventing lateness. Midday is the boundary.
+  const overnight = endMin < startMin && endMin < MIDDAY_MINUTES;
+  // Early-morning tail of an overnight shift belongs to the previous evening's
+  // start; shift the anchor back a full day so the compare is date-aware.
+  const inTail = overnight && inZone.minutes <= endMin;
+  const effAnchor = inTail ? anchor - 1440 : anchor;
+  const diff = inZone.minutes - effAnchor;
+  let raw: number;
+  if (inTail) {
+    raw = diff > grace ? Math.round(diff - grace) : 0;
+  } else if (crossDay) {
+    raw = 0; // preserved ambiguous-midnight guard for non-overnight schedules
+  } else {
+    raw = diff > grace ? Math.round(diff - grace) : 0;
+  }
   return {
     scheduledStart: values.startTime,
     timezone: zone,
-    graceMinutes: Math.max(0, values.graceMinutes || 0),
+    graceMinutes: grace,
     rawLateMinutes: Math.max(0, raw),
     crossDayCheckIn: crossDay,
   };
@@ -201,6 +229,214 @@ export function countableLateMinutes(
   excused: boolean
 ): number {
   return excused ? 0 : Math.max(0, Math.round(rawLateMinutes));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Canonical lateness policy (single source of truth)                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The last-resort fallback timezone for HR calendar math. A punch is judged
+ * in its assigned schedule's zone when one resolves, otherwise in the
+ * tenant-configured company zone, and only when NEITHER is set does this
+ * documented fallback apply (with an explicit diagnostic at the call site).
+ * The browser's local zone is never an input to any lateness decision.
+ */
+export const FALLBACK_TIMEZONE = "UTC";
+
+/**
+ * The IANA zones offered in the settings UIs. Schedules and the company-level
+ * zone share one list so the two settings can never drift into incompatible
+ * vocabularies. A stored value outside this list is still accepted as long as
+ * it is a valid IANA id (see {@link normalizeTimezone}).
+ */
+export const TIMEZONE_OPTIONS: readonly string[] = [
+  "Asia/Riyadh",
+  "Asia/Dubai",
+  "Asia/Karachi",
+  "Europe/London",
+  "UTC",
+];
+
+/**
+ * A valid, trimmed IANA zone id, or null when empty/unsupported. This is the
+ * single validation primitive — the settings schema, the service write path
+ * and the runtime resolver all consult it, so an invalid id never throws and
+ * is never quietly treated as a real zone.
+ */
+export function normalizeTimezone(tz: string | null | undefined): string | null {
+  const id = (tz || "").trim();
+  if (!id) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: id }).format(0);
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+/** True only for a non-empty, runtime-supported IANA zone id. */
+export function isValidTimezone(tz: string | null | undefined): boolean {
+  return normalizeTimezone(tz) != null;
+}
+
+/** Where an effective timezone came from — drives the UTC-fallback diagnostic. */
+export type TimezoneSource = "schedule" | "company" | "fallback";
+
+export interface EffectiveTimezone {
+  timezone: string;
+  source: TimezoneSource;
+}
+
+/**
+ * The precedence chain every consumer uses: a valid assigned schedule zone
+ * wins; otherwise a valid company zone; otherwise UTC. Never the browser. An
+ * invalid id at any level is skipped (not guessed), so the caller learns the
+ * true source and can emit the fallback diagnostic.
+ */
+export function resolveEffectiveTimezone(
+  scheduleTimezone?: string | null,
+  companyTimezone?: string | null
+): EffectiveTimezone {
+  const fromSchedule = normalizeTimezone(scheduleTimezone);
+  if (fromSchedule) return { timezone: fromSchedule, source: "schedule" };
+  const fromCompany = normalizeTimezone(companyTimezone);
+  if (fromCompany) return { timezone: fromCompany, source: "company" };
+  return { timezone: FALLBACK_TIMEZONE, source: "fallback" };
+}
+
+/**
+ * The effective zone a punch is judged in from a single zone input (the
+ * schedule's own zone, or the company zone when there is no schedule).
+ * An invalid/unsupported id degrades to the documented fallback instead of
+ * throwing or guessing. For the full schedule → company → UTC chain use
+ * {@link resolveEffectiveTimezone}.
+ */
+export function effectivePunchTimezone(scheduleTimezone: string | null | undefined): string {
+  return normalizeTimezone(scheduleTimezone) ?? FALLBACK_TIMEZONE;
+}
+
+/** Calendar day key ("YYYY-MM-DD") of an instant in the effective zone. */
+export function zonedDayKeyOf(epochMs: number, timezone: string): string {
+  return zonedMoment(epochMs, effectivePunchTimezone(timezone)).dayKey;
+}
+
+/** Month key ("YYYY-MM") of an instant in the effective zone. */
+export function zonedMonthKeyOf(epochMs: number, timezone: string): string {
+  return zonedDayKeyOf(epochMs, timezone).slice(0, 7);
+}
+
+/**
+ * Period month key ("YYYY-MM") for a report that spans many schedules: judged
+ * in the company zone (else UTC), never browser-local. This is the documented
+ * company-level period timezone the timesheets and lateness reports align to.
+ */
+export function periodKeyOf(epochMs: number, companyTimezone?: string | null): string {
+  return zonedMonthKeyOf(epochMs, resolveEffectiveTimezone(null, companyTimezone).timezone);
+}
+
+/** Today's day key ("YYYY-MM-DD") in the company period zone (else UTC). */
+export function periodDayKeyOf(epochMs: number, companyTimezone?: string | null): string {
+  return zonedDayKeyOf(epochMs, resolveEffectiveTimezone(null, companyTimezone).timezone);
+}
+
+/**
+ * Minutes the punch falls past the company's "HH:mm" late cutoff, measured in
+ * the effective zone (never the browser's). An unparseable cutoff is 0 late —
+ * a broken setting never fabricates lateness.
+ */
+export function cutoffLateMinutes(
+  checkInAtMs: number,
+  cutoffHHmm: string,
+  timezone: string
+): number {
+  const cutoffMin = parseHHmm(cutoffHHmm);
+  if (cutoffMin == null) return 0;
+  const inZone = zonedMoment(checkInAtMs, effectivePunchTimezone(timezone));
+  return Math.max(0, inZone.minutes - cutoffMin);
+}
+
+export interface CanonicalLatenessInput {
+  /** Instant of the punch, epoch milliseconds. */
+  nowMs: number;
+  /**
+   * The frozen schedule snapshot's lateness for this punch, or null when no
+   * valid schedule resolved (then the company cutoff is the documented
+   * fallback basis). `countableLateMinutes` already carries the leave-excuse
+   * rule; the raw/excused numbers stay on the snapshot for the audit trail.
+   */
+  schedule: { countableLateMinutes: number; timezone: string } | null;
+  /** Company-wide late cutoff "HH:mm" — fallback basis only. */
+  cutoffTime: string;
+  /**
+   * The tenant's configured company zone (settings/attendance.timezone). Used
+   * ONLY when no schedule resolves, to place the cutoff fallback in the right
+   * wall-clock day. Null/invalid ⇒ the documented UTC fallback with the
+   * `usedUtcFallback` diagnostic set. Never the browser's zone.
+   */
+  companyTimezone?: string | null;
+  /** Late punch days already persisted in the punch's own month. */
+  priorLateOccurrences: number;
+  /** Late days allowed per month before deductions start. */
+  lateThreshold: number;
+}
+
+export interface CanonicalLateness {
+  /** Zone every field below was derived in. */
+  timezone: string;
+  /** Whether the zone came from the schedule, the company setting, or UTC. */
+  timezoneSource: TimezoneSource;
+  /** True only when NEITHER a schedule nor a company zone was available. */
+  usedUtcFallback: boolean;
+  /** Punch date as persisted on the attendance row. */
+  punchDate: string;
+  /** Month window used for occurrence counting and report alignment. */
+  monthKey: string;
+  /** Which basis produced the numbers — never both. */
+  basis: "schedule" | "cutoff";
+  /** The canonical lateness minutes: persisted, alerted, reported, deducted. */
+  lateMinutes: number;
+  isLate: boolean;
+  /** Minutes deducted for this day once the monthly threshold is reached. */
+  deductionMinutes: number;
+}
+
+/**
+ * THE lateness decision. One punch, one effective timezone, one basis:
+ *  - assigned valid schedule → the schedule's own countable lateness rules
+ *    (company cutoff cannot add or remove lateness from a scheduled punch);
+ *  - no valid schedule → the company cutoff in the documented fallback zone.
+ * `lateMinutes`, `status` and the alert therefore agree with what the lateness
+ * report and `evaluateMonth` (payroll) derive from the same row. Grace,
+ * occurrence and deduction semantics are unchanged — only their clock is.
+ */
+export function canonicalLateness(input: CanonicalLatenessInput): CanonicalLateness {
+  const scheduled = input.schedule != null;
+  // Precedence: schedule zone → company zone → UTC. A scheduled punch is
+  // always judged in its own schedule zone (company zone only steps in if that
+  // id is invalid); an unscheduled punch is judged in the company zone, or UTC
+  // when the tenant has configured none.
+  const zone = scheduled
+    ? resolveEffectiveTimezone(input.schedule!.timezone, input.companyTimezone)
+    : resolveEffectiveTimezone(null, input.companyTimezone);
+  const timezone = zone.timezone;
+  const punchDate = zonedDayKeyOf(input.nowMs, timezone);
+  const lateMinutes = scheduled
+    ? Math.max(0, Math.round(Number(input.schedule!.countableLateMinutes) || 0))
+    : cutoffLateMinutes(input.nowMs, input.cutoffTime, timezone);
+  const isLate = lateMinutes > 0;
+  const occurrence = input.priorLateOccurrences + 1;
+  return {
+    timezone,
+    timezoneSource: zone.source,
+    usedUtcFallback: zone.source === "fallback",
+    punchDate,
+    monthKey: punchDate.slice(0, 7),
+    basis: scheduled ? "schedule" : "cutoff",
+    lateMinutes,
+    isLate,
+    deductionMinutes: isLate && occurrence >= input.lateThreshold ? lateMinutes : 0,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
