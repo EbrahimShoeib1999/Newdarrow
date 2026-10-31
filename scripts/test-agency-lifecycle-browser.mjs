@@ -14,8 +14,9 @@
  * calendar with the scheduled-date precondition -> creative brief with an
  * attachment -> reports derived from persisted records only -> cross-tenant
  * and non-admin denials -> deactivating the activity blocks UI + data while
- * records survive reactivation -> CRM/billing keep working and the
- * facilities/PROJECTS namespaces stay denied under Marketing.
+ * records survive reactivation -> CRM/billing keep working, the facilities
+ * namespace stays activity-denied, and the core PROJECTS module stays
+ * reachable (Projects is a CORE_ROUTE_PREFIXES shared module, never gated).
  *
  * All mutations go through UI interaction; the emulator REST API is used
  * only for fixture seeding and READ-ONLY verification of persisted state
@@ -267,9 +268,73 @@ async function clickTextExact(candidates) {
     el.click(); return true;
   })()`);
 }
-async function selectOption(labelText, optionText) {
+/** Trusted-mouse click on the element currently marked [data-e2e-press].
+    React-Aria (HeroUI Select) listens for real pointer events; a synthetic
+    .click() is intermittently ignored, leaving the selection uncommitted and
+    the listbox popover open — which then pollutes dialogButtonState reads. */
+async function trustedClickMarked() {
+  const pt = await js(`(() => {
+    const b = document.querySelector('[data-e2e-press]');
+    if (!b) return null;
+    b.scrollIntoView({ block: 'center', inline: 'center' });
+    const r = b.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  })()`);
+  if (!pt) return false;
+  await sleep(120);
+  await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: pt.x, y: pt.y });
+  await send("Input.dispatchMouseEvent", { type: "mousePressed", x: pt.x, y: pt.y, button: "left", clickCount: 1 });
+  await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: pt.x, y: pt.y, button: "left", clickCount: 1 });
+  await js(`(() => { const b = document.querySelector('[data-e2e-press]'); if (b) b.removeAttribute('data-e2e-press'); return true; })()`).catch(() => {});
+  return true;
+}
+/** True while a Select listbox/option popover is visible on screen. */
+async function listboxVisible() {
+  return js(`(() => {
+    const isVis = ${VIS};
+    return Array.from(document.querySelectorAll('[role="listbox"], [role="option"]')).some((e) => isVis(e));
+  })()`);
+}
+/** True once the labelled combobox visibly shows the chosen value. Proves the
+    React-Aria selection actually committed, independent of popover-close
+    animation (which is what made the old listbox-close heuristic flake). */
+async function comboboxShowsValue(labelText, optionText) {
   const want = String(labelText).toLowerCase();
-  const opened = await js(`(() => {
+  const oWant = String(optionText).toLowerCase();
+  return js(`(() => {
+    const want = ${JSON.stringify(want)};
+    const oWant = ${JSON.stringify(oWant)};
+    const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+    const isVis = ${VIS};
+    const combos = Array.from(document.querySelectorAll('[role="combobox"], button[aria-haspopup="listbox"]')).filter(c => isVis(c));
+    const labelFor = (el) => {
+      const lb = el.getAttribute && el.getAttribute('aria-labelledby');
+      if (lb) {
+        const refs = lb.split(/\\s+/).map((id) => document.getElementById(id)).filter(Boolean);
+        const asLabel = refs.find((r) => r.tagName === 'LABEL' || r.closest('label'));
+        if (asLabel && norm(asLabel.innerText)) return norm(asLabel.innerText);
+      }
+      const own = el.getAttribute && el.getAttribute('aria-label');
+      if (own && norm(own)) return norm(own);
+      let n = el.parentElement;
+      for (let i = 0; i < 6 && n; i++) {
+        const direct = Array.from(n.children).filter((c) => c.tagName === 'LABEL');
+        if (direct.length) return norm(direct[0].innerText);
+        n = n.parentElement;
+      }
+      return '';
+    };
+    const trig = combos.find((c) => labelFor(c) === want) || combos.find((c) => labelFor(c).includes(want));
+    if (!trig) return false;
+    return norm(trig.innerText || trig.textContent).includes(oWant);
+  })()`);
+}
+async function selectOption(labelText, optionText, attempts = 3) {
+  const want = String(labelText).toLowerCase();
+  const oWant = String(optionText).toLowerCase();
+  // Locate the labelled combobox and mark it for a trusted press.
+  const findTrigger = () => js(`(() => {
     const want = ${JSON.stringify(want)};
     const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
     const isVis = ${VIS};
@@ -293,21 +358,54 @@ async function selectOption(labelText, optionText) {
     };
     const trig = combos.find((c) => labelFor(c) === want) || combos.find((c) => labelFor(c).includes(want));
     if (!trig) return false;
-    trig.setAttribute('data-e2e-open', '1');
-    trig.click(); return true;
+    trig.setAttribute('data-e2e-press', '1');
+    return true;
   })()`);
-  if (!opened) {
+  const markOption = () => js(`(() => {
+    const isVis = ${VIS};
+    const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+    const opts = Array.from(document.querySelectorAll('li, [role="option"]')).filter(isVis);
+    const el = opts.find((o) => norm(o.innerText || o.textContent).includes(${JSON.stringify(oWant)}));
+    if (!el) return false;
+    el.setAttribute('data-e2e-press', '1');
+    return true;
+  })()`);
+  // Best-effort: dismiss a lingering open popover by toggling the combobox
+  // trigger shut with a synthetic click. NEVER use Escape here: inside a
+  // HeroUI Modal Escape closes the whole dialog, wiping the form mid-sequence.
+  const dismissListbox = async () => {
+    if (!(await listboxVisible())) return;
+    await js(`(() => { const isVis = ${VIS}; const t = Array.from(document.querySelectorAll('[role="combobox"], button[aria-haspopup="listbox"]')).filter(isVis).find(c => c.getAttribute('aria-expanded') === 'true'); if (t) t.click(); return true; })()`).catch(() => {});
+    await waitUntil(async () => (await listboxVisible()) === false, 1500, "listbox dismissed").catch(() => {});
+  };
+  // OPEN the listbox (trusted press, synthetic fallback) exactly once.
+  if (!(await findTrigger())) {
     const opts = await js(`JSON.stringify(Array.from(document.querySelectorAll('[role="combobox"], button[aria-haspopup="listbox"]')).map(el => (el.getAttribute('aria-labelledby')||'') + '|' + (el.innerText||'').slice(0,30)))`).catch(() => "?");
     log(`   [selectDiag:${labelText}] no trigger matched. combos=${opts}`);
     return false;
   }
-  const chosen = await waitUntil(
-    () => clickText('li, [role="option"]', [optionText]),
-    8000,
-    `option "${optionText}" for "${labelText}"`
-  ).catch(() => false);
-  if (chosen) return true;
-  await js(`(() => { const t = document.querySelector('[data-e2e-open]'); if (t) t.click(); return true; })()`).catch(() => {});
+  await trustedClickMarked();
+  if (!(await waitUntil(async () => (await listboxVisible()) === true, 2000, "listbox open").catch(() => false))) {
+    await findTrigger();
+    await js(`(() => { const t = document.querySelector('[data-e2e-press]'); if (t) { t.click(); t.removeAttribute('data-e2e-press'); } return true; })()`).catch(() => {});
+    await waitUntil(async () => (await listboxVisible()) === true, 2000, "listbox open (synthetic fallback)").catch(() => {});
+  }
+  if (!(await listboxVisible())) { await dismissListbox(); return false; }
+  // Let the popover finish its open animation before measuring the option, then
+  // press it with trusted pointer events. React-Aria closes the listbox on a
+  // real selection, so "listbox gone" is the authoritative commit signal (the
+  // old value-text read was unreliable because HeroUI repoints aria-labelledby
+  // once a value is chosen). Retry the press if the popover stays open — the
+  // historic flake was measuring the option rect mid-animation.
+  await sleep(350);
+  for (let press = 1; press <= attempts; press++) {
+    if (!(await listboxVisible())) break;
+    if (await markOption()) await trustedClickMarked();
+    else await clickText('li, [role="option"]', [optionText]);
+    if (await waitUntil(async () => (await listboxVisible()) === false, 1500, `"${optionText}" selected (press ${press})`).catch(() => false)) return true;
+    await sleep(250);
+  }
+  await dismissListbox();
   return false;
 }
 /** Check a HeroUI checkbox by its visible label text. */
@@ -720,8 +818,9 @@ try {
     await clickRowButton(TEASER, ["Change Status"]);
     await waitForVisibleDialog("transition modal");
     if (!(await selectOption("Move to", "Published"))) throw new Error("select published failed");
-    await sleep(500);
-    if ((await dialogButtonState("Confirm")) !== "disabled") throw new Error("publish without client sign-off must be disabled");
+    // The Confirm button mounts a frame after the dialog animates open; poll
+    // for it to render as DISABLED instead of misreading a transient "no-button".
+    await waitUntil(async () => (await dialogButtonState("Confirm")) === "disabled", 8000, "publish Confirm disabled (no sign-off)");
     if (!/blocked until the client approval/i.test(await bodyText())) throw new Error("publication gate hint not shown");
     await closeModal();
     // Record the sign-off: not_required -> pending -> approved.
@@ -729,6 +828,14 @@ try {
     await waitForVisibleDialog("approval modal");
     if (!(await clickText("button", ["Mark Pending"], { within: '[role="dialog"]' }))) throw new Error("mark pending not found");
     await waitUntil(async () => (await fsGet(`companies/${COMPANY_ID}/mkt_deliverables/${deliverableId}`))?.clientApprovalState === "pending", 30000, "pending recorded");
+    // The sign-off modal's legal options are derived from the LIST row object
+    // (cache-backed), so wait for the refetch to repaint it to "Pending"
+    // before reopening — otherwise the modal still reads the stale
+    // not_required state and offers only "Mark Pending".
+    await waitUntil(async () => (await js(`(() => {
+      const r = Array.from(document.querySelectorAll('tr')).find(x => (x.innerText || '').includes('${TEASER}'));
+      return !!r && /Pending/.test(r.innerText) && !/Not Required/.test(r.innerText);
+    })()`)) === true, 20000, "row repaints to Pending");
     await clickRowButton(TEASER, ["Client Approval"]);
     await waitForVisibleDialog("approval modal 2");
     await setLabeled("Note", "Brand manager signed off via email thread #441");
@@ -747,7 +854,7 @@ try {
     await clickRowButton(TEASER, ["Change Status"]);
     await waitForVisibleDialog("transition modal 3");
     if (!(await selectOption("Move to", "Published"))) throw new Error("re-select published failed");
-    if ((await dialogButtonState("Confirm")) !== "enabled") throw new Error("publish still disabled after sign-off");
+    await waitUntil(async () => (await dialogButtonState("Confirm")) === "enabled", 10000, "publish Confirm enabled after sign-off");
     await clickText("button", ["Confirm"], { within: '[role="dialog"]' });
     await waitUntil(async () => {
       const d = await fsGet(`companies/${COMPANY_ID}/mkt_deliverables/${deliverableId}`);
@@ -785,8 +892,7 @@ try {
     await clickRowButton(CAROUSEL, ["Change Status"]);
     await waitForVisibleDialog("transition modal 2");
     if (!(await selectOption("Move to", "Scheduled"))) throw new Error("select scheduled failed");
-    await sleep(500);
-    if ((await dialogButtonState("Confirm")) !== "disabled") throw new Error("scheduling without a date must be disabled");
+    await waitUntil(async () => (await dialogButtonState("Confirm")) === "disabled", 8000, "schedule Confirm disabled (no date)");
     if (!/scheduled date must be set/i.test(await bodyText())) throw new Error("date-precondition hint not shown");
     await closeModal();
     // Edit: add the date.
@@ -795,6 +901,14 @@ try {
     await setLabeled("Scheduled Date", daysFromNow(3));
     await clickText("button", ["Save"], { within: '[role="dialog"]' });
     await waitUntil(async () => (await fsGet(`companies/${COMPANY_ID}/mkt_content_items/${contentId}`))?.scheduledDate === daysFromNow(3), 30000, "date persisted");
+    // The schedule gate reads the LIST row object, so wait for the content
+    // refetch to repaint the scheduled-date cell before reopening the
+    // transition modal — otherwise dateBlocked stays true from stale data and
+    // Confirm is wrongly disabled on the first Scheduled attempt.
+    await waitUntil(async () => (await js(`(() => {
+      const r = Array.from(document.querySelectorAll('tr')).find(x => (x.innerText || '').includes('${CAROUSEL}'));
+      return !!r && r.innerText.includes('${daysFromNow(3)}');
+    })()`)) === true, 20000, "row repaints scheduled date");
     // -> scheduled -> published.
     for (const to of ["Scheduled", "Published"]) {
       await clickRowButton(CAROUSEL, ["Change Status"]);
@@ -895,7 +1009,7 @@ try {
   });
 
   // ---------- Step 18: shared modules + other namespaces unaffected ----------
-  await step("18. CRM + billing still work under Marketing; facilities/PROJECTS stay activity-denied", async () => {
+  await step("18. CRM + billing still work under Marketing; facilities stays denied, PROJECTS stays reachable", async () => {
     await goto(`http://localhost:${VITE_PORT}/crm/contacts`);
     await waitUntil(async () => (await bodyText()).includes("Globex Foods"), 60000, "CRM contacts list");
     await goto(`http://localhost:${VITE_PORT}/billing/invoices`);
@@ -903,9 +1017,57 @@ try {
     await goto(`http://localhost:${VITE_PORT}/facilities`);
     await waitUntil(async () => (await bodyText()).includes("Section not available"), 40000, "facilities denial under Marketing");
     await goto(`http://localhost:${VITE_PORT}/projects`);
-    await waitUntil(async () => (await bodyText()).includes("Section not available"), 40000, "projects denial under Marketing");
+    // Projects is a CORE module (activity-routes.ts CORE_ROUTE_PREFIXES),
+    // intentionally reachable under every activity — so it must render here,
+    // NOT resolve to the activity-denied card. This guards the fixed
+    // "Projects disappeared when switching activity" regression.
+    await waitUntil(async () => (await bodyText()).includes("New Project"), 40000, "projects core module reachable under Marketing");
+    if ((await bodyText()).includes("Section not available")) throw new Error("PROJECTS must stay reachable as a core module under Marketing");
     await shot("18-shared-modules-ok");
-    return "CRM/billing render; other activity namespaces correctly denied";
+    return "CRM/billing render; facilities denied; PROJECTS core module stays reachable";
+  });
+
+  // ---------- Step 19: register a client through the CRM UI (not a seed) ----------
+  await step("19. Register a new client through the CRM contacts form (real CRUD under the tenant)", async () => {
+    const NOVA_FIRST = "Nova";
+    const NOVA_LAST = "Retail Group";
+    await goto(`http://localhost:${VITE_PORT}/crm/contacts`);
+    await waitUntil(async () => (await bodyText()).includes("Globex Foods"), 60000, "CRM contacts list loaded");
+    if (!(await clickText("button", ["add contact"]))) throw new Error("Add contact button not found");
+    await waitForVisibleDialog("contact form");
+    if (!(await setLabeled("First Name", NOVA_FIRST))) throw new Error("first name not filled");
+    if (!(await setLabeled("Last Name", NOVA_LAST))) throw new Error("last name not filled");
+    // Individual contacts need phone OR email to pass validation.
+    if (!(await setLabeled("Primary Phone", "0500000099"))) throw new Error("phone not filled");
+    if (!(await clickTextExact(["Save Contact"]))) throw new Error("Save Contact button not found");
+    await waitUntil(async () => {
+      const rows = await fsList(`companies/${COMPANY_ID}/contacts`);
+      return rows.some((c) => (c.firstName || "").includes(NOVA_FIRST) && (c.lastName || "").includes(NOVA_LAST));
+    }, 30000, "new contact persisted to Firestore under the tenant");
+    await waitUntil(async () => (await bodyText()).includes(NOVA_LAST), 30000, "new contact repaints the list");
+    await shot("19-client-registered");
+    return "client created through the real CRM form and persisted under the tenant";
+  });
+
+  // ---------- Step 20: campaign detail in-context links actually navigate ----------
+  await step("20. Campaign detail client link resolves to the shared CRM contact (no dead buttons)", async () => {
+    await goto(`http://localhost:${VITE_PORT}/agency/campaigns/${campaignId}`);
+    // The client chip must be a real anchor to the shared contact, not plain text.
+    const marked = await waitUntil(async () => js(`(() => {
+      const isVis = ${VIS};
+      const a = Array.from(document.querySelectorAll('a[href^="/crm/contacts/"]')).find((x) => isVis(x) && (x.innerText || '').includes('Globex'));
+      if (!a) return false;
+      a.setAttribute('data-e2e-press', '1');
+      return true;
+    })()`), 40000, "client in-context anchor renders").catch(() => false);
+    if (!marked) throw new Error("campaign client link did not render");
+    const href = await js(`(() => { const a = document.querySelector('[data-e2e-press]'); return a ? a.getAttribute('href') : null; })()`);
+    if (!href || !/^\/crm\/contacts\//.test(href)) throw new Error(`client link malformed: ${href}`);
+    await trustedClickMarked();
+    await waitUntil(async () => (await currentUrl()).includes("/crm/contacts/"), 20000, "navigated to CRM contact via the campaign link");
+    await waitUntil(async () => (await bodyText()).includes("Globex"), 20000, "CRM contact detail renders the client");
+    await shot("20-client-link-navigated");
+    return `href=${href} → CRM contact detail rendered`;
   });
 } finally {
   edgeProc.kill();

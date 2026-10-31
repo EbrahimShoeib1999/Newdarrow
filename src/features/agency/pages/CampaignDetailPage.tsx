@@ -229,11 +229,27 @@ export function CampaignDetailPage() {
         <CardBody className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
             <p className="text-xs uppercase text-default-400">{t("fields.client")}</p>
-            <p className="font-medium mt-1">{client ? contactDisplayName(client) : t("misc.removedRef")}</p>
+            <p className="font-medium mt-1">
+              {client ? (
+                <Link to={`/crm/contacts/${client.id}`} className="text-primary hover:underline">
+                  {contactDisplayName(client)}
+                </Link>
+              ) : (
+                t("misc.removedRef")
+              )}
+            </p>
           </div>
           <div>
             <p className="text-xs uppercase text-default-400">{t("fields.contract")}</p>
-            <p className="font-medium mt-1">{contract ? contract.title : t("misc.none")}</p>
+            <p className="font-medium mt-1">
+              {contract ? (
+                <Link to={`/crm/contracts?contractId=${contract.id}`} className="text-primary hover:underline">
+                  {contract.title}
+                </Link>
+              ) : (
+                t("misc.none")
+              )}
+            </p>
           </div>
           <div>
             <p className="text-xs uppercase text-default-400">{t("fields.owner")}</p>
