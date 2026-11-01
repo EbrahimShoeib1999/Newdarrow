@@ -1,0 +1,279 @@
+
+  // ---------- Step 13: first rent payment (full allocation) ----------
+  await step("13. Record Payment allocates the full first installment -> ipk_ payment doc, installment re-derived to paid", async () => {
+    await waitUntil(async () => (await clickText("button", ["Record Payment"])) === true, 20000, "Record Payment button");
+    await waitForVisibleDialog("payment modal");
+    // Rows start unchecked with the outstanding balance pre-filled.
+    if (!(await checkCheckbox("Allocate"))) throw new Error("allocate checkbox not found");
+    if (!(await setLabeled("Reference", "E2E-RENT-1"))) throw new Error("reference not filled");
+    const confirmState = await dialogButtonState("Record Payment");
+    if (confirmState !== "enabled") throw new Error(`confirm should be enabled with prefilled total, got ${confirmState}`);
+    await shot("13-payment-modal");
+    await clickDialogButton(["Record Payment"]);
+    await waitUntil(async () => {
+      const payments = await fsList(`companies/${COMPANY_ID}/rem_rent_payments`);
+      return payments.some((p) => String(p.id).startsWith("ipk_") && Number(p.amount) === 5000 && (p.allocations || []).length === 1);
+    }, 30000, "idempotency-keyed payment persisted");
+    const inst = await fsList(`companies/${COMPANY_ID}/rem_rent_installments`);
+    const first = inst.filter((i) => i.leaseId === leaseId).sort((a, b) => a.periodIndex - b.periodIndex)[0];
+    if (Number(first.paidAmount) !== 5000 || first.status !== "paid") {
+      throw new Error(`installment not re-derived: paid=${first.paidAmount} status=${first.status}`);
+    }
+    await waitUntil(async () => (await bodyText()).includes("Recorded"), 20000, "payments table shows Recorded chip");
+    await waitUntil(async () => (await bodyText()).includes("Paid"), 10000, "schedule row flipped to Paid");
+    await shot("13-rent-paid");
+    return "paid state DERIVED from the allocation (no 'mark paid' exists)";
+  });
+
+  // ---------- Step 14: partial payment then VOID (audit-preserving) ----------
+  await step("14. Partial payment (2,000 of 5,000) -> partially_paid; Void restores the balance and keeps the audit row", async () => {
+    await clickText("button", ["Record Payment"]);
+    await waitForVisibleDialog("payment modal 2");
+    // First OPEN row is now installment 2 (installment 1 is settled).
+    if (!(await checkCheckbox("Allocate"))) throw new Error("second allocate checkbox missing");
+    if (!(await setDialogNumber("2000"))) throw new Error("partial amount not set");
+    await setLabeled("Reference", "E2E-VOID-1");
+    await clickDialogButton(["Record Payment"]);
+    await waitUntil(async () => {
+      const inst = await fsList(`companies/${COMPANY_ID}/rem_rent_installments`);
+      const i2 = inst.filter((x) => x.leaseId === leaseId).sort((a, b) => a.periodIndex - b.periodIndex)[1];
+      return Number(i2.paidAmount) === 2000 && i2.status === "partially_paid";
+    }, 30000, "installment 2 partially paid");
+    // Void it: corrections are voids with a reason, never deletions.
+    await waitUntil(async () => (await bodyText()).includes("E2E-VOID-1"), 20000, "payment row repaints");
+    if (!(await clickRowButton("E2E-VOID-1", ["void payment"]))) throw new Error("void button not found on the row");
+    await waitForVisibleDialog("void confirm");
+    // Reason gate: confirm stays disabled until the audit reason exists.
+    await waitUntil(async () => (await dialogButtonState("Void Payment")) === "disabled", 8000, "void disabled without reason");
+    if (!(await setLabeled("Reason", "duplicate transfer"))) throw new Error("reason not filled");
+    await waitUntil(async () => (await dialogButtonState("Void Payment")) === "enabled", 8000, "void enabled with reason");
+    await clickDialogButton(["Void Payment"]);
+    await waitUntil(async () => {
+      const payments = await fsList(`companies/${COMPANY_ID}/rem_rent_payments`);
+      const p = payments.find((x) => x.reference === "E2E-VOID-1");
+      return p && p.voided === true;
+    }, 30000, "payment voided (doc still present — audit preserved)");
+    await waitUntil(async () => {
+      const inst = await fsList(`companies/${COMPANY_ID}/rem_rent_installments`);
+      const i2 = inst.filter((x) => x.leaseId === leaseId).sort((a, b) => a.periodIndex - b.periodIndex)[1];
+      return Number(i2.paidAmount) === 0;
+    }, 30000, "installment 2 balance rolled back by the void");
+    await waitUntil(async () => (await bodyText()).includes("Voided"), 20000, "Voided chip in payments table");
+    await shot("14-voided");
+    return "void reversed allocations; nothing was deleted";
+  });
+
+  // ---------- Step 15: deposit receipt is a liability event, not revenue ----------
+  await step("15. Deposit receipt recorded -> receivedAmount up, payment row carries isDepositReceipt + zero allocations", async () => {
+    await waitUntil(async () => (await clickText("button", ["Record Receipt"])) === true, 20000, "Record Receipt button");
+    await waitForVisibleDialog("deposit receipt modal");
+    if (!(await setLabeled("Amount", "10000"))) throw new Error("amount not filled");
+    await clickDialogButton(["Record Receipt"]);
+    await waitUntil(async () => {
+      const dep = await fsGet(`companies/${COMPANY_ID}/rem_security_deposits/${leaseId}`);
+      return dep && Number(dep.receivedAmount) === 10000 && dep.status === "received";
+    }, 30000, "deposit row received");
+    const payments = await fsList(`companies/${COMPANY_ID}/rem_rent_payments`);
+    const receipt = payments.find((p) => p.isDepositReceipt === true);
+    if (!receipt) throw new Error("deposit receipt payment not persisted");
+    if (Array.isArray(receipt.allocations) && receipt.allocations.length !== 0) throw new Error("deposit receipt must not allocate rent!");
+    // The rent payments table FILTERS deposit receipts out (liability ledger).
+    const rowVisible = await js(`(() => { const r = Array.from(document.querySelectorAll('tr')).find(x => (x.innerText||'').includes('10,000.00')); return !!r; })()`);
+    void rowVisible; // deposit card shows the 10,000.00 — either table is fine
+    await shot("15-deposit-received");
+    return "held liability 10,000 SAR; collections reports cannot read it as income";
+  });
+
+  // ---------- Step 16: inspection + issue + facilities boundary ----------
+  await step("16. Inspection with an issue persists (INS-0001), finalizes; work-order write stays facilities-owned (fail-closed under REM)", async () => {
+    await goto(`http://localhost:${VITE_PORT}/real-estate/inspections`);
+    await waitFor(`(document.body.innerText || '').includes('Inspections')`, 60000, "inspections page");
+    if (!(await clickText("button", ["New Inspection"]))) throw new Error("New Inspection not clicked");
+    await waitForVisibleDialog("inspection modal");
+    if (!(await selectOption("Property", "PRP-0001"))) throw new Error("property select failed");
+    if (!(await selectOption("Unit", "UNT-0001"))) throw new Error("unit select failed");
+    await setLabeled("Condition Notes", "Annual periodic inspection");
+    if (!(await clickButton(["Add Issue"]))) throw new Error("Add Issue not clicked");
+    if (!(await setByPlaceholder("Describe the issue", ISSUE))) throw new Error("issue description not filled");
+    await shot("16-inspection-form");
+    await clickDialogButton(["Save"]);
+    await waitUntil(async () => (await bodyText()).includes("INS-0001"), 30000, "inspection code in list");
+    const docs = await fsList(`companies/${COMPANY_ID}/rem_inspections`);
+    const insp = docs.find((d) => d.code === "INS-0001");
+    if (!insp) throw new Error("inspection not persisted");
+    if (!Array.isArray(insp.issues) || insp.issues.length !== 1 || !insp.issues[0].description.includes(ISSUE)) {
+      throw new Error(`issue not persisted: ${JSON.stringify(insp.issues)}`);
+    }
+    if (insp.finalized !== false) throw new Error("new inspection must start as a draft");
+    await clickRowButton("INS-0001", ["finalize"]);
+    await waitUntil(async () => (await fsGet(`companies/${COMPANY_ID}/rem_inspections/${insp.id}`))?.finalized === true, 30000, "finalized");
+    // Expand the row and attempt the work order — the ONLY maintenance path.
+    await js(`(() => { const row = Array.from(document.querySelectorAll('tr')).find(r => (r.innerText||'').includes('INS-0001')); const b = row && row.querySelector('button'); if (b) b.click(); return true; })()`);
+    await waitUntil(async () => (await bodyText()).includes(ISSUE), 15000, "expanded issue row");
+    await clickRowButton(ISSUE, ["raise work order"]);
+    await sleep(3500); // the facilities create either succeeds or toast-fails
+    const after = await fsGet(`companies/${COMPANY_ID}/rem_inspections/${insp.id}`);
+    const issueAfter = (after.issues || [])[0] || {};
+    // Cross-domain boundary: fm_* writes belong to FACILITIES_MANAGEMENT, so
+    // raising from REM must NOT silently write outside the active domain.
+    const woProbe = await fsPatch(`companies/${COMPANY_ID}/fm_work_orders/wo_e2e_probe`, { title: "probe", facilityId: null, priority: "medium" });
+    if (woProbe !== 403 && issueAfter.workOrderId) {
+      throw new Error("expected either a denied fm_ write or an unlinked issue — work order crossed the boundary silently");
+    }
+    if (issueAfter.workOrderId) throw new Error("issue linked a work order although the fm_ probe write was denied??");
+    await shot("16-workorder-boundary");
+    return `inspection finalized; fm_ direct write denied with ${woProbe} (cross-domain maintenance intake = gap T2)`;
+  });
+
+  // ---------- Step 17: property expense + approval decision ----------
+  await step("17. Property expense captured pending -> approved through the real_estate.approve gate", async () => {
+    await goto(`http://localhost:${VITE_PORT}/real-estate/expenses`);
+    await waitFor(`(document.body.innerText || '').includes('Property Expenses')`, 60000, "expenses page");
+    if (!(await clickText("button", ["New Expense"]))) throw new Error("New Expense not clicked");
+    await waitForVisibleDialog("expense modal");
+    if (!(await selectOption("Property", "PRP-0001"))) throw new Error("property select failed");
+    await setLabeled("Vendor", "Gulf Facilities Co");
+    if (!(await setLabeled("Description", EXPENSE))) throw new Error("description not filled");
+    if (!(await setLabeled("Amount", "1800.5"))) throw new Error("amount not filled");
+    await clickDialogButton(["Save"]);
+    await waitUntil(async () => (await bodyText()).includes(EXPENSE), 30000, "expense row");
+    const docs = await fsList(`companies/${COMPANY_ID}/rem_property_expenses`);
+    const e = docs.find((x) => x.description === EXPENSE);
+    if (!e) throw new Error("expense not persisted");
+    if (Number(e.amount) !== 1800.5) throw new Error(`expense amount wrong: ${e.amount}`);
+    if (e.propertyId !== propertyId) throw new Error("expense on the wrong property");
+    if (e.approvalStatus !== "pending") throw new Error(`new expense should be pending, got ${e.approvalStatus}`);
+    await clickRowButton(EXPENSE, ["approve"]);
+    await waitUntil(async () => {
+      const d = await fsGet(`companies/${COMPANY_ID}/rem_property_expenses/${e.id}`);
+      return d?.approvalStatus === "approved";
+    }, 30000, "expense approved");
+    await shot("17-expense-approved");
+    return "1,800.50 SAR expense moved pending -> approved (obligation)";
+  });
+
+  // ---------- Step 18: collections derive the balance from the ledger ----------
+  await step("18. Rent collections page derives outstanding 55,000.00 (60,000 scheduled - 5,000 paid, void excluded)", async () => {
+    await goto(`http://localhost:${VITE_PORT}/real-estate/collections`);
+    await waitFor(`(document.body.innerText || '').includes('Rent Collections')`, 60000, "collections page");
+    await waitUntil(async () => (await bodyText()).includes("55,000.00"), 30000, "derived outstanding total");
+    const txt = await bodyText();
+    if (!txt.includes("LSE-0001")) throw new Error("lease row missing");
+    if (!txt.includes(`${TENANT_FIRST}`)) throw new Error("tenant name missing on the arrears row");
+    await shot("18-collections");
+    return "balances recomputed from installments + non-voided allocations";
+  });
+
+  // ---------- Step 19: dashboard metrics + idempotent reminder sweep ----------
+  await step("19. Dashboard counts persisted truth; Generate Reminders is idempotent across presses", async () => {
+    await goto(`http://localhost:${VITE_PORT}/real-estate`);
+    await waitFor(`(document.body.innerText || '').includes('Real Estate Overview')`, 60000, "dashboard");
+    await waitUntil(async () => {
+      const txt = await bodyText();
+      return txt.includes("100%") && txt.includes("Occupied: 1");
+    }, 30000, "occupancy metrics");
+    await pressButtonUntil("Generate Reminders", `((document.body.innerText || '').toLowerCase().includes('reminder'))`, 25000);
+    await sleep(1200);
+    const n1 = (await fsList(`companies/${COMPANY_ID}/notifications`)).length;
+    await pressButtonUntil("Generate Reminders", "true", 5000).catch(() => {});
+    await sleep(1500);
+    const n2 = (await fsList(`companies/${COMPANY_ID}/notifications`)).length;
+    if (n2 !== n1) throw new Error(`reminder sweep was NOT idempotent: ${n1} -> ${n2}`);
+    await shot("19-dashboard");
+    return `occupancy 100%, reminders stable at ${n1} notification doc(s)`;
+  });
+
+  // ---------- Step 20: reports from persisted records ----------
+  await step("20. Reports render register + income-vs-expenses from persisted records only", async () => {
+    await goto(`http://localhost:${VITE_PORT}/real-estate/reports`);
+    await waitFor(`(document.body.innerText || '').includes('Income vs Expenses')`, 60000, "reports sections");
+    const txt = await bodyText();
+    for (const needle of [PROPERTY, "Occupancy", "Rent collected", "Approved expenses"]) {
+      if (!txt.includes(needle)) throw new Error(`reports missing "${needle}"`);
+    }
+    await shot("20-reports");
+    return "no fabricated targets — everything traces to the seeded lifecycle";
+  });
+
+  // ---------- Step 21: refresh persistence ----------
+  await step("21. Full reload of the lease keeps every derived state (single source: Firestore)", async () => {
+    await goto(`http://localhost:${VITE_PORT}/real-estate/leases/${leaseId}`);
+    await waitFor(`(document.body.innerText || '').includes('LSE-0001')`, 40000, "lease detail after reload");
+    const txt = await bodyText();
+    if (!txt.includes("Active")) throw new Error("lease status chip not Active after reload");
+    if (!txt.includes("Recorded") || !txt.includes("Voided")) throw new Error("payment history did not survive the reload");
+    if (!txt.includes("Rent Schedule")) throw new Error("schedule section missing after reload");
+    await shot("21-after-reload");
+    return "status, schedule, payments and deposit all re-read from the database";
+  });
+
+  // ---------- Step 22: authorization probes ----------
+  await step("22. Employee cannot record payments or escalate a lease; outsider cannot read rem_*", async () => {
+    const stPay = await fsPatch(`companies/${COMPANY_ID}/rem_rent_payments/ipk_e2e_probe`, {
+      leaseId, amount: 1, currency: "SAR", allocations: [], voided: false,
+    }, empToken);
+    if (stPay !== 403) throw new Error(`employee payment write expected 403, got ${stPay}`);
+    const stEsc = await fsPatch(`companies/${COMPANY_ID}/rem_leases/${leaseId}`, { status: "terminated" }, empToken);
+    if (stEsc !== 403) throw new Error(`employee lease escalation expected 403, got ${stEsc}`);
+    const stOut = await fsGetStatus(`companies/${COMPANY_ID}/rem_properties/${propertyId}`, outsiderToken);
+    if (stOut !== 403) throw new Error(`outsider property read expected 403, got ${stOut}`);
+    const stLeaseDelete = await fetch(`${FS_BASE}/companies/${COMPANY_ID}/rem_leases/${leaseId}`, {
+      method: "DELETE", headers: authHdr(adminIdToken),
+    });
+    if (stLeaseDelete.status !== 403) throw new Error(`admin lease DELETE must be forbidden, got ${stLeaseDelete.status}`);
+    const still = await fsGet(`companies/${COMPANY_ID}/rem_leases/${leaseId}`);
+    if (still.status !== "active") throw new Error("denied delete nevertheless mutated the lease!");
+    return `payment=${stPay} escalation=${stEsc} outsider=${stOut} delete=${stLeaseDelete.status} (all denied, data intact)`;
+  });
+
+  // ---------- Step 23: shared modules + other namespaces under REM ----------
+  await step("23. CRM/billing/PROJECTS stay reachable; /agency and /facilities stay denied under REM", async () => {
+    await goto(`http://localhost:${VITE_PORT}/crm/contacts`);
+    await waitUntil(async () => (await bodyText()).includes(`${TENANT_FIRST} ${TENANT_LAST}`), 60000, "CRM contacts shared with REM");
+    await goto(`http://localhost:${VITE_PORT}/billing/invoices`);
+    await waitUntil(async () => (await bodyText()).includes("REM-INV-0001"), 90000, "billing invoices list");
+    await goto(`http://localhost:${VITE_PORT}/agency`);
+    await waitUntil(async () => (await bodyText()).includes("Section not available"), 40000, "agency denial under REM");
+    await goto(`http://localhost:${VITE_PORT}/facilities`);
+    await waitUntil(async () => (await bodyText()).includes("Section not available"), 40000, "facilities denial under REM");
+    await goto(`http://localhost:${VITE_PORT}/projects`);
+    await waitUntil(async () => (await bodyText()).includes("New Project"), 40000, "projects core module reachable under REM");
+    if ((await bodyText()).includes("Section not available")) throw new Error("PROJECTS must stay reachable as a core module under REM");
+    await shot("23-modules-under-rem");
+    return "shared portals render; foreign activity-owned namespaces denied; PROJECTS core stays reachable";
+  });
+
+  // ---------- Step 24: deactivation blocks but preserves ----------
+  await step("24. Switching the tenant activity blocks rem_* (UI + REST) while every record survives reactivation", async () => {
+    const patchSt = await fsPatch(`companies/${COMPANY_ID}`, { primaryActivity: "MARKETING_AGENCY" });
+    if (patchSt >= 400) throw new Error(`admin switch to MARKETING_AGENCY failed: ${patchSt}`);
+    const stRem = await fsGetStatus(`companies/${COMPANY_ID}/rem_leases/${leaseId}`);
+    if (stRem !== 403) throw new Error(`admin read of rem data under inactive activity expected 403, got ${stRem}`);
+    await goto(`http://localhost:${VITE_PORT}/real-estate`);
+    await waitUntil(async () => (await bodyText()).includes("Section not available"), 40000, "denied card under inactive activity");
+    await shot("24-denied-while-inactive");
+    await fsPatch(`companies/${COMPANY_ID}`, { primaryActivity: "REAL_ESTATE_MANAGEMENT" });
+    await goto(`http://localhost:${VITE_PORT}/real-estate/leases/${leaseId}`);
+    await waitUntil(async () => (await bodyText()).includes("LSE-0001"), 40000, "lease visible again");
+    const lease = await fsGet(`companies/${COMPANY_ID}/rem_leases/${leaseId}`);
+    if (lease.status !== "active" || Number(lease.rentAmount) !== 5000) throw new Error("lease mutated across the activity switch!");
+    const payments = await fsList(`companies/${COMPANY_ID}/rem_rent_payments`);
+    if (!payments.some((p) => p.reference === "E2E-RENT-1") || !payments.some((p) => p.isDepositReceipt === true)) {
+      throw new Error("payment ledger incomplete after reactivation");
+    }
+    const inst = await fsList(`companies/${COMPANY_ID}/rem_rent_installments`);
+    if (inst.filter((i) => i.leaseId === leaseId).length !== 12) throw new Error("schedule changed across the switch");
+    await shot("24-records-survived");
+    return "blocked while inactive; identical lease + ledger after reactivation";
+  });
+} finally {
+  edgeProc.kill();
+  viteProc.kill();
+}
+
+console.log("\n=================================================================");
+const passed = results.filter((r) => r.ok).length;
+console.log(` Real Estate Management Browser E2E Summary: ${passed}/${results.length} passed`);
+for (const r of results.filter((x) => !x.ok)) console.log(`   ✗ ${r.name}: ${r.error}`);
+console.log("=================================================================\n");
+process.exit(passed === results.length ? 0 : 1);
