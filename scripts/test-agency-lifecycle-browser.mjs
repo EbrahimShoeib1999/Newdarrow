@@ -1037,16 +1037,32 @@ try {
     await waitForVisibleDialog("contact form");
     if (!(await setLabeled("First Name", NOVA_FIRST))) throw new Error("first name not filled");
     if (!(await setLabeled("Last Name", NOVA_LAST))) throw new Error("last name not filled");
-    // Individual contacts need phone OR email to pass validation.
-    if (!(await setLabeled("Primary Phone", "0500000099"))) throw new Error("phone not filled");
+    // Individual contacts need phone OR email to pass validation; provide both
+    // so a mis-targeted field cannot silently block the submit.
+    await setLabeled("Primary Phone", "0500000099");
+    await setLabeled("Email Address", "nova.retail@example.test");
     if (!(await clickTextExact(["Save Contact"]))) throw new Error("Save Contact button not found");
-    await waitUntil(async () => {
-      const rows = await fsList(`companies/${COMPANY_ID}/contacts`);
-      return rows.some((c) => (c.firstName || "").includes(NOVA_FIRST) && (c.lastName || "").includes(NOVA_LAST));
-    }, 30000, "new contact persisted to Firestore under the tenant");
+    let persisted = null;
+    try {
+      await waitUntil(async () => {
+        const rows = await fsList(`companies/${COMPANY_ID}/contacts`);
+        persisted = rows.find((c) => (c.firstName || "").includes(NOVA_FIRST) && (c.lastName || "").includes(NOVA_LAST));
+        return !!persisted;
+      }, 20000, "new contact persisted to Firestore under the tenant");
+    } catch {
+      // Surface exactly why the submit did not persist: is the dialog still
+      // open (blocked by validation) and what does it currently read?
+      const diag = await js(`(() => {
+        const isVis = ${VIS};
+        const dlg = Array.from(document.querySelectorAll('[role="dialog"]')).filter(isVis).pop();
+        const grab = (want) => { const lab = Array.from(document.querySelectorAll('label')).find(l => isVis(l) && (l.innerText||'').toLowerCase().includes(want)); if(!lab) return null; const sc = lab.closest('div'); const inp = sc && sc.querySelector('input'); return inp ? inp.value : null; };
+        return JSON.stringify({ open: !!dlg, err: dlg ? (dlg.innerText||'').replace(/\\s+/g,' ').slice(0,180) : null, first: grab('first name'), last: grab('last name'), phone: grab('primary phone'), email: grab('email address') });
+      })()`);
+      throw new Error(`contact not persisted — ${diag}`);
+    }
     await waitUntil(async () => (await bodyText()).includes(NOVA_LAST), 30000, "new contact repaints the list");
     await shot("19-client-registered");
-    return "client created through the real CRM form and persisted under the tenant";
+    return `client "${persisted.firstName} ${persisted.lastName}" created via the CRM form (id=${String(persisted.id).slice(0, 8)}…)`;
   });
 
   // ---------- Step 20: campaign detail in-context links actually navigate ----------
