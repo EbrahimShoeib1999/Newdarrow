@@ -707,15 +707,18 @@ try {
   });
 
   // ---------- Step 15: shared modules and other namespaces unaffected ----------
-  await step("15. CRM + billing still work under Facilities; /projects stays activity-denied", async () => {
+  await step("15. CRM + billing still work under Facilities; /projects stays reachable (core module)", async () => {
     await goto(`http://localhost:${VITE_PORT}/crm/contacts`);
     await waitUntil(async () => (await bodyText()).includes("Globex Trading"), 60000, "CRM contacts list");
     await goto(`http://localhost:${VITE_PORT}/billing/invoices`);
     await waitUntil(async () => (await bodyText()).includes("FM-SHARED-0001"), 90000, "billing invoices list");
     await goto(`http://localhost:${VITE_PORT}/projects`);
-    await waitUntil(async () => (await bodyText()).includes("Section not available"), 40000, "projects denial under FM");
+    // Projects is a CORE module (activity-routes.ts CORE_ROUTE_PREFIXES):
+    // intentionally reachable under every activity, never activity-denied.
+    await waitUntil(async () => (await bodyText()).includes("New Project"), 40000, "projects core module reachable under FM");
+    if ((await bodyText()).includes("Section not available")) throw new Error("PROJECTS must stay reachable as a core module under Facilities");
     await shot("15-shared-modules-ok");
-    return "CRM/billing render; PROJECTS namespace correctly denied (not a crash)";
+    return "CRM/billing render; PROJECTS core module stays reachable";
   });
 } finally {
   edgeProc.kill();
