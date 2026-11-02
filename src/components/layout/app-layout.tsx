@@ -7,6 +7,7 @@ import { AssistantLauncher } from "@/features/assistant/components/AssistantLaun
 import { useAutomationScanner } from "@/features/automation/hooks/use-automation-scanner";
 import { useSyncLastPortal } from "@/features/portals/hooks/use-sync-last-portal";
 import { useRecordNavOrigin } from "@/features/portals/hooks/use-record-nav-origin";
+import { useNavHistory } from "@/features/portals/hooks/use-nav-history";
 import { useMeetingReminders } from "@/features/meetings/hooks/use-meeting-reminders";
 import { getPortalFromPath } from "@/lib/portal-permissions";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,9 @@ export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
   // Central smart-back origin tracker: observes every in-app PUSH so the
   // registry-driven BackBar knows where the user came from (Phase 6b §4B).
   useRecordNavOrigin();
+  // Global Back/Forward history mirror — mounted ONCE here (the shell every
+  // protected page renders through) and passed to the header controls.
+  const navHistory = useNavHistory();
   useMeetingReminders();
   useAutomationScanner();
   const { pathname } = useLocation();
@@ -45,6 +49,7 @@ export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
         <Header
           hasPortalSidebar={showSidebar}
           sidebarCollapsed={sidebarCollapsed}
+          navHistory={navHistory}
         />
         <main
           className={cn(

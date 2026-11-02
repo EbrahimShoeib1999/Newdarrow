@@ -2,6 +2,7 @@
   "appName": "D-Arrow Business",
   "nav": {
     "breadcrumbs": "Breadcrumb navigation",
+    "history": "Navigation history",
     "dashboard": "Dashboard",
     "crm": "CRM",
     "projects": "Projects",
@@ -130,6 +131,7 @@
     "reset": "Reset",
     "confirm": "Confirm",
     "back": "Back",
+    "forward": "Forward",
     "loading": "Loading...",
     "noResults": "No results found",
     "viewAll": "View All",

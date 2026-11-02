@@ -19,6 +19,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
 import { Button } from "@heroui/react";
+import { hasRealBackHistory } from "@/lib/navigation-history";
 import {
   buildBreadcrumbChain,
   getLastInAppOrigin,
@@ -83,7 +84,17 @@ export function BackBar() {
   // came from in an effect that runs AFTER this component renders, so a render
   // snapshot would always be one navigation behind (and would fall back to the
   // registry parent on the very first render of a newly opened page).
-  const goBack = () => navigate(resolveSmartBackTarget(pathname, getLastInAppOrigin(), access));
+  // True history wins whenever the shell mirrored a real in-app previous
+  // entry (global Back/Forward, same visit order across portals); the smart
+  // registry fallback only answers direct entry / refresh, where no history
+  // exists to walk.
+  const goBack = () => {
+    if (hasRealBackHistory()) {
+      navigate(-1);
+      return;
+    }
+    navigate(resolveSmartBackTarget(pathname, getLastInAppOrigin(), access));
+  };
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="back-bar" data-bar-mode={rule.bar}>

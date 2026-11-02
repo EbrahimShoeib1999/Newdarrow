@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 import { initialsFromName, localizedName } from "@/lib/localized-name";
 import { avatarSrc } from "@/lib/image-utils";
 import { MobileSidebar } from "./mobile-sidebar";
+import { NavHistoryControls } from "./nav-history-controls";
+import type { useNavHistory } from "@/features/portals/hooks/use-nav-history";
 import { Logo } from "../shared/logo";
 import { useNavigate } from "react-router-dom";
 import { TimeTrackerWidget } from "@/features/people/components/TimeTrackerWidget";
@@ -33,9 +35,11 @@ import { useAttendanceTimer } from "@/features/people/hooks/use-attendance-timer
 export function Header({
   hasPortalSidebar = false,
   sidebarCollapsed = false,
+  navHistory,
 }: {
   hasPortalSidebar?: boolean;
   sidebarCollapsed?: boolean;
+  navHistory?: ReturnType<typeof useNavHistory>;
 }) {
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
@@ -64,6 +68,9 @@ export function Header({
     >
       {/* Start side controls */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Global history Back/Forward — walks the real visit order. */}
+        {navHistory && <NavHistoryControls history={navHistory} />}
+
         {/* System / Portal Picker button */}
         <Tooltip content={t("portals.switchPortal", "اختر النظام")}>
           <Button
