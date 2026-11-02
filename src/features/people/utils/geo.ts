@@ -6,6 +6,7 @@ export type AttendanceGeoCode =
   | "unavailable"
   | "timeout"
   | "not_assigned"
+  | "location_inactive"
   | "outside"
   | "no_employee";
 
@@ -229,6 +230,60 @@ export function isOpenSessionForDay(
 }
 
 /**
+ * Employment gate: only live records may open a shift. 'onboarding' and
+ * (unknown/legacy) statuses stay eligible — blocking them would lock out
+ * hires the current flows already allow to punch.
+ */
+export function isEmploymentActive(status?: string | null): boolean {
+  return status !== "terminated" && status !== "suspended";
+}
+
+/** Stable reason codes for "why can't this employee start?". */
+export type CheckInBlockCode =
+  | "employment_inactive"
+  | "location_not_assigned"
+  | "location_inactive";
+
+/**
+ * Pure pre-click readiness: explains a blocked start INSTEAD of silently
+ * hiding or disabling the control. Mirrors captureAttendanceGeo's decisions
+ * exactly (same remote-authorization and mode precedence) so the explanation
+ * never contradicts what the click path enforces.
+ * `knownLocations` is the company's work-location list when it could be read;
+ * null means "unknown" — dangling/inactive references then stay silent here
+ * and the click path reports them as an actionable error.
+ */
+export function resolveCheckInBlockReason(
+  employee:
+    | Pick<
+        Employee,
+        "status" | "workType" | "allowRemoteTimer" | "attendanceCheckMode" | "attendanceLocationIds"
+      >
+    | null
+    | undefined,
+  knownLocations: { id: string; isActive?: boolean }[] | null
+): CheckInBlockCode | null {
+  if (!employee) return null;
+  if (!isEmploymentActive(employee.status)) return "employment_inactive";
+  const remoteAuthorized =
+    employee.workType === "remote" || employee.allowRemoteTimer === true;
+  const mode =
+    employee.attendanceCheckMode ?? (remoteAuthorized ? "flexible" : "geofence");
+  if (mode === "flexible" || remoteAuthorized) return null;
+  const ids = employee.attendanceLocationIds ?? [];
+  if (ids.length === 0) return "location_not_assigned";
+  if (
+    knownLocations != null &&
+    !ids.some((id) =>
+      knownLocations.some((l) => l.id === id && l.isActive !== false)
+    )
+  ) {
+    return "location_inactive";
+  }
+  return null;
+}
+
+/**
  * Coarse class of a timer failure, resolved from the error's own stable
  * identifiers — never from the message string. Keeping the auth/authorization
  * distinction here prevents a Firestore write fault from being presented as a
@@ -238,6 +293,8 @@ export type AttendanceErrorClass =
   | "gps_denied"
   | "gps_unavailable"
   | "location_not_assigned"
+  | "location_inactive"
+  | "employment_inactive"
   | "outside"
   | "session_expired"
   | "action_forbidden"
@@ -249,6 +306,7 @@ export function classifyAttendanceError(error: unknown): AttendanceErrorClass {
     if (error.code === "permission_denied") return "gps_denied";
     if (error.code === "unavailable" || error.code === "timeout") return "gps_unavailable";
     if (error.code === "not_assigned") return "location_not_assigned";
+    if (error.code === "location_inactive") return "location_inactive";
     if (error.code === "outside") return "outside";
     return "write_failed";
   }
@@ -260,5 +318,7 @@ export function classifyAttendanceError(error: unknown): AttendanceErrorClass {
   if (code === "unauthenticated") return "session_expired";
   if (code === "permission-denied") return "action_forbidden";
   if (code === "unavailable") return "network_unavailable";
+  // The service-side employment gate throws with this stable code.
+  if (code === "employment_inactive") return "employment_inactive";
   return "write_failed";
 }

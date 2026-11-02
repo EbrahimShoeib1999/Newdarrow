@@ -58,6 +58,7 @@ function emptyDraft(): CreateLatenessPolicyDTO {
     thresholds: [{ id: "t1", afterMinutes: 480, action: { kind: "warning" }, automatic: true }],
     thresholdMode: "cumulative",
     workingDaysPerMonth: 26,
+    hoursPerDeductionDay: null,
     maxMonthlyDeductionAmount: 0,
     maxMonthlyDeductionGrossFraction: 0,
     legalBasis: null,
@@ -66,19 +67,22 @@ function emptyDraft(): CreateLatenessPolicyDTO {
   };
 }
 
-/** The spec's example — as an EDITABLE DRAFT, seeded only on explicit click. */
+/** The approved example — as an EDITABLE DRAFT, seeded only on explicit click. */
 function exampleDraft(): CreateLatenessPolicyDTO {
   const d = emptyDraft();
   return {
     ...d,
-    name: "24h → 3 days (internal example)",
+    name: "24h → 3 days (approved 8h rule)",
     description: "Experimental internal policy — requires legal review before posting.",
+    // The approved conversion drives the days from the canonical accumulation;
+    // t2 fires at 24 accumulated late hours → 24h / 8h = 3 deduction days.
+    hoursPerDeductionDay: 8,
     thresholds: [
       { id: "t1", afterMinutes: 480, action: { kind: "warning" }, automatic: true },
       {
         id: "t2",
         afterMinutes: 1440,
-        action: { kind: "propose_deduction", deductionDays: 3, basis: "calendar_30" },
+        action: { kind: "propose_deduction", deductionDays: null, basis: "calendar_30" },
         automatic: false,
       },
     ],
@@ -152,6 +156,11 @@ export default function LatenessPoliciesPage() {
                 </TableCell>
                 <TableCell className="text-xs tabular-nums text-default-500">
                   {p.thresholds.map((th) => `${Math.round(th.afterMinutes / 60)}h ${t(`policy.action_${th.action.kind}`)}`).join(" · ")}
+                  {p.hoursPerDeductionDay != null && p.hoursPerDeductionDay > 0 && (
+                    <div className="mt-0.5 text-primary font-semibold">
+                      {t("policy.conversion_suffix", { hours: p.hoursPerDeductionDay })}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className="text-xs tabular-nums">
                   {p.maxMonthlyDeductionAmount > 0 ? `${p.maxMonthlyDeductionAmount}/mo` : "—"}
@@ -286,6 +295,15 @@ function PolicyEditorModal({ draft, onClose }: { draft: LatenessPolicy | CreateL
                 onValueChange={(v) => setForm({ ...form, maxMonthlyDeductionGrossFraction: Number(v) || 0 })}
                 className="max-w-[320px]"
               />
+              <div className="max-w-[420px]">
+                <Input
+                  type="number"
+                  label={t("policy.field_hours_per_deduction_day")}
+                  value={form.hoursPerDeductionDay == null ? "" : String(form.hoursPerDeductionDay)}
+                  onValueChange={(v) => setForm({ ...form, hoursPerDeductionDay: v === "" ? null : Number(v) || 0 })}
+                />
+                <p className="text-[11px] text-default-400 font-medium mt-1">{t("policy.conversion_note")}</p>
+              </div>
 
               <div>
                 <div className="flex items-center justify-between mb-2">

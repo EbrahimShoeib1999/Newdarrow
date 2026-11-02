@@ -56,5 +56,9 @@ export function taxOptionLabel(
   t: TFunction,
   tax: { id: string; name: string; rate: number }
 ): string {
-  return `${taxLabel(t, tax)} (${tax.rate}%)`;
+  const label = taxLabel(t, tax);
+  const suffix = `(${tax.rate}%)`;
+  // Avoid doubling if the translated label already ends with the rate in parens
+  if (label.endsWith(suffix)) return label;
+  return `${label} (${tax.rate}%)`;
 }

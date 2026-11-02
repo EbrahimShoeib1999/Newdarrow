@@ -184,6 +184,39 @@ await check("employee: addDoc attendance check-in payload", async () => {
   );
 });
 
+// Phase-1 acceptance: an employee MUST NOT be able to start a shift for a
+// colleague. The rule uses employeeAccountUid(employeeId)==uid AND (userId
+// empty || userId==uid). e2's employee doc has userId="e2-uid" so neither
+// variant can succeed under EMP_UID.
+await check("employee: CANNOT create attendance for a colleague (via employeeId)", async () => {
+  await assertFails(
+    addDoc(attendanceCol, {
+      employeeId: "e2",
+      date: new Date().toISOString().split("T")[0],
+      checkIn: serverTimestamp(),
+      status: "present",
+      lateMinutes: 0,
+      deductionMinutes: 0,
+      createdAt: serverTimestamp(),
+    })
+  );
+});
+
+await check("employee: CANNOT stamp own userId onto a colleague's employeeId", async () => {
+  await assertFails(
+    addDoc(attendanceCol, {
+      employeeId: "e2",
+      userId: EMP_UID,
+      date: new Date().toISOString().split("T")[0],
+      checkIn: serverTimestamp(),
+      status: "present",
+      lateMinutes: 0,
+      deductionMinutes: 0,
+      createdAt: serverTimestamp(),
+    })
+  );
+});
+
 // ================= work schedules / attendance / deduction cases ============
 // The hr_* boundary + attendance ownership rules introduced with the schedule
 // & lateness feature. Seeded fixtures (rules disabled — SETUP only):

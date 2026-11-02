@@ -20,6 +20,7 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
     isReportModalOpen,
     setReportModalOpen,
     syncError,
+    checkInBlockReason,
     retrySync,
     handleCheckIn,
     handleTakeBreak,
@@ -30,6 +31,23 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
 
   const isCheckedIn = !!todayAttendance && !todayAttendance.checkOut && !isOnBreak;
   const totalDisplaySeconds = accumulatedSeconds + liveSeconds;
+
+  // A blocked start is EXPLAINED, never silently hidden or disabled: the
+  // reason comes from this employee's actual employment configuration
+  // (computed during sync), shown while idle and gone once a shift runs.
+  const blockCopyKey = checkInBlockReason
+    ? `time_tracker.block_${checkInBlockReason}`
+    : null;
+  const showBlockNotice = !!blockCopyKey && !isCheckedIn && !isOnBreak && !syncError;
+  const blockBanner = showBlockNotice ? (
+    <div
+      role="alert"
+      className="flex items-center gap-2 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-warning-700 dark:text-warning"
+    >
+      <AlertTriangle size={16} className="shrink-0" />
+      <span className="font-semibold">{t(blockCopyKey!)}</span>
+    </div>
+  ) : null;
 
   // A failed initialization is an explicit, recoverable error — not a silent
   // "off-duty" state. This keeps a permission/tenant/network fault from being
@@ -74,10 +92,24 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
     </div>
   ) : null;
 
+  // Same explanation in the navbar's inline footprint — a compact chip.
+  const blockChip = showBlockNotice ? (
+    <div
+      role="alert"
+      className="flex items-center gap-2 rounded-full border border-warning/40 bg-warning/10 px-3 py-1.5 text-warning-700 dark:text-warning"
+    >
+      <AlertTriangle size={14} className="shrink-0" />
+      <span className="text-[10px] sm:text-[11px] font-bold whitespace-nowrap">
+        {t(blockCopyKey!)}
+      </span>
+    </div>
+  ) : null;
+
   if (variant === "full") {
     return (
       <div className="space-y-3">
         {syncErrorBanner}
+        {blockBanner}
       <div className="bg-primary/5 p-6 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6 md:gap-10 rounded-3xl">
         {/* Timer Section */}
         <div className="flex items-center gap-6">
@@ -198,6 +230,7 @@ export function TimeTrackerWidget({ variant = "compact" }: TimeTrackerWidgetProp
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
       className="space-y-2"
     >
+      {blockChip}
       {syncError ? (
         syncErrorChip
       ) : (

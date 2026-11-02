@@ -212,6 +212,13 @@ export interface LatenessPolicy {
   thresholdMode: ThresholdMode;
   /** Denominator when a threshold uses the working_days basis. */
   workingDaysPerMonth: number;
+  /**
+   * Approved accumulation→day conversion: how many accumulated LATE HOURS
+   * equal one deduction day (the approved company rule is 8 ⇒ 24h → 3 days).
+   * NULL/absent keeps the historical fixed `deductionDays` behavior — the
+   * conversion is never silently applied to a policy that does not state it.
+   */
+  hoursPerDeductionDay?: number | null;
   /** Hard monthly cap per employee, in currency units (0 = no cap configured). */
   maxMonthlyDeductionAmount: number;
   /** Cap as a fraction of monthly gross (0 = none). Never claims legal validity. */
@@ -266,6 +273,8 @@ export interface CasePolicySnapshot {
   action: LatenessThreshold["action"];
   thresholdMode: ThresholdMode;
   workingDaysPerMonth: number;
+  /** Frozen conversion ratio at case creation (8 = approved 8h → 1 day rule). */
+  hoursPerDeductionDay?: number | null;
   legalBasisPresent: boolean;
   currency: string;
 }

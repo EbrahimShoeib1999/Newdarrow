@@ -41,6 +41,7 @@
     "test:map-user": "npx tsx scripts/test-map-user-profile.ts",
     "test:invite-delivery": "npx tsx scripts/test-invite-delivery.ts",
     "test:attendance-authz": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project attendance-authz-check \"node scripts/test-attendance-authz.mjs\"",
+    "test:phase5-config": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project phase5-config-check \"npx tsx scripts/test-phase5-config.ts\"",
     "test:registration-visibility": "npx -y firebase-tools@13.35.1 emulators:exec --only auth,firestore --project registration-visibility-check \"node scripts/test-registration-visibility.mjs\"",
     "test:attendance-config-parity": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project attendance-parity-check \"node scripts/test-attendance-config-parity.mjs\"",
     "test:realtime-list-gate": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project realtime-list-gate-check \"node scripts/test-realtime-list-gate.mjs\"",

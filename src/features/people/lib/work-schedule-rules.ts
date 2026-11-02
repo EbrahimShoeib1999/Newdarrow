@@ -571,6 +571,59 @@ export function accumulateMonth(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Monthly lateness → deduction-day conversion (approved 8h = 1 day rule)      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The approved company conversion: 8 ACCUMULATED LATE HOURS equal one
+ * deduction day (24h → 3 days). The value is a policy EDITABLE (`hoursPerDeductionDay`)
+ * so a tenant can state a different approved ratio; this constant is only the
+ * documented default — policies without an explicit conversion keep their
+ * legacy fixed `deductionDays` behavior and are never silently re-based.
+ */
+export const LATE_HOURS_PER_DEDUCTION_DAY = 8;
+
+export interface LateDeductionConversion {
+  /** Minutes of accumulated lateness that make one full day. */
+  minutesPerDay: number;
+  totalMinutes: number;
+  /** Accumulated lateness in hours (2-dp, never rounded up to whole hours). */
+  totalHours: number;
+  /**
+   * Exact fractional days for payroll: totalMinutes / minutesPerDay, 2-dp.
+   * The payroll model multiplies a daily rate, so fractions are preserved —
+   * the conversion NEVER rounds up to a full day.
+   */
+  deductionDays: number;
+  /** Whole days for the transparent breakdown (floor, no rounding up). */
+  fullDays: number;
+  /** Minutes beyond the last whole day — the carry shown to HR/payroll. */
+  remainingMinutes: number;
+}
+
+/**
+ * Pure conversion of the CANONICAL accumulated minutes (from
+ * {@link accumulateMonth} — never a separately calculated UI value) into
+ * deduction days using the hours-per-day rule, preserving the remainder.
+ */
+export function lateDeductionConversion(
+  totalMinutes: number,
+  hoursPerDay: number = LATE_HOURS_PER_DEDUCTION_DAY
+): LateDeductionConversion {
+  const perDay = Math.max(1, Math.round((Number(hoursPerDay) || LATE_HOURS_PER_DEDUCTION_DAY) * 60));
+  const mins = Math.max(0, Math.round(Number(totalMinutes) || 0));
+  const fullDays = Math.floor(mins / perDay);
+  return {
+    minutesPerDay: perDay,
+    totalMinutes: mins,
+    totalHours: round2(mins / 60),
+    deductionDays: round2(mins / perDay),
+    fullDays,
+    remainingMinutes: mins - fullDays * perDay,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Threshold evaluation                                                        */
 /* -------------------------------------------------------------------------- */
 
@@ -626,6 +679,14 @@ export interface DeductionAmountInput {
   alreadyCommitted: number;
   maxMonthlyDeductionAmount: number;
   maxMonthlyDeductionGrossFraction: number;
+  /**
+   * The canonical monthly accumulation for the employee+period. Present ONLY
+   * together with `hoursPerDeductionDay` below, and ONLY then does the
+   * approved conversion replace the threshold's fixed days.
+   */
+  accumulatedMinutes?: number;
+  /** Policy-stated conversion (8 = the approved 8h → 1 day rule). Null/0 ⇒ legacy fixed days. */
+  hoursPerDeductionDay?: number | null;
 }
 
 export interface DeductionAmountResult {
@@ -661,7 +722,15 @@ export function computeDeductionAmount(input: DeductionAmountInput): DeductionAm
     dailyRate = null;
     amount = round2(input.monthlyGross * frac);
   } else {
-    days = Math.max(0, action.deductionDays ?? 0);
+    // Approved conversion wins when the POLICY explicitly states it: days are
+    // derived from the canonical accumulation (fractional, never rounded up).
+    // Without it the threshold's fixed days keep the historical behavior.
+    const converted =
+      (input.hoursPerDeductionDay ?? 0) > 0 &&
+      Number.isFinite(input.accumulatedMinutes)
+        ? lateDeductionConversion(input.accumulatedMinutes!, input.hoursPerDeductionDay!).deductionDays
+        : null;
+    days = converted != null ? converted : Math.max(0, action.deductionDays ?? 0);
     dailyRate = dailyWageRate(input.monthlyGross, action.basis ?? "calendar_30", input.workingDaysPerMonth);
     amount = round2(dailyRate * days);
   }
@@ -747,7 +816,11 @@ export function validatePolicyDraft(p: Partial<LatenessPolicy>): FieldError[] {
           const f = t.action.fraction ?? 0;
           if (f <= 0 || f > 1) errors.push({ field: `thresholds.${i}.action.fraction`, messageKey: "policy.validation.fraction" });
         } else {
-          if (!(t.action.deductionDays != null && t.action.deductionDays > 0)) {
+          // When the policy states the accumulation→day conversion, days are
+          // derived from the canonical month — the threshold may leave them
+          // blank instead of pinning a contradicting fixed value.
+          const conversionStated = (p.hoursPerDeductionDay ?? 0) > 0;
+          if (!conversionStated && !(t.action.deductionDays != null && t.action.deductionDays > 0)) {
             errors.push({ field: `thresholds.${i}.action.deductionDays`, messageKey: "policy.validation.days" });
           }
           if (!t.action.basis) errors.push({ field: `thresholds.${i}.action.basis`, messageKey: "policy.validation.basis" });
@@ -762,6 +835,14 @@ export function validatePolicyDraft(p: Partial<LatenessPolicy>): FieldError[] {
   }
   if ((p.workingDaysPerMonth ?? 26) < 1 || (p.workingDaysPerMonth ?? 26) > 31) {
     errors.push({ field: "workingDaysPerMonth", messageKey: "policy.validation.workingDays" });
+  }
+  // The accumulation→day conversion is opt-in: when stated it must be sane
+  // (0 < hours ≤ 24). Absent/null keeps the legacy fixed-days behavior.
+  if (p.hoursPerDeductionDay != null) {
+    const h = Number(p.hoursPerDeductionDay);
+    if (!Number.isFinite(h) || h <= 0 || h > 24) {
+      errors.push({ field: "hoursPerDeductionDay", messageKey: "policy.validation.hoursPerDeductionDay" });
+    }
   }
   return errors;
 }

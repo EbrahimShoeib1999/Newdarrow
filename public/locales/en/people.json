@@ -343,7 +343,10 @@
     "productivity_mode": "High Productivity Mode",
     "sync_error_permission": "You don't have permission to load your attendance for this company.",
     "sync_error_generic": "Couldn't load your attendance session. Check your connection and retry.",
-    "sync_retry": "Retry"
+    "sync_retry": "Retry",
+    "block_employment_inactive": "Shift start is blocked: this employment record is inactive (terminated or suspended).",
+    "block_location_not_assigned": "Shift start is blocked: no work location is assigned for the office check-in yet — ask HR to assign one.",
+    "block_location_inactive": "Shift start is blocked: the assigned work location was removed or deactivated — ask HR to update the assignment."
   },
   "departments": {
     "Engineering": "Engineering",
@@ -433,6 +436,8 @@
     "gps_denied": "Location permission is required to check in. Allow GPS and try again.",
     "gps_unavailable": "Could not read your GPS location. Try again near the workplace.",
     "location_not_assigned": "No attendance location is assigned to you. Ask your manager to set it.",
+    "location_inactive": "Your assigned work location was removed or deactivated. Ask HR to update the assignment before starting a shift.",
+    "employment_inactive": "Your employment record is not active, so you cannot start a shift. Contact HR.",
     "outside_location": "You are outside {{name}} ({{distance}} m away, allowed {{radius}} m).",
     "late_checkin": "You checked in {{minutes}} min late.",
     "late_checkin_deducted": "You checked in {{minutes}} min late — this occurrence will be deducted from your pay.",
@@ -701,6 +706,9 @@
     "field_working_days_per_month": "Working days / month",
     "field_cap_amount": "Monthly cap per employee (amount, 0 = none)",
     "field_cap_fraction": "Monthly cap (% of gross, 0–1, 0 = none)",
+    "field_hours_per_deduction_day": "Accumulated late hours = 1 deduction day (approved rule: 8; empty = fixed days)",
+    "conversion_note": "When set, deduction days are derived from the month's canonical accumulated lateness (e.g. 24h → 3 days at 8h/day). Fractions and remainder are preserved — never rounded up.",
+    "conversion_suffix": "{{hours}}h late = 1 deduction day",
     "field_thresholds": "Thresholds",
     "btn_add_threshold": "Add threshold",
     "field_legal_basis": "Legal / contractual basis text",
@@ -739,7 +747,8 @@
       "duplicateId": "Threshold IDs must be unique within the policy",
       "employeeRequired": "Select an employee",
       "departmentRequired": "Select a department",
-      "noGrossOnRecord": "No salary on record — filed as a review item, no amount was invented"
+      "noGrossOnRecord": "No salary on record — filed as a review item, no amount was invented",
+      "hoursPerDeductionDay": "Hours per deduction day must be greater than 0 and at most 24"
     }
   },
   "cases": {
@@ -749,6 +758,7 @@
     "evaluate_title": "Evaluate an employee's month (idempotent — re-running creates no duplicates)",
     "btn_evaluate": "Evaluate month",
     "evaluate_note": "Accumulation is derived ONLY from existing attendance rows; missing days are never invented.",
+    "conversion_detail": "Accumulated {{hours}}h ÷ {{ratio}}h/day → {{days}} deduction day(s), remainder {{remainder}} · {{records}} source record(s)",
     "col_employee": "Employee",
     "col_period": "Period",
     "col_accumulated": "Accumulated",

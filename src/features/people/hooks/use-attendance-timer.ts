@@ -14,6 +14,7 @@ export function useAttendanceTimer() {
     isInitialized: state.isInitialized,
     isReportModalOpen: state.isReportModalOpen,
     syncError: state.syncError,
+    checkInBlockReason: state.checkInBlockReason,
     retrySync: state.retrySync,
     setReportModalOpen: state.setReportModalOpen,
     checkIn: state.checkIn,
@@ -52,6 +53,7 @@ export function useAttendanceTimer() {
     isReportModalOpen: store.isReportModalOpen,
     setReportModalOpen: store.setReportModalOpen,
     syncError: store.syncError,
+    checkInBlockReason: store.checkInBlockReason,
     retrySync: store.retrySync,
     handleCheckIn: () => store.checkIn(companyId || "", "", user?.id || ""),
     handleTakeBreak: () => {

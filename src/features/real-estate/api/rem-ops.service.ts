@@ -259,10 +259,12 @@ export const HandoverService = {
 
 export const ExpenseService = {
   async list(companyId: string): Promise<ApiResponse<PropertyExpense[]>> {
-    return logged("listExpenses", async () => ({
-      data: await listCollection<PropertyExpense>(companyId, REM_COLLECTIONS.expenses),
-      message: "Success",
-    }));
+    return logged("listExpenses", async () => {
+      // Archived expenses are soft-deleted: they stay in Firestore for financial
+      // audit/history but are hidden from the working list (see `remove`).
+      const rows = await listCollection<PropertyExpense>(companyId, REM_COLLECTIONS.expenses);
+      return { data: rows.filter((r) => r.archived !== true), message: "Success" };
+    });
   },
   async create(companyId: string, dto: CreatePropertyExpenseDTO, by: string, canApprove: boolean): Promise<ApiResponse<PropertyExpense>> {
     return logged("createExpense", async () => {
@@ -319,9 +321,14 @@ export const ExpenseService = {
     });
   },
   async remove(companyId: string, id: string): Promise<ApiResponse<null>> {
-    return logged("deleteExpense", async () => {
-      await removeRecord(companyId, REM_COLLECTIONS.expenses, id);
-      return { data: null, message: "Expense deleted" };
+    return logged("archiveExpense", async () => {
+      // Financial records are never hard-deleted (the rules deny it): the UI
+      // "delete" archives the expense so history and any posted journal/bill
+      // reference remain intact while it disappears from the working list.
+      const before = await getDocData(companyId, REM_COLLECTIONS.expenses, id);
+      if (!before) throw new DomainValidationError("notFound");
+      await patchRecord(companyId, REM_COLLECTIONS.expenses, id, { archived: true });
+      return { data: null, message: "Expense archived" };
     });
   },
 };

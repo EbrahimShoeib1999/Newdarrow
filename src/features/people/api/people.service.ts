@@ -32,6 +32,7 @@ import { DEFAULT_ATTENDANCE_LATE_POLICY } from "../types/people.types";
 import {
   buildCheckInGeoFields,
   buildCheckOutGeoFields,
+  isEmploymentActive,
   isOpenSessionForDay,
   pruneUndefinedFields,
 } from "../utils/geo";
@@ -572,12 +573,20 @@ export const PeopleService = {
       const unscheduledZone = resolveEffectiveTimezone(null, policy.timezone).timezone;
       let schedule: AttendanceScheduleSnapshot | null = null;
       let punchDate = zonedDayKeyOf(now.getTime(), unscheduledZone);
+      // Employment gate — read BEFORE the schedule degradation below: a
+      // terminated/suspended record may not open a shift, and that failure
+      // must NOT be swallowed as "no schedule, use the cutoff". The stable
+      // code lets the UI explain the block instead of a generic write error.
+      const employeeSnap = await getDoc(doc(db, "companies", companyId, "employees", employeeId));
+      const employeeRecord = employeeSnap.data() as Employee | undefined;
+      if (employeeRecord?.status && !isEmploymentActive(employeeRecord.status)) {
+        throw Object.assign(new Error("Employment is not active"), { code: "employment_inactive" });
+      }
       try {
-        const empSnap = await getDoc(doc(db, "companies", companyId, "employees", employeeId));
         const resolved = await resolveScheduleSnapshotForPunch(
           companyId,
           employeeId,
-          (empSnap.data() as Employee | undefined)?.department,
+          employeeRecord?.department,
           now,
           policy.timezone
         );

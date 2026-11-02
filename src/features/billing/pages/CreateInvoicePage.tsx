@@ -7,16 +7,18 @@ import {
   CardBody,
   CardHeader,
   Button,
+  Chip,
   Input,
   Select,
   SelectItem,
   Divider,
+  Spinner,
   Textarea,
 } from "@heroui/react";
-import { Plus, Trash2, Save, Send, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Save, Send, ChevronRight, FileText, Users, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 
 import { selectFieldProps } from "@/components/shared/select-field";
@@ -37,6 +39,8 @@ import {
   getDefaultTax,
   getTaxRateForProduct,
 } from "../utils/tax-utils";
+import { DEFAULT_TAXES } from "../data/product-defaults";
+import { computeInvoiceTotals, invoiceVatPercent } from "../utils/invoice-line-utils";
 import {
   DEFAULT_BILLING_CURRENCY,
   getDefaultBillingCurrency,
@@ -112,12 +116,38 @@ export default function CreateInvoicePage() {
 
   const { data: products = [] } = useProducts();
   const { data: costCenters = [] } = useCostCenters();
-  const { data: billingSettings } = useBillingSettings();
-  const taxes = billingSettings?.taxes ?? [];
-  const defaultTax = getDefaultTax(taxes);
-  
+  const { data: billingSettings, isPending: isLoadingSettings, error: settingsError, refetch: refetchSettings } = useBillingSettings();
+  const tenantTaxes = billingSettings?.taxes ?? [];
+  /** Gate: new invoices MUST wait for settings so the first line shows the
+   *  tenant default rate (15%) immediately — never a misleading 0%. Editing
+   *  an existing invoice keeps its stored tax values, so settings are less
+   *  critical (only for the dropdown list). */
+  const settingsReady = !isLoadingSettings && !settingsError && !!billingSettings;
+
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id;
+
+  // Timeout: if settings don't resolve within 8 s, unblock the form with a
+  // fallback from DEFAULT_TAXES so the user is never stuck on a spinner.
+  const [settingsTimedOut, setSettingsTimedOut] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (settingsReady || isEditing) return;
+    timeoutRef.current = setTimeout(() => setSettingsTimedOut(true), 8000);
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+  }, [settingsReady, isEditing]);
+
+  /** Effective readiness: true when settings loaded OR when the timeout fired
+   *  (fallback to the product default 15% so the form is never blocked). */
+  const formReady = settingsReady || settingsTimedOut || isEditing;
+
+  /** Single source of truth for tax options and default:
+   *  - Settings loaded → use tenant's configured taxes.
+   *  - Timeout/failure → fall back to built-in DEFAULT_TAXES (15% + 0%).
+   *  - Still loading → empty (form is gated behind spinner). */
+  const effectiveTaxes = tenantTaxes.length > 0 ? tenantTaxes : (settingsTimedOut ? DEFAULT_TAXES : []);
+  const effectiveDefaultTax = getDefaultTax(effectiveTaxes);
+
   const { data: existingInvoice, isLoading: isLoadingExisting } = useInvoice(id);
 
   const createInvoice = useCreateInvoiceMutation();
@@ -194,7 +224,7 @@ export default function CreateInvoicePage() {
     if (!isEditing && fromContract?.contractId) {
       const contact = contacts.find((c) => c.id === fromContract.contactId);
       const customerName = fromContract.customerName || (contact ? invoiceCustomerPickerLabel(contact) : "");
-      const vatRate = fromContract.vatRate ?? defaultTax?.rate ?? 15;
+      const vatRate = fromContract.vatRate ?? effectiveDefaultTax?.rate ?? 15;
 
       const items = fromContract.items && fromContract.items.length > 0
         ? fromContract.items.map((i) => {
@@ -205,7 +235,7 @@ export default function CreateInvoicePage() {
               quantity: i.quantity,
               unitPrice: i.unitPrice,
               taxRate: i.taxRate ?? vatRate,
-              taxRateId: defaultTax?.id ?? null,
+            taxRateId: effectiveDefaultTax?.id ?? null,
               discount: 0,
               total: beforeTax + tax,
             };
@@ -215,7 +245,7 @@ export default function CreateInvoicePage() {
             quantity: 1,
             unitPrice: fromContract.amount || 0,
             taxRate: vatRate,
-            taxRateId: defaultTax?.id ?? null,
+            taxRateId: effectiveDefaultTax?.id ?? null,
             discount: 0,
             total: (fromContract.amount || 0) * (1 + vatRate / 100),
           }];
@@ -248,20 +278,20 @@ export default function CreateInvoicePage() {
       control._reset(resetData as any);
       setCustomerInput(customerName);
     }
-  }, [isEditing, fromContract, control, contacts, defaultTax]);
+  }, [isEditing, fromContract, control, contacts, effectiveDefaultTax]);
 
   useEffect(() => {
     if (!isEditing && fromDeal?.dealId) {
       const contact = contacts.find((c) => c.id === fromDeal.contactId);
       const customerName = contact ? invoiceCustomerPickerLabel(contact) : "";
-      const vatRate = defaultTax?.rate ?? 15;
+      const vatRate = effectiveDefaultTax?.rate ?? 15;
 
       const items = [{
         description: fromDeal.title || `خدمات مرتبطة بالصفقة #${fromDeal.dealId}`,
         quantity: 1,
         unitPrice: fromDeal.amount || 0,
         taxRate: vatRate,
-        taxRateId: defaultTax?.id ?? null,
+        taxRateId: effectiveDefaultTax?.id ?? null,
         discount: 0,
         total: (fromDeal.amount || 0) * (1 + vatRate / 100),
       }];
@@ -292,7 +322,7 @@ export default function CreateInvoicePage() {
       control._reset(resetData as any);
       setCustomerInput(customerName);
     }
-  }, [isEditing, fromDeal, control, contacts, defaultTax]);
+  }, [isEditing, fromDeal, control, contacts, effectiveDefaultTax]);
 
   useEffect(() => {
     if (isEditing && existingInvoice) {
@@ -319,34 +349,29 @@ export default function CreateInvoicePage() {
   }, [billingSettings, fromQuotation, fromContract, fromDeal, isEditing, setValue]);
 
   useEffect(() => {
-    if (isEditing || fromQuotation || !defaultTax) return;
+    if (isEditing || fromQuotation) return;
+    if (!effectiveDefaultTax) return;
     const items = watch("items");
     if (
       items?.length === 1 &&
       !items[0]?.taxRateId &&
       (items[0]?.taxRate ?? 0) === 0
     ) {
-      setValue("items.0.taxRateId", defaultTax.id);
-      setValue("items.0.taxRate", defaultTax.rate);
+      setValue("items.0.taxRateId", effectiveDefaultTax.id);
+      setValue("items.0.taxRate", effectiveDefaultTax.rate);
     }
-  }, [defaultTax, fromQuotation, isEditing, setValue, watch]);
+  }, [effectiveDefaultTax, fromQuotation, isEditing, setValue, watch]);
 
   const watchItems = watch("items");
   const currency = watch("currency") ?? DEFAULT_BILLING_CURRENCY;
 
-  // Dynamic calculations
-  // We compute totals dynamically from watchItems.
-  const subTotal = watchItems.reduce((acc, item) => acc + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
-  const totalDiscount = watchItems.reduce((acc, item) => acc + (Number(item.discount) || 0), 0);
-  const totalTax = watchItems.reduce((acc, item) => {
-    const q = Number(item.quantity) || 0;
-    const r = Number(item.unitPrice) || 0;
-    const d = Number(item.discount) || 0;
-    const tx = Number(item.taxRate) || 0;
-    const beforeTax = (q * r) - d;
-    return acc + (beforeTax * (tx / 100));
-  }, 0);
-  const grandTotal = subTotal - totalDiscount + totalTax;
+  // Dynamic calculations — ONE canonical formula (never duplicated per page).
+  const {
+    subTotal,
+    totalDiscount,
+    totalTax,
+    grandTotal,
+  } = computeInvoiceTotals(watchItems);
 
   const handleProductSelect = (index: number, productId: string) => {
     const product = products.find((p) => p.id === productId);
@@ -354,9 +379,9 @@ export default function CreateInvoicePage() {
       setValue(`items.${index}.description`, product.name);
       setValue(`items.${index}.unitPrice`, product.price);
       setValue(`items.${index}.productId`, product.id ?? null);
-      const rate = getTaxRateForProduct(taxes, product.taxRateId);
+      const rate = getTaxRateForProduct(effectiveTaxes, product.taxRateId);
       const tax =
-        taxes.find((tx) => tx.id === product.taxRateId) ?? defaultTax ?? null;
+        effectiveTaxes.find((tx) => tx.id === product.taxRateId) ?? effectiveDefaultTax ?? null;
       setValue(`items.${index}.taxRateId`, tax?.id ?? null);
       setValue(`items.${index}.taxRate`, rate);
     }
@@ -367,8 +392,8 @@ export default function CreateInvoicePage() {
       description: "",
       quantity: 1,
       unitPrice: 0,
-      taxRate: defaultTax?.rate ?? 0,
-      taxRateId: defaultTax?.id ?? null,
+      taxRate: effectiveDefaultTax?.rate ?? 0,
+      taxRateId: effectiveDefaultTax?.id ?? null,
       discount: 0,
       total: 0,
     });
@@ -419,6 +444,11 @@ export default function CreateInvoicePage() {
   };
 
   const onSubmit = async (data: CreateInvoiceDTO, actionType: "draft" | "sent") => {
+    // Guard: never save a new invoice when tax settings are unverified.
+    if (!isEditing && !formReady) {
+      toast.error(t("invoices.create.settings_error", "Tax settings not loaded — cannot save."));
+      return;
+    }
     try {
       if (
         actionType === "sent" &&
@@ -487,94 +517,122 @@ export default function CreateInvoicePage() {
   }
 
   return (
-    <div className="space-y-4 max-w-5xl mx-auto pb-20 animate-in fade-in duration-300">
-      <nav className="flex items-center gap-1 text-sm text-default-500">
-        <Link to="/billing" className="hover:text-primary">
-          {t("module_name")}
-        </Link>
-        <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
-        <Link to="/billing/invoices" className="hover:text-primary">
-          {t("invoices.title")}
-        </Link>
-        <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
-        <span className="font-medium text-default-800">
-          {isEditing ? t("invoices.create.edit_title") : t("invoices.create.title")}
-        </span>
-      </nav>
+    <div className="max-w-6xl mx-auto pb-24 animate-in fade-in duration-300">
+      {/* Page header — compact breadcrumb + inline DRAFT chip so the invoice
+          status is at a glance before the user even scrolls. */}
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div className="min-w-0">
+          <nav className="flex items-center gap-1 text-xs text-default-500 mb-1">
+            <Link to="/billing" className="hover:text-primary transition-colors">
+              {t("module_name")}
+            </Link>
+            <ChevronRight className="h-3 w-3 rtl:rotate-180" />
+            <Link to="/billing/invoices" className="hover:text-primary transition-colors">
+              {t("invoices.title")}
+            </Link>
+            <ChevronRight className="h-3 w-3 rtl:rotate-180" />
+            <span className="font-medium text-default-700">
+              {isEditing ? t("invoices.create.edit_title") : t("invoices.create.title")}
+            </span>
+          </nav>
+          <h1 className="text-xl md:text-2xl font-bold text-default-900 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary" />
+            <span className="truncate">
+              {isEditing ? t("invoices.create.edit_title") : t("invoices.create.title")}
+            </span>
+          </h1>
+          <p className="text-sm text-default-500 mt-0.5">{t("invoices.create.subtitle")}</p>
+        </div>
+        <Chip size="sm" variant="flat" color="warning" className="font-semibold shrink-0">
+          {t("invoices.create.status_draft")}
+        </Chip>
+      </div>
 
-      <p className="text-sm text-default-500">{t("invoices.create.subtitle")}</p>
-
-      <form className="space-y-6">
-        <Card className="p-2 border border-default-100 shadow-sm rounded-2xl">
-          <CardBody className="gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <form className="space-y-5">
+        {/* Invoice information */}
+        <Card className="border border-default-100 shadow-sm rounded-2xl">
+          <CardBody className="p-5 md:p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5">
               {/* Customer: pick existing or type a new company/client name */}
-              <Controller
-                control={control}
-                name="customerId"
-                render={({ field }) => (
-                  <Autocomplete
-                    label={t("invoices.create.customer")}
-                    placeholder={t("invoices.create.customer_placeholder")}
-                    description={t("invoices.create.customer_hint")}
-                    variant="bordered"
-                    allowsCustomValue
-                    menuTrigger="focus"
-                    inputValue={customerInput}
-                    selectedKey={field.value || null}
-                    onInputChange={(value) => {
-                      setCustomerInput(value);
-                      setValue("customerName", value, { shouldValidate: true });
-                      const selected = contacts.find((c) => c.id === field.value);
-                      if (
-                        selected &&
-                        invoiceCustomerPickerLabel(selected) !== value
-                      ) {
-                        field.onChange("");
-                      }
-                    }}
-                    onSelectionChange={(key) => {
-                      const id = key != null ? String(key) : "";
-                      field.onChange(id);
-                      if (!id) return;
-                      const contact = contacts.find((c) => c.id === id);
-                      if (!contact) return;
-                      const label = invoiceCustomerPickerLabel(contact);
-                      setCustomerInput(label);
-                      setValue("customerName", label, { shouldValidate: true });
-                    }}
-                    onBlur={field.onBlur}
-                    isInvalid={!!errors.customerId}
-                    errorMessage={errors.customerId?.message as string | undefined}
-                    listboxProps={{
-                      emptyContent: t("invoices.create.customer_empty"),
-                    }}
-                  >
-                    {contacts.map((contact) => {
-                      const label = invoiceCustomerPickerLabel(contact);
-                      return (
-                        <AutocompleteItem key={contact.id!} textValue={label}>
-                          <div className="flex flex-col">
-                            <span>{label}</span>
-                            {contact.email ? (
-                              <span className="text-xs text-default-400">
-                                {contact.email}
-                              </span>
-                            ) : null}
-                          </div>
-                        </AutocompleteItem>
-                      );
-                    })}
-                  </Autocomplete>
-                )}
-              />
+              <div className="md:col-span-2 xl:col-span-1">
+                <Controller
+                  control={control}
+                  name="customerId"
+                  render={({ field }) => (
+                    <Autocomplete
+                      label={t("invoices.create.customer")}
+                      placeholder={t("invoices.create.customer_placeholder")}
+                      description={t("invoices.create.customer_hint")}
+                      startContent={<Users className="w-4 h-4 text-default-400 pointer-events-none" />}
+                      variant="bordered"
+                      allowsCustomValue
+                      menuTrigger="focus"
+                      inputValue={customerInput}
+                      selectedKey={field.value || null}
+                      onInputChange={(value) => {
+                        setCustomerInput(value);
+                        setValue("customerName", value, { shouldValidate: true });
+                        const selected = contacts.find((c) => c.id === field.value);
+                        if (
+                          selected &&
+                          invoiceCustomerPickerLabel(selected) !== value
+                        ) {
+                          field.onChange("");
+                        }
+                      }}
+                      onSelectionChange={(key) => {
+                        const id = key != null ? String(key) : "";
+                        field.onChange(id);
+                        if (!id) return;
+                        const contact = contacts.find((c) => c.id === id);
+                        if (!contact) return;
+                        const label = invoiceCustomerPickerLabel(contact);
+                        setCustomerInput(label);
+                        setValue("customerName", label, { shouldValidate: true });
+                      }}
+                      onBlur={field.onBlur}
+                      isInvalid={!!errors.customerId}
+                      errorMessage={errors.customerId?.message as string | undefined}
+                      listboxProps={{
+                        emptyContent: t("invoices.create.customer_empty"),
+                      }}
+                    >
+                      {contacts.map((contact) => {
+                        const label = invoiceCustomerPickerLabel(contact);
+                        return (
+                          <AutocompleteItem key={contact.id!} textValue={label}>
+                            <div className="flex flex-col">
+                              <span>{label}</span>
+                              {contact.email ? (
+                                <span className="text-xs text-default-400">
+                                  {contact.email}
+                                </span>
+                              ) : null}
+                            </div>
+                          </AutocompleteItem>
+                        );
+                      })}
+                    </Autocomplete>
+                  )}
+                />
+              </div>
 
+              {/* Invoice number — read-only + a visually distinct DRAFT chip. */}
               <Input
-                label={t("invoices.create.invoice_number") || "Invoice Number"}
+                label={t("invoices.create.invoice_number")}
                 variant="bordered"
                 isReadOnly
+                classNames={{
+                  input: "font-mono tracking-wide",
+                  mainWrapper: "[&_.input-wrapper]:bg-default-50",
+                }}
                 {...register("invoiceNumber")}
-                description={t("invoices.create.number_assigned_on_post") || "Assigned when posted"}
+                endContent={
+                  <Chip size="sm" variant="flat" color="warning" className="pointer-events-none h-5 text-[10px] font-bold">
+                    {t("invoices.create.status_draft")}
+                  </Chip>
+                }
+                description={t("invoices.create.number_assigned_on_post")}
               />
 
               <Controller
@@ -582,8 +640,8 @@ export default function CreateInvoicePage() {
                 control={control}
                 render={({ field }) => (
                   <Select
-                    label="مركز التكلفة (Cost Center)"
-                    placeholder="اختر مركز التكلفة (اختياري)..."
+                    label={t("cost_centers.title", "مركز التكلفة (Cost Center)")}
+                    placeholder={t("cost_centers.pick_optional", "اختر مركز التكلفة (اختياري)...")}
                     variant="bordered"
                     selectedKeys={field.value ? [field.value] : []}
                     onSelectionChange={(keys) => field.onChange(Array.from(keys)[0] as string || "")}
@@ -600,22 +658,74 @@ export default function CreateInvoicePage() {
           </CardBody>
         </Card>
 
+        {/* --- Settings loading / error gate --------------------------------
+            New invoices MUST NOT render line items until billing settings
+            resolve, preventing a misleading "VAT (0%)" flash. Editing existing
+            invoices is fine because tax values are already stored per-line. */}
+        {!formReady && !settingsError && (
+          <Card className="border border-default-100 shadow-sm rounded-2xl">
+            <CardBody className="p-10 flex flex-col items-center gap-3">
+              <Spinner size="lg" color="primary" />
+              <p className="text-sm text-default-500">{t("invoices.create.loading_tax_settings", "Loading tax settings…")}</p>
+            </CardBody>
+          </Card>
+        )}
+
+        {settingsError && (
+          <Card className="border border-danger-200 shadow-sm rounded-2xl">
+            <CardBody className="p-6 flex flex-col items-center gap-3 text-center">
+              <AlertTriangle className="w-8 h-8 text-danger" />
+              <p className="text-sm font-medium text-danger">
+                {t("invoices.create.settings_error", "Could not load billing tax settings. Invoice cannot be saved until rates are verified.")}
+              </p>
+              <Button
+                size="sm"
+                variant="bordered"
+                color="primary"
+                onPress={() => refetchSettings()}
+              >
+                {t("invoices.create.retry", "Retry")}
+              </Button>
+            </CardBody>
+          </Card>
+        )}
+
+        {settingsTimedOut && !settingsReady && (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-warning-50 border border-warning-200 text-warning-700 text-sm" role="alert">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span className="flex-1">{t("invoices.create.settings_timeout_warning", "Billing settings could not be verified. Using default VAT 15%. Retry to load tenant configuration.")}</span>
+            <Button size="sm" variant="light" color="warning" onPress={() => { setSettingsTimedOut(false); refetchSettings(); }}>
+              {t("invoices.create.retry", "Retry")}
+            </Button>
+          </div>
+        )}
+
+        {formReady && (
+          <>
         {/* Items Table */}
         <Card className="border border-default-100 shadow-sm rounded-2xl">
-          <CardHeader className="px-6 py-4 flex justify-between items-center bg-default-50/50">
-            <h3 className="font-bold text-lg">{t("invoices.create.item_details") || "Item Details"}</h3>
+          <CardHeader className="px-5 md:px-6 py-4 flex justify-between items-center bg-default-50/60 rounded-t-2xl">
+            <h3 className="font-bold text-base md:text-lg text-default-800 flex items-center gap-2">
+              {t("invoices.create.item_details")}
+              <Chip size="sm" variant="flat" className="h-5 text-[10px] font-bold">
+                {fields.length}
+              </Chip>
+            </h3>
+            <span className="hidden md:inline text-xs text-default-500">
+              {t("invoices.create.sub_total_hint")}
+            </span>
           </CardHeader>
           <Divider />
           <CardBody className="p-0 overflow-x-auto">
-            <table className="w-full min-w-[800px] text-start">
-              <thead className="bg-default-100/50 text-sm font-medium text-default-600">
+            <table className="w-full min-w-[820px] text-start">
+              <thead className="bg-default-50/70 text-xs md:text-sm font-semibold text-default-600 uppercase tracking-wide">
                 <tr>
-                  <th className="p-4 w-[30%]">{t("invoices.create.product_item") || "Product / Item"}</th>
-                  <th className="p-4 w-[15%]">{t("invoices.create.quantity") || "Quantity"}</th>
-                  <th className="p-4 w-[15%]">{t("invoices.create.rate") || "Rate"}</th>
-                  <th className="p-4 w-[15%]">{t("invoices.create.tax")}</th>
-                  <th className="p-4 w-[15%] text-end">{t("invoices.create.amount")}</th>
-                  <th className="p-4 w-[10%]"></th>
+                  <th className="p-3 md:p-4 w-[32%] text-start">{t("invoices.create.product_item")}</th>
+                  <th className="p-3 md:p-4 w-[10%] text-center">{t("invoices.create.quantity")}</th>
+                  <th className="p-3 md:p-4 w-[16%] text-end">{t("invoices.create.rate")}</th>
+                  <th className="p-3 md:p-4 w-[20%] text-start">{t("invoices.create.tax")}</th>
+                  <th className="p-3 md:p-4 w-[16%] text-end">{t("invoices.create.amount")}</th>
+                  <th className="p-3 md:p-4 w-[6%]"></th>
                 </tr>
               </thead>
               <tbody>
@@ -625,17 +735,18 @@ export default function CreateInvoicePage() {
                   const d = Number(watch(`items.${index}.discount`)) || 0;
                   const tx = Number(watch(`items.${index}.taxRate`)) || 0;
                   const amtBeforeTax = (q * r) - d;
-                  const lineTotal = amtBeforeTax + (amtBeforeTax * (tx / 100));
+                  const lineVat = (amtBeforeTax * tx) / 100;
+                  const lineTotal = amtBeforeTax + lineVat;
 
                   return (
-                    <tr key={field.id} className="border-b border-default-100 group">
-                      <td className="p-4">
-                        <div className="flex flex-col gap-2">
+                    <tr key={field.id} className="border-b border-default-100/70 last:border-b-0 group hover:bg-default-50/40 transition-colors">
+                      <td className="p-3 md:p-4 align-top">
+                        <div className="flex flex-col gap-1.5">
                           <Select
                             {...selectFieldProps({ compact: true })}
                             size="sm"
-                            aria-label="Select Product"
-                            placeholder={t("invoices.create.select_product") || "Select Product..."}
+                            aria-label={t("invoices.create.product_item")}
+                            placeholder={t("invoices.create.select_product")}
                             variant="flat"
                             onChange={(e) => handleProductSelect(index, e.target.value)}
                           >
@@ -647,53 +758,75 @@ export default function CreateInvoicePage() {
                           </Select>
                           <Input
                             size="sm"
-                            placeholder={t("invoices.create.item_description") || "Item description..."}
+                            placeholder={t("invoices.create.item_description")}
                             variant="flat"
+                            classNames={{ input: "text-sm" }}
                             {...register(`items.${index}.description` as const)}
                             isInvalid={!!errors.items?.[index]?.description}
                           />
                         </div>
                       </td>
-                      <td className="p-4 align-top">
+                      <td className="p-3 md:p-4 align-top">
                         <Input
                           size="sm"
                           type="number"
                           variant="flat"
+                          className="w-full"
+                          classNames={{ input: "text-center" }}
                           {...register(`items.${index}.quantity` as const, { valueAsNumber: true })}
                         />
                       </td>
-                      <td className="p-4 align-top">
+                      <td className="p-3 md:p-4 align-top">
                         <Input
                           size="sm"
                           type="number"
                           variant="flat"
                           dir="ltr"
-                          classNames={{ input: "text-start" }}
+                          classNames={{ input: "text-end tabular-nums" }}
                           startContent={<RiyalSymbol size={12} className="text-default-400" />}
                           {...register(`items.${index}.unitPrice` as const, { valueAsNumber: true })}
                         />
                       </td>
-                      <td className="p-4 align-top">
-                        <LineTaxRateSelect
-                          taxes={taxes}
-                          taxRateId={watch(`items.${index}.taxRateId`)}
-                          onChange={(tax) => {
-                            setValue(`items.${index}.taxRateId`, tax?.id ?? null);
-                            setValue(`items.${index}.taxRate`, tax?.rate ?? 0);
-                          }}
-                        />
+                      <td className="p-3 md:p-4 align-top">
+                        <div className="flex flex-col gap-1">
+                          <LineTaxRateSelect
+                            taxes={effectiveTaxes}
+                            taxRateId={watch(`items.${index}.taxRateId`)}
+                            onChange={(tax) => {
+                              setValue(`items.${index}.taxRateId`, tax?.id ?? null);
+                              setValue(`items.${index}.taxRate`, tax?.rate ?? 0);
+                            }}
+                          />
+                          {tx > 0 && amtBeforeTax > 0 ? (
+                            <span className="text-[11px] text-default-500 rtl:text-start ltr:text-end">
+                              {t("invoices.create.line_tax_amount", { amount: lineVat.toFixed(2) })}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
-                      <td className="p-4 align-top text-end font-medium text-default-700">
-                        <BillingMoney amount={lineTotal} currency={currency} />
+                      <td className="p-3 md:p-4 align-top text-end">
+                        <div className="flex flex-col items-end gap-0.5">
+                          <BillingMoney
+                            amount={lineTotal}
+                            currency={currency}
+                            className="font-semibold text-default-800 tabular-nums"
+                          />
+                          {tx > 0 && amtBeforeTax > 0 ? (
+                            <span className="text-[11px] text-default-400 tabular-nums">
+                              {t("invoices.create.line_amount_before_tax")}: {amtBeforeTax.toFixed(2)}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
-                      <td className="p-4 align-top text-end">
+                      <td className="p-3 md:p-4 align-top text-end">
                         <Button
                           isIconOnly
                           variant="light"
                           color="danger"
                           size="sm"
                           onPress={() => remove(index)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          className={fields.length <= 1 ? "opacity-30 pointer-events-none" : "opacity-60 group-hover:opacity-100 transition-opacity"}
+                          aria-label={t("invoices.create.remove_line", "Remove line")}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -703,94 +836,123 @@ export default function CreateInvoicePage() {
                 })}
               </tbody>
             </table>
-            
-            <div className="p-4">
+
+            <div className="p-3 md:p-4 border-t border-default-100">
               <Button
-                variant="flat"
+                variant="bordered"
                 color="primary"
                 size="sm"
                 startContent={<Plus className="w-4 h-4" />}
                 onPress={appendLine}
+                className="rounded-lg"
               >
-                {t("invoices.create.add_line") || "Add another line"}
+                {t("invoices.create.add_line")}
               </Button>
             </div>
           </CardBody>
         </Card>
 
-        <div className="flex flex-col md:flex-row gap-6 justify-between items-start">
-          <div className="w-full md:w-1/2 space-y-4">
-             <Textarea
-               label={t("invoices.create.notes") || "Customer Notes"}
-               placeholder={t("invoices.create.notes_placeholder") || "Thanks for your business."}
-               variant="bordered"
-               {...register("notes")}
-             />
-             <Textarea
-               label={t("invoices.create.terms") || "Terms & Conditions"}
-               placeholder={t("invoices.create.terms_placeholder") || "Payment due in 15 days."}
-               variant="bordered"
-               {...register("termsAndConditions")}
-             />
+        {/* Notes / terms on the left, summary card on the right (stacked on mobile). */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+          <div className="lg:col-span-2 space-y-4">
+            <Textarea
+              label={t("invoices.create.notes")}
+              placeholder={t("invoices.create.notes_placeholder")}
+              variant="bordered"
+              minRows={2}
+              className="[&_.inner-wrapper]:!min-h-[80px]"
+              {...register("notes")}
+            />
+            <Textarea
+              label={t("invoices.create.terms")}
+              placeholder={t("invoices.create.terms_placeholder")}
+              variant="bordered"
+              minRows={2}
+              className="[&_.inner-wrapper]:!min-h-[80px]"
+              {...register("termsAndConditions")}
+            />
           </div>
 
-          <Card className="w-full md:w-1/3 border border-default-100 shadow-sm rounded-2xl bg-default-50/50">
-            <CardBody className="p-6 space-y-4">
-              <div className="flex justify-between text-sm text-default-600">
-                <span>{t("invoices.create.sub_total")}</span>
-                <BillingMoney amount={subTotal} currency={currency} className="font-medium" />
+          <Card className="lg:col-span-1 lg:sticky lg:top-4 border border-default-200 shadow-sm rounded-2xl bg-content1 overflow-hidden">
+            <div className="px-5 py-3 bg-default-50/70 border-b border-default-100">
+              <h3 className="text-sm font-bold text-default-800">{t("invoices.create.summary_title")}</h3>
+            </div>
+            <CardBody className="p-5 space-y-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm text-default-700">{t("invoices.create.sub_total")}</div>
+                  <div className="text-[11px] text-default-400">{t("invoices.create.sub_total_hint")}</div>
+                </div>
+                <BillingMoney amount={subTotal} currency={currency} className="font-medium tabular-nums" />
               </div>
               {totalDiscount > 0 && (
-                <div className="flex justify-between text-sm text-danger">
-                  <span>{t("invoices.create.discount")}</span>
-                  <BillingMoney amount={-totalDiscount} currency={currency} />
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm text-danger">{t("invoices.create.discount")}</span>
+                  <BillingMoney amount={-totalDiscount} currency={currency} className="tabular-nums text-danger" />
                 </div>
               )}
-              {totalTax > 0 && (
-                <div className="flex justify-between text-sm text-default-600">
-                  <span>{t("invoices.create.total_tax")}</span>
-                  <BillingMoney amount={totalTax} currency={currency} className="font-medium" />
-                </div>
-              )}
-              <Divider />
-              <div className="flex justify-between text-lg font-bold">
-                <span>{t("invoices.create.total")}</span>
-                <BillingMoney amount={grandTotal} currency={currency} />
+              {/* VAT row: percentage beside the label + monetary amount beside
+                  it — critical for the requirement. The rate is derived from
+                  the stored amounts, so mixed-rate invoices show the true
+                  effective percentage, never a hardcoded 15. */}
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm text-default-700">
+                  {t("invoices.create.vat_row_label", {
+                    rate: invoiceVatPercent(subTotal, totalTax, effectiveDefaultTax?.rate ?? 0),
+                  })}
+                </span>
+                <BillingMoney amount={totalTax} currency={currency} className="font-medium tabular-nums" />
+              </div>
+              <Divider className="my-1" />
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-bold text-default-900">{t("invoices.create.total")}</span>
+                <BillingMoney
+                  amount={grandTotal}
+                  currency={currency}
+                  className="text-xl md:text-2xl font-extrabold text-primary tabular-nums"
+                />
               </div>
             </CardBody>
           </Card>
         </div>
 
-        <div className="flex flex-col items-end gap-2 sticky bottom-4 bg-background/80 backdrop-blur-md p-4 rounded-2xl border border-default-100 shadow-xl z-10">
+        {/* Sticky action bar */}
+        <div className="fixed bottom-0 inset-x-0 sm:static sm:bottom-auto z-10 bg-background/85 backdrop-blur-md border-t sm:border sm:rounded-2xl sm:shadow-md sm:mt-2 px-4 py-3">
           {isEditing && existingInvoice?.status === "pending" && !canIssueImmediately && (
-            <p className="w-full text-xs text-warning">
+            <p className="w-full text-xs text-warning mb-2">
               {tCommon("documentApproval.lockedHint")}
             </p>
           )}
-          <div className="flex justify-end gap-3 w-full">
-          <Button
-            variant="flat"
-            onPress={() => handleSubmit((data) => onSubmit(data as any, "draft"))()}
-            isLoading={isSubmitting || updateInvoice.isPending || createInvoice.isPending || createContact.isPending}
-            startContent={<Save className="w-4 h-4" />}
-          >
-            {isEditing ? t("invoices.create.update_draft") : t("invoices.create.save_draft")}
-          </Button>
-          <Button
-            color="primary"
-            onPress={() => handleSubmit((data) => onSubmit(data as any, "sent"))()}
-            isLoading={isSubmitting || updateInvoice.isPending || createInvoice.isPending || createContact.isPending}
-            isDisabled={!canUsePrimaryAction}
-            startContent={<Send className="w-4 h-4" />}
-          >
-            {isEditing
-              ? t("invoices.create.update_send")
-              : canIssueImmediately
-                ? t("invoices.create.save_send")
-                : t("invoices.create.save_submit")}
-          </Button>
+          <div className="flex justify-end gap-2 md:gap-3 w-full max-w-6xl mx-auto">
+            <Button
+              variant="flat"
+              color="default"
+              onPress={() => handleSubmit((data) => onSubmit(data as any, "draft"))()}
+              isLoading={isSubmitting || updateInvoice.isPending || createInvoice.isPending || createContact.isPending}
+              isDisabled={!formReady}
+              startContent={<Save className="w-4 h-4" />}
+              className="min-w-[130px] md:min-w-[150px]"
+            >
+              {isEditing ? t("invoices.create.update_draft") : t("invoices.create.save_draft")}
+            </Button>
+            <Button
+              color="primary"
+              onPress={() => handleSubmit((data) => onSubmit(data as any, "sent"))()}
+              isLoading={isSubmitting || updateInvoice.isPending || createInvoice.isPending || createContact.isPending}
+              isDisabled={!canUsePrimaryAction || !formReady}
+              startContent={<Send className="w-4 h-4" />}
+              className="min-w-[150px] md:min-w-[170px] font-semibold"
+            >
+              {isEditing
+                ? t("invoices.create.update_send")
+                : canIssueImmediately
+                  ? t("invoices.create.save_send")
+                  : t("invoices.create.save_submit")}
+            </Button>
           </div>
         </div>
+          </>
+        )}
       </form>
     </div>
   );

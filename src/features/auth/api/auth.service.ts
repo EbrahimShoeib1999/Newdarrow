@@ -282,6 +282,11 @@ export const AuthService = {
         ...userData,
         portalAccess: invite.portalAccess ?? [],
         portalSubRoles: invite.portalSubRoles ?? {},
+        // Provenance marker the Firestore create rule binds this self-provision
+        // to the real, still-pending invite (SEC-P0-01): a privileged (manager/
+        // admin) or portal-sub-role profile can only be created when it mirrors
+        // an existing invites/{token} doc addressed to this email/company/role.
+        invitationToken: input.token,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });

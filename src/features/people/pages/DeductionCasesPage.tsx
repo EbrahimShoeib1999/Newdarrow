@@ -42,7 +42,7 @@ import {
   usePostCaseMutation,
   useReverseCaseMutation,
 } from "../hooks/use-work-schedule";
-import { formatDurationHM, periodKeyOf } from "../lib/work-schedule-rules";
+import { formatDurationHM, lateDeductionConversion, periodKeyOf } from "../lib/work-schedule-rules";
 import type { DeductionCase, DeductionCaseStatus } from "../types/work-schedule.types";
 
 const STATUS_COLORS: Record<DeductionCaseStatus, "default" | "warning" | "primary" | "success" | "danger"> = {
@@ -164,6 +164,17 @@ export default function DeductionCasesPage() {
                   <TableCell className="text-xs">
                     {t(`policy.action_${c.kind}`)}
                     {c.deductionDays != null && ` · ${c.deductionDays} × ${c.policySnapshot.action.basis === "calendar_30" ? t("policy.basis_calendar_30") : t("policy.basis_working_days")}`}
+                    {(c.policySnapshot?.hoursPerDeductionDay ?? 0) > 0 && (
+                      <div className="mt-0.5 text-default-500 tabular-nums">
+                        {t("cases.conversion_detail", {
+                          hours: lateDeductionConversion(c.accumulatedMinutes, c.policySnapshot.hoursPerDeductionDay!).totalHours,
+                          days: c.deductionDays ?? lateDeductionConversion(c.accumulatedMinutes, c.policySnapshot.hoursPerDeductionDay!).deductionDays,
+                          remainder: formatDurationHM(lateDeductionConversion(c.accumulatedMinutes, c.policySnapshot.hoursPerDeductionDay!).remainingMinutes),
+                          ratio: c.policySnapshot.hoursPerDeductionDay,
+                          records: c.contributingAttendanceIds.length,
+                        })}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm tabular-nums font-bold">
                     {c.amount != null && c.amount > 0 ? `${c.amount} ${c.currency ?? ""}` : "—"}

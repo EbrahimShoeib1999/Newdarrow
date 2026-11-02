@@ -66,6 +66,11 @@ const EMP = {
   // matter how aggressive the company cutoff is (E6 — the cutoff may not
   // override an assigned shift).
   scheduleAlert: { email: "att_alert_sched@acme.test", pass: "AttShift2026!", empId: "e-alert-schedule" },
+  // Phase-1 acceptance: ineligible employees must see a REASON, and every
+  // eligible office employee (not just e-office) must be able to start.
+  officeTwo: { email: "att_office2@acme.test", pass: "AttOffice2026b!", empId: "e-office-2" },
+  terminated: { email: "att_terminated@acme.test", pass: "AttTerm2026!", empId: "e-terminated" },
+  ghostLoc: { email: "att_ghostloc@acme.test", pass: "AttGhost2026!", empId: "e-ghost-loc" },
 };
 const LATE_EMPS = [
   EMP.shiftOnTime,
@@ -544,7 +549,7 @@ try {
   // it belongsToCompany() cannot be evaluated and every company-scoped op 403s.
   await seedDoc(`users/${admin.uid}`, {
     id: admin.uid, email: ADMIN.email, name: "Acme Admin", role: "admin", companyId: COMPANY_ID,
-    portalAccess: ["people", "tasks"], portalSubRoles: { people: "admin" },
+    portalAccess: ["people", "tasks"],
   }, admin.idToken);
   const adminBack = await fsGet(`users/${admin.uid}`, admin.idToken);
   if (adminBack?.role !== "admin" || adminBack?.companyId !== COMPANY_ID) throw new Error("admin fixture not persisted");
@@ -584,6 +589,40 @@ try {
     attendanceCheckMode: "geofence", attendanceLocationIds: [], department: "Finance",
   });
   log("Seeded company, work location hq, 3 employees + auth accounts (office/remote/no-assign).");
+
+  // ---------- Phase-1 acceptance fixtures -----------------------------------
+  // A SECOND eligible office employee (proves the fix is universal), a
+  // TERMINATED office employee (must be blocked by employment gate), and a
+  // GEOFENCE employee whose assigned location was deactivated (must surface
+  // location_inactive, not the misleading not_assigned message).
+  const office2 = await createAuthUser(EMP.officeTwo.email, EMP.officeTwo.pass);
+  const term = await createAuthUser(EMP.terminated.email, EMP.terminated.pass);
+  const ghost = await createAuthUser(EMP.ghostLoc.email, EMP.ghostLoc.pass);
+  await seedDoc(`users/${office2.uid}`, { id: office2.uid, email: EMP.officeTwo.email, name: "office2", role: "employee", companyId: COMPANY_ID, portalAccess: ["people", "tasks"], portalSubRoles: {} }, office2.idToken);
+  await seedDoc(`users/${term.uid}`, { id: term.uid, email: EMP.terminated.email, name: "terminated", role: "employee", companyId: COMPANY_ID, portalAccess: ["people", "tasks"], portalSubRoles: {} }, term.idToken);
+  await seedDoc(`users/${ghost.uid}`, { id: ghost.uid, email: EMP.ghostLoc.email, name: "ghostloc", role: "employee", companyId: COMPANY_ID, portalAccess: ["people", "tasks"], portalSubRoles: {} }, ghost.idToken);
+  await seedDoc(`companies/${COMPANY_ID}/work_locations/annex`, {
+    id: "annex", name: "Closed Annex", isActive: false, lat: LOC.lat, lng: LOC.lng, radiusMeters: LOC.radiusMeters, companyId: COMPANY_ID,
+  });
+  await seedDoc(`companies/${COMPANY_ID}/employees/e-office-2`, {
+    userId: office2.uid, firstName: "Oma", lastName: "Office2", name: "Oma Office2", email: EMP.officeTwo.email,
+    jobTitle: "Accountant", shiftStatus: "off-duty", status: "active", workType: "onsite", allowRemoteTimer: false,
+    attendanceCheckMode: "geofence", attendanceLocationIds: ["hq"], department: "Finance",
+    joiningDate: new Date().toISOString(),
+  });
+  await seedDoc(`companies/${COMPANY_ID}/employees/e-terminated`, {
+    userId: term.uid, firstName: "Ter", lastName: "Inated", name: "Ter Inated", email: EMP.terminated.email,
+    jobTitle: "Clerk", shiftStatus: "off-duty", status: "terminated", workType: "onsite", allowRemoteTimer: false,
+    attendanceCheckMode: "geofence", attendanceLocationIds: ["hq"], department: "Operations",
+    joiningDate: new Date().toISOString(),
+  });
+  await seedDoc(`companies/${COMPANY_ID}/employees/e-ghost-loc`, {
+    userId: ghost.uid, firstName: "Gho", lastName: "Stloc", name: "Gho Stloc", email: EMP.ghostLoc.email,
+    jobTitle: "Analyst", shiftStatus: "off-duty", status: "active", workType: "onsite", allowRemoteTimer: false,
+    attendanceCheckMode: "geofence", attendanceLocationIds: ["annex"], department: "Facilities",
+    joiningDate: new Date().toISOString(),
+  });
+  log("Seeded Phase-1 fixtures: e-office-2 (active, valid hq), e-terminated (status=terminated), e-ghost-loc (assigned 'annex' which is isActive:false).");
 
   // ---------- Late check-in / punctuality matrix fixtures -------------------
   // NOTE: settings/attendance is deliberately NOT seeded here. Scenarios A-C
@@ -809,7 +848,7 @@ try {
     // the three employees see ONLY their own company's attendance via the app's
     // own rules-enforced reads, by asserting seeded data stayed in scope.
     const emps = await fsList(`companies/${COMPANY_ID}/employees`);
-    const expectedEmps = 3 + LATE_EMPS.length;
+    const expectedEmps = 3 + LATE_EMPS.length + 3; // 3 core + 6 punctuality + 3 Phase-1 (office2/terminated/ghost-loc)
     if (emps.length !== expectedEmps) throw new Error(`expected ${expectedEmps} seeded employees, emulator has ${emps.length}`);
     const other = await fetch(`${FS_BASE.replace(PROJECT_ID, "someone-else-project")}/companies/acme-co/employees?pageSize=10`, { headers: { "Content-Type": "application/json" } });
     const otherBody = await other.json().catch(() => ({}));
@@ -1027,6 +1066,92 @@ try {
     assertLocalOnlyOnly("E6");
     await shot("E6-cutoff-no-override");
     return `record=${rec.id} cutoff=00:00(aggressive) shift=${rec.schedule.scheduledStart} status=${rec.status} lateMinutes=${rec.lateMinutes ?? 0} deduction=${rec.deductionMinutes ?? 0} modal=open:${modal.open} → cutoff cannot override an assigned shift`;
+  });
+
+  // ---------- Phase-1 acceptance: eligibility & explicit block reasons ------
+  // Read the shipped warning copy directly from the locale file so the
+  // assertion tracks real product strings, never a hardcoded sentence.
+  const BLOCK_COPY = {
+    en: readLocale("en").time_tracker,
+    ar: readLocale("ar").time_tracker,
+  };
+  const blockAlertState = () => evalJs(`(() => {
+    const alerts = [...document.querySelectorAll('[role="alert"]')].filter(a => a.offsetParent !== null);
+    const playBtn = Array.from(document.querySelectorAll('button')).find(x => x.querySelector('svg.lucide-play') && x.offsetParent !== null);
+    return {
+      alertCount: alerts.length,
+      alertText: alerts.map(a => (a.innerText || '').replace(/\\s+/g, ' ').trim()).join(' || '),
+      playPresent: !!playBtn,
+      bodySnippet: (document.body.innerText || '').replace(/\\s+/g, ' ').slice(0, 200),
+    };
+  })()`);
+
+  await scenario("F1. Second eligible Saudi office employee starts the timer successfully", async () => {
+    await setGeo({ grant: true, coords: LOC });
+    await signOutBrowser();
+    await login(EMP.officeTwo.email, EMP.officeTwo.pass, "en");
+    const mark = consoleBuf.length;
+    await goto(`${ORIGIN}/tasks`);
+    await waitForTrackerReady(mark);
+    assertLocalOnlyOnly("F1: after second-office login");
+    // Must NOT see a block banner (eligibility resolved).
+    const state = await blockAlertState();
+    if (state.alertText.includes(BLOCK_COPY.en.block_employment_inactive) || state.alertText.includes(BLOCK_COPY.en.block_location_not_assigned) || state.alertText.includes(BLOCK_COPY.en.block_location_inactive)) {
+      throw new Error(`eligible office employee shown a block banner: "${state.alertText}"`);
+    }
+    const clicked = await waitUntil(() => evalJs(clickButtonWithIcon("play")), 30000, "F1 play control");
+    if (!clicked) throw new Error(`F1: play button never clickable for eligible employee — alert="${state.alertText}" body="${state.bodySnippet}"`);
+    const rec = await waitUntil(async () => (await openSessions(EMP.officeTwo.empId))[0] || null, 30000, "F1 open session");
+    await shot("F1-office2-started");
+    return `uid=${String(rec.employeeId)} record=${rec.id} coords=${rec.checkInLat},${rec.checkInLng} locId=${rec.checkInLocationId}`;
+  });
+
+  await scenario("F2. Terminated employee is blocked with an explicit employment_inactive reason (no silent hide)", async () => {
+    await setGeo({ grant: true, coords: LOC });
+    await signOutBrowser();
+    await login(EMP.terminated.email, EMP.terminated.pass, "en");
+    const mark = consoleBuf.length;
+    await goto(`${ORIGIN}/tasks`);
+    await waitForTrackerReady(mark);
+    assertLocalOnlyOnly("F2: after terminated login");
+    const state = await blockAlertState();
+    if (!state.alertText.includes(BLOCK_COPY.en.block_employment_inactive)) {
+      throw new Error(`terminated employee did NOT see the employment_inactive block banner (alert="${state.alertText}")`);
+    }
+    const before = await recordsFor(EMP.terminated.empId);
+    // Clicking the play button (even if present) must NOT create a session —
+    // the service throws employment_inactive before any Firestore write.
+    await evalJs(clickButtonWithIcon("play")).catch(() => {});
+    await new Promise((r) => setTimeout(r, 2500));
+    const after = await recordsFor(EMP.terminated.empId);
+    if (after.length !== before.length) throw new Error(`terminated employee managed to open an attendance record: ${JSON.stringify(after)}`);
+    const errs = consoleSince(mark, /employment_inactive|Employment is not active|Check-in error/i);
+    await shot("F2-terminated-blocked");
+    return `banner=employment_inactive recordsBefore=${before.length} recordsAfter=${after.length} consoleHits=${errs.length}`;
+  });
+
+  await scenario("F3. Geofence employee with a deactivated assigned location sees location_inactive (not the misleading not_assigned)", async () => {
+    await setGeo({ grant: true, coords: LOC });
+    await signOutBrowser();
+    await login(EMP.ghostLoc.email, EMP.ghostLoc.pass, "en");
+    const mark = consoleBuf.length;
+    await goto(`${ORIGIN}/tasks`);
+    await waitForTrackerReady(mark);
+    assertLocalOnlyOnly("F3: after ghost-location login");
+    const state = await blockAlertState();
+    if (!state.alertText.includes(BLOCK_COPY.en.block_location_inactive)) {
+      throw new Error(`employee whose assigned location is isActive:false did NOT see location_inactive (banner="${state.alertText}") — the misleading fallback would look like not_assigned="${BLOCK_COPY.en.block_location_not_assigned}"`);
+    }
+    if (state.alertText.includes(BLOCK_COPY.en.block_location_not_assigned)) {
+      throw new Error(`location_inactive employee shown the wrong reason (not_assigned) — root cause still misclassified`);
+    }
+    const before = await recordsFor(EMP.ghostLoc.empId);
+    await evalJs(clickButtonWithIcon("play")).catch(() => {});
+    await new Promise((r) => setTimeout(r, 2500));
+    const after = await recordsFor(EMP.ghostLoc.empId);
+    if (after.length !== before.length) throw new Error(`location-inactive employee managed to open an attendance record`);
+    await shot("F3-location-inactive");
+    return `banner=location_inactive recordsBefore=${before.length} recordsAfter=${after.length}`;
   });
 } finally {
   log("\n================ attendance-lifecycle evidence ================");

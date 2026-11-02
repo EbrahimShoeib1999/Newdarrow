@@ -192,6 +192,8 @@ function mapPolicy(id: string, data: Record<string, unknown>): LatenessPolicy {
       : [],
     thresholdMode: (data.thresholdMode as LatenessPolicy["thresholdMode"]) ?? "cumulative",
     workingDaysPerMonth: Number(data.workingDaysPerMonth ?? 26),
+    hoursPerDeductionDay:
+      data.hoursPerDeductionDay == null ? null : Number(data.hoursPerDeductionDay) || null,
     maxMonthlyDeductionAmount: Number(data.maxMonthlyDeductionAmount ?? 0),
     maxMonthlyDeductionGrossFraction: Number(data.maxMonthlyDeductionGrossFraction ?? 0),
     legalBasis:
@@ -798,6 +800,10 @@ export const WorkScheduleService = {
                   alreadyCommitted: committedThisPeriod,
                   maxMonthlyDeductionAmount: policy.maxMonthlyDeductionAmount,
                   maxMonthlyDeductionGrossFraction: policy.maxMonthlyDeductionGrossFraction,
+                  // Approved 8h→1day conversion: days derive from the CANONICAL
+                  // accumulation whenever the policy states a ratio.
+                  accumulatedMinutes: acc.totalMinutes,
+                  hoursPerDeductionDay: policy.hoursPerDeductionDay ?? null,
                 })
               : { days: null, dailyRate: null, amount: 0, capped: false, capReason: null } as DeductionAmountResult;
 
@@ -817,6 +823,7 @@ export const WorkScheduleService = {
             action: threshold.action,
             thresholdMode: policy.thresholdMode,
             workingDaysPerMonth: policy.workingDaysPerMonth,
+            hoursPerDeductionDay: policy.hoursPerDeductionDay ?? null,
             legalBasisPresent: hasLegalBasis,
             currency: employee.currency || "SAR",
           };
@@ -948,6 +955,14 @@ export const WorkScheduleService = {
             alreadyCommitted,
             maxMonthlyDeductionAmount: policy.maxMonthlyDeductionAmount,
             maxMonthlyDeductionGrossFraction: policy.maxMonthlyDeductionGrossFraction,
+            // Undecided cases follow the CURRENT canonical accumulation and
+            // the conversion stated at case creation (snapshot first, policy
+            // as fallback for pre-field cases). Decided cases are never touched.
+            accumulatedMinutes: acc.totalMinutes,
+            hoursPerDeductionDay:
+              kase.policySnapshot?.hoursPerDeductionDay ??
+              policy.hoursPerDeductionDay ??
+              null,
           });
           if (amountResult.amount !== (kase.amount ?? 0)) {
             patch.amount = amountResult.amount;

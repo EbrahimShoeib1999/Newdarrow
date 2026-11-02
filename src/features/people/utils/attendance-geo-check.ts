@@ -48,6 +48,17 @@ export async function captureAttendanceGeo(
   }
 
   if (assigned.length === 0) {
+    // A geofence employee WITH assignment references that resolve to nothing
+    // (deleted or deactivated work locations) is a tenant configuration
+    // problem — reporting it as "never assigned" sends HR chasing the wrong
+    // fix. The two causes get distinct, actionable codes.
+    const rawIds = employee.attendanceLocationIds ?? [];
+    if (rawIds.length > 0) {
+      throw new AttendanceGeoError(
+        "location_inactive",
+        "Assigned work locations are missing or inactive"
+      );
+    }
     throw new AttendanceGeoError("not_assigned", "No attendance location assigned");
   }
 

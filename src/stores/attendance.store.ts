@@ -22,7 +22,12 @@ import {
   zonedDayKeyOf,
 } from "@/features/people/lib/work-schedule-rules";
 import { captureAttendanceGeo } from "@/features/people/utils/attendance-geo-check";
-import { AttendanceGeoError, classifyAttendanceError } from "@/features/people/utils/geo";
+import {
+  AttendanceGeoError,
+  classifyAttendanceError,
+  resolveCheckInBlockReason,
+  type CheckInBlockCode,
+} from "@/features/people/utils/geo";
 import i18n from "@/lib/i18n";
 
 const at = (key: string, opts?: Record<string, unknown>) =>
@@ -42,6 +47,8 @@ function geoErrorToast(error: unknown, fallbackKey: "checkin_failed" | "checkout
     gps_denied: "gps_denied",
     gps_unavailable: "gps_unavailable",
     location_not_assigned: "location_not_assigned",
+    location_inactive: "location_inactive",
+    employment_inactive: "employment_inactive",
     outside: "outside_location",
     session_expired: "session_expired",
     action_forbidden: "action_forbidden",
@@ -67,6 +74,10 @@ interface AttendanceState {
   // an under-provisioned account) is surfaced here so the timer can offer a
   // recoverable retry instead of silently rendering "off-duty" forever.
   syncError: string | null;
+  // Why a start would be blocked for THIS employee, computed during sync from
+  // their actual employment configuration — the timer explains the block
+  // instead of silently hiding or disabling the control. null = can start.
+  checkInBlockReason: CheckInBlockCode | null;
   lastSync: { companyId: string; userId: string } | null;
   
   setReportModalOpen: (open: boolean) => void;
@@ -94,6 +105,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   isReportModalOpen: false,
   lateCheckInAlert: null,
   syncError: null,
+  checkInBlockReason: null,
   lastSync: null,
 
   setReportModalOpen: (open: boolean) => set({ isReportModalOpen: open }),
@@ -305,6 +317,34 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const employeeId = employeeDoc.id;
       const employeeData = employeeDoc.data() ?? {};
       set({ employeeId, isInitialized: true });
+
+      // Pre-click explanation of a blocked start (employment status, missing
+      // schedule locations). Dangling/inactive location references need the
+      // company's work-location list; reading it is best-effort — when it
+      // fails the click path still reports the actionable error itself.
+      const readiness = resolveCheckInBlockReason(
+        employeeData as Parameters<typeof resolveCheckInBlockReason>[0],
+        null
+      );
+      let checkInBlockReason: CheckInBlockCode | null = readiness;
+      if (
+        !readiness &&
+        employeeData.attendanceCheckMode !== "flexible" &&
+        employeeData.workType !== "remote" &&
+        employeeData.allowRemoteTimer !== true &&
+        (employeeData.attendanceLocationIds ?? []).length > 0
+      ) {
+        try {
+          const locRes = await PeopleService.getWorkLocations(companyId);
+          checkInBlockReason = resolveCheckInBlockReason(
+            employeeData as Parameters<typeof resolveCheckInBlockReason>[0],
+            locRes.data
+          );
+        } catch {
+          /* readiness unknown — never blocks, the punch path reports it */
+        }
+      }
+      set({ checkInBlockReason });
 
       const res = await PeopleService.getAttendance(companyId, employeeId);
       // A row's `date` is its punch day IN ITS OWN EFFECTIVE ZONE (the

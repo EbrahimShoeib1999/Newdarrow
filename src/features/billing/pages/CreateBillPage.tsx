@@ -38,6 +38,7 @@ import { BillingMoney } from "../components/BillingMoney";
 import { useBillingSettings } from "../hooks/use-billing-settings";
 import { LineTaxRateSelect } from "../components/LineTaxRateSelect";
 import { getDefaultTax } from "../utils/tax-utils";
+import { computeInvoiceTotals } from "../utils/invoice-line-utils";
 import {
   DEFAULT_BILLING_CURRENCY,
   getDefaultBillingCurrency,
@@ -152,17 +153,8 @@ export default function CreateBillPage() {
     }
   }, [defaultTax, isEditing, setValue, watch]);
 
-  const subTotal = watchItems.reduce(
-    (acc, item) =>
-      acc + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
-    0
-  );
-  const totalTax = watchItems.reduce((acc, item) => {
-    const beforeTax =
-      (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
-    return acc + beforeTax * ((Number(item.taxRate) || 0) / 100);
-  }, 0);
-  const grandTotal = subTotal + totalTax;
+  // Dynamic totals — ONE canonical formula shared with invoices.
+  const { subTotal, totalTax, grandTotal } = computeInvoiceTotals(watchItems);
 
   const resolveVendorForSave = async (
     data: CreateBillDTO

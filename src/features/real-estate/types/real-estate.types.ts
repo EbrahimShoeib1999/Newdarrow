@@ -511,6 +511,9 @@ export interface PropertyExpense {
   journalId?: string | null;
   documents: PropertyDocumentRef[];
   createdBy: string;
+  /** Soft-delete marker: financial records are never hard-deleted, the UI
+   *  "delete" archives them so history survives and they leave the list. */
+  archived?: boolean;
   createdAt: string;
   updatedAt: string;
 }

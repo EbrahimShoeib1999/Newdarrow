@@ -876,7 +876,7 @@ await check("REM finance: ordinary employee CANNOT record a rent payment (collec
   assertFails(setDoc(remPay1(asUser("emp1")), { leaseId: "L1", installmentId: "I1", amount: 1000, paymentDate: "2026-12-01" }))
 );
 await check("REM finance: collector CAN record a rent payment", () =>
-  assertSucceeds(setDoc(remPay1(asUser("mgr")), { leaseId: "L1", installmentId: "I1", amount: 1000, paymentDate: "2026-12-01" }))
+  assertSucceeds(setDoc(remPay1(asUser("mgr")), { leaseId: "L1", installmentId: "I1", amount: 1000, paymentDate: "2026-12-01", createdBy: "mgr" }))
 );
 await check("REM finance: recorded payment is NEVER hard-deletable (void keeps audit trail)", () =>
   assertFails(deleteDoc(remPay1(asUser("admin"))))
@@ -893,6 +893,87 @@ await check("REM finance: admin CAN move the deposit liability", () =>
 await check("REM finance: deposit row is NEVER hard-deletable", () =>
   assertFails(deleteDoc(remDep1(asUser("admin"))))
 );
+
+// ---- Phase B: explicit REM financial-integrity rules (positive + negative) --
+// Proves each new boundary: fabricated collected money, forged actor identity,
+// approved-amount tampering, hard-delete denial with a working archive path,
+// lease resurrection denial, and settings/real_estate counter-rewind denial —
+// while every legitimate workflow (schedule generation, recording a cost,
+// voiding a payment, archiving an expense, allocating a code) still passes.
+const remExpP = (db) => doc(db, "companies", COMPANY, "rem_property_expenses", "E-P");
+const remExpA = (db) => doc(db, "companies", COMPANY, "rem_property_expenses", "E-A");
+const remPayZero = (db) => doc(db, "companies", COMPANY, "rem_rent_payments", "P-ZERO");
+const remPayForge = (db) => doc(db, "companies", COMPANY, "rem_rent_payments", "P-FORGE");
+const remInstFabricated = (db) => doc(db, "companies", COMPANY, "rem_rent_installments", "I-FAB");
+const remSetRE = (db) => doc(db, "companies", COMPANY, "settings", "real_estate");
+
+// rem_rent_installments — schedule generation opens UNCOLLECTED, a fabricated
+// collected amount at creation is rejected (money lands only via collect).
+await check("Phase B: installment create with fabricated paidAmount>0 is DENIED", () =>
+  assertFails(setDoc(remInstFabricated(asUser("emp1")), { leaseId: "L1", index: 2, dueDate: "2027-01-01", expectedAmount: 1000, paidAmount: 1000, status: "paid" }))
+);
+
+// rem_rent_payments — positive amount + actor bound to the authenticated uid.
+await check("Phase B: collector CANNOT record a zero/negative payment", () =>
+  assertFails(setDoc(remPayZero(asUser("mgr")), { leaseId: "L1", installmentId: "I1", amount: 0, paymentDate: "2026-12-01", createdBy: "mgr" }))
+);
+await check("Phase B: collector CANNOT record a payment with a forged createdBy", () =>
+  assertFails(setDoc(remPayForge(asUser("mgr")), { leaseId: "L1", installmentId: "I1", amount: 1000, paymentDate: "2026-12-01", createdBy: "someone-else" }))
+);
+await check("Phase B: collector CAN void a recorded payment (money fields immutable)", () =>
+  assertSucceeds(updateDoc(remPay1(asUser("mgr")), { void: true, voidReason: "duplicate entry" }))
+);
+await check("Phase B: collector CANNOT rewrite a recorded payment amount", () =>
+  assertFails(updateDoc(remPay1(asUser("mgr")), { amount: 1 }))
+);
+
+// rem_property_expenses — explicit rule (not the catch-all): recording is open
+// to the domain, approval + approved-amount are gated, hard delete is denied.
+await check("Phase B: member CAN record a pending expense (createdBy == uid)", () =>
+  assertSucceeds(setDoc(remExpP(asUser("emp1")), { propertyId: "p1", category: "other", description: "leaky tap", amount: 500, currency: "USD", expenseDate: "2026-12-01", approvalStatus: "pending", createdBy: "emp1" }))
+);
+await check("Phase B: member CANNOT record a zero/negative expense", () =>
+  assertFails(setDoc(doc(asUser("emp1"), "companies", COMPANY, "rem_property_expenses", "E-ZERO"), { propertyId: "p1", amount: 0, currency: "USD", expenseDate: "2026-12-01", approvalStatus: "pending", createdBy: "emp1" }))
+);
+await check("Phase B: member CANNOT self-approve an expense (approve gate)", () =>
+  assertFails(setDoc(doc(asUser("emp1"), "companies", COMPANY, "rem_property_expenses", "E-SELFAPPROVE"), { propertyId: "p1", amount: 500, currency: "USD", expenseDate: "2026-12-01", approvalStatus: "approved", createdBy: "emp1" }))
+);
+await check("Phase B: reviewer CAN record an approved expense", () =>
+  assertSucceeds(setDoc(remExpA(asUser("mgr")), { propertyId: "p1", category: "other", description: "roof repair", amount: 5000, currency: "USD", expenseDate: "2026-12-01", approvalStatus: "approved", createdBy: "mgr" }))
+);
+await check("Phase B: non-reviewer CANNOT rewrite an APPROVED expense amount", () =>
+  assertFails(updateDoc(remExpA(asUser("emp1")), { amount: 501 }))
+);
+await check("Phase B: non-reviewer CAN amend neutral metadata of a pending expense", () =>
+  assertSucceeds(updateDoc(remExpP(asUser("emp1")), { description: "leaky tap (kitchen)" }))
+);
+await check("Phase B: expense archive (soft-delete) is allowed for a member", () =>
+  assertSucceeds(updateDoc(remExpP(asUser("emp1")), { archived: true }))
+);
+await check("Phase B: expense is NEVER hard-deletable (history preserved)", () =>
+  assertFails(deleteDoc(remExpA(asUser("admin"))))
+);
+
+// rem_leases — no resurrection: once terminated, a lease can never be re-activated.
+await check("Phase B: reviewer CAN terminate the active lease", () =>
+  assertSucceeds(updateDoc(remLease1(asUser("mgr")), { status: "terminated" }))
+);
+await check("Phase B: a TERMINATED lease CANNOT be resurrected to active", () =>
+  assertFails(updateDoc(remLease1(asUser("mgr")), { status: "active" }))
+);
+
+// settings/real_estate — sequence counters may only move forward; a rewind (the
+// mechanism behind duplicate property/lease codes) is denied.
+await check("Phase B: REM member CAN open the code-counter doc", () =>
+  assertSucceeds(setDoc(remSetRE(asUser("emp1")), { sequences: { lease: { prefix: "LSE-", nextNumber: 5, padding: 4 } } }, { merge: true }))
+);
+await check("Phase B: code-counter CAN move FORWARD (legitimate allocation)", () =>
+  assertSucceeds(updateDoc(remSetRE(asUser("emp1")), { sequences: { lease: { prefix: "LSE-", nextNumber: 6, padding: 4 } } }))
+);
+await check("Phase B: code-counter CANNOT be rewound (duplicate-code protection)", () =>
+  assertFails(updateDoc(remSetRE(asUser("emp1")), { sequences: { lease: { prefix: "LSE-", nextNumber: 2, padding: 4 } } }))
+);
+
 await check("rem teardown: tenant activity -> MARKETING_AGENCY", () => setActivity("MARKETING_AGENCY"));
 await check("REM finance: inactive domain blocks even the admin (fail-closed)", () =>
   assertFails(getDoc(remLease1(asUser("admin"))))
@@ -930,6 +1011,108 @@ await check("reconcile: ordinary admin CANNOT assign an orphan (no tenant claim)
   assertFails(
     updateDoc(doc(asUser("admin"), "users", "orphan2"), { companyId: COMPANY })
   )
+);
+
+// ---- SEC-P0-01: user-profile privilege-escalation (positive AND negative) ----
+// Proves the create rule accepts every real provisioning shape and rejects every
+// self-minted privilege, and that the update rule blocks a tenant admin from
+// minting/editing a super_admin or moving members across tenants — while a
+// platform super_admin may still grant the super_admin role.
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  // A live tenant for the "admin of an existing company" denial cases.
+  await setDoc(doc(db, "companies", "existing-co"), { name: "Existing Co", primaryActivity: "PROJECTS" });
+  // A genuine pending invitation (manager) and an already-consumed one.
+  await setDoc(doc(db, "invites", "inv-pending"), {
+    token: "inv-pending", email: "mgr@acme.test", role: "manager", companyId: COMPANY, status: "pending",
+  });
+  await setDoc(doc(db, "invites", "inv-accepted"), {
+    token: "inv-accepted", email: "ex@acme.test", role: "manager", companyId: COMPANY, status: "accepted",
+  });
+});
+
+// Positive: the four legitimate provisioning shapes.
+await check("provision: register()/Google self-create admin of a NEW (non-existent) company", () =>
+  assertSucceeds(setDoc(doc(asUser("newco-uid"), "users", "newco-uid"), {
+    email: "owner@newco.test", name: "New Owner", role: "admin", companyId: "brand-new-co",
+  }))
+);
+await check("provision: login() orphan placeholder (employee, empty companyId)", () =>
+  assertSucceeds(setDoc(doc(asUser("orphan-new"), "users", "orphan-new"), {
+    email: "stray@x.test", name: "stray", role: "employee", companyId: "",
+  }))
+);
+await check("provision: plain employee self-joins an existing company (registration-visibility contract)", () =>
+  assertSucceeds(setDoc(doc(asUser("joiner-uid"), "users", "joiner-uid"), {
+    email: "join@acme.test", name: "Joiner", role: "employee", companyId: COMPANY, portalAccess: ["people"], portalSubRoles: {},
+  }))
+);
+await check("provision: manager invitation accepted against the real pending invite", () =>
+  assertSucceeds(setDoc(doc(asUser("inv-mgr-uid"), "users", "inv-mgr-uid"), {
+    email: "mgr@acme.test", name: "Invited Manager", role: "manager", companyId: COMPANY,
+    invitationToken: "inv-pending", portalSubRoles: { people: "hr" },
+  }))
+);
+
+// Negative: every self-minted privilege.
+await check("SEC-P0-01: CANNOT self-create super_admin", () =>
+  assertFails(setDoc(doc(asUser("hacker1"), "users", "hacker1"), {
+    email: "h@x.test", name: "H", role: "super_admin", companyId: COMPANY,
+  }))
+);
+await check("SEC-P0-01: CANNOT self-register as admin of an EXISTING company", () =>
+  assertFails(setDoc(doc(asUser("hacker2"), "users", "hacker2"), {
+    email: "h@x.test", name: "H", role: "admin", companyId: "existing-co",
+  }))
+);
+await check("SEC-P0-01: CANNOT self-grant customPermissions even for a new company", () =>
+  assertFails(setDoc(doc(asUser("hacker3"), "users", "hacker3"), {
+    email: "h@x.test", name: "H", role: "admin", companyId: "another-new-co", customPermissions: ["real_estate.collect"],
+  }))
+);
+await check("SEC-P0-01: CANNOT join as employee with an elevated portal sub-role", () =>
+  assertFails(setDoc(doc(asUser("hacker4"), "users", "hacker4"), {
+    email: "h@x.test", name: "H", role: "employee", companyId: COMPANY, portalSubRoles: { billing: "accountant" },
+  }))
+);
+await check("SEC-P0-01: CANNOT mint a manager with a non-existent invitation token", () =>
+  assertFails(setDoc(doc(asUser("hacker5"), "users", "hacker5"), {
+    email: "mgr@acme.test", name: "H", role: "manager", companyId: COMPANY, invitationToken: "nope-not-real",
+  }))
+);
+await check("SEC-P0-01: CANNOT reuse an invitation for a role the invite did not grant", () =>
+  assertFails(setDoc(doc(asUser("hacker6"), "users", "hacker6"), {
+    email: "mgr@acme.test", name: "H", role: "admin", companyId: COMPANY, invitationToken: "inv-pending",
+  }))
+);
+await check("SEC-P0-01: CANNOT redeem an already-accepted invitation", () =>
+  assertFails(setDoc(doc(asUser("hacker7"), "users", "hacker7"), {
+    email: "ex@acme.test", name: "H", role: "manager", companyId: COMPANY, invitationToken: "inv-accepted",
+  }))
+);
+
+// Negative: update-path escalation guards.
+await check("SEC-P0-01: tenant admin CANNOT mint a super_admin teammate", () =>
+  assertFails(updateDoc(doc(asUser("admin"), "users", "emp1"), { role: "super_admin" }))
+);
+await check("SEC-P0-01: tenant admin CANNOT edit a super_admin's profile", () =>
+  assertFails(updateDoc(doc(asUser("admin"), "users", "superadmin"), { name: "pwned" }))
+);
+await check("SEC-P0-01: tenant admin CANNOT move a member across tenants", () =>
+  assertFails(updateDoc(doc(asUser("admin"), "users", "emp1"), { companyId: "existing-co" }))
+);
+await check("SEC-P0-01: ordinary member CANNOT self-grant customPermissions", () =>
+  assertFails(updateDoc(doc(asUser("emp1"), "users", "emp1"), { customPermissions: ["real_estate.collect"] }))
+);
+await check("SEC-P0-01: ordinary member CANNOT self-promote role", () =>
+  assertFails(updateDoc(doc(asUser("emp1"), "users", "emp1"), { role: "manager" }))
+);
+// Positive: legitimate admin management still works.
+await check("provision: tenant admin CAN still change a teammate's non-privileged role", () =>
+  assertSucceeds(updateDoc(doc(asUser("admin"), "users", "emp2"), { role: "manager" }))
+);
+await check("provision: super_admin CAN grant the super_admin role (only legit minter)", () =>
+  assertSucceeds(updateDoc(doc(asUser("superadmin"), "users", "mgr"), { role: "super_admin" }))
 );
 
 await testEnv.cleanup();

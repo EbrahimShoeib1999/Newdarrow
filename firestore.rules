@@ -190,6 +190,48 @@ service cloud.firestore {
       );
     }
 
+    // ---- SEC-P0-01: user-profile provisioning contract --------------------
+    //
+    // The users collection is the RBAC root: role/companyId/customPermissions/
+    // portalSubRoles read here decide every downstream gate. The old create rule
+    // (`signedIn() && uid == userId`) let ANY signed-in uid forge a privileged
+    // profile — self-mint super_admin, join a victim tenant as admin, or grant
+    // oneself customPermissions. These helpers encode the ONLY provisioning
+    // shapes the shipped services actually perform (traced against
+    // AuthService.register / loginWithGoogle / login / acceptInvite).
+
+    // True when the not-yet-existing profile elevates itself through a portal
+    // sub-role map (e.g. {billing:'accountant'} reaches canReviewDocuments).
+    // Ordinary self-provisioned profiles must never carry these; invitation
+    // grants are validated against the real invite doc instead.
+    function portalSubRolesElevating(data) {
+      return data.get('portalSubRoles', null) != null
+        && data.get('portalSubRoles', {}) is map
+        && data.get('portalSubRoles', {}).size() > 0;
+    }
+
+    // A self-provisioned profile may only carry customPermissions when absent or
+    // empty; an admin grants them later through the separately-gated update rule.
+    function customPermissionsEmptyOrAbsent(data) {
+      return !(data.get('customPermissions', []) is list)
+        || data.get('customPermissions', []).size() == 0;
+    }
+
+    // Invitation-backed provisioning. acceptInvite() stamps the consumed invite's
+    // token onto the new profile; the create is legitimate ONLY when it mirrors a
+    // real, still-pending invite addressed to this exact email/role/company. This
+    // is the sole path that may mint a privileged (admin/manager) profile or
+    // portal sub-roles into an EXISTING tenant.
+    function provisionedViaValidInvitation() {
+      return 'invitationToken' in request.resource.data
+        && request.resource.data.get('invitationToken', '') != ''
+        && exists(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken))
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken)).data.get('status', '') == 'pending'
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken)).data.get('email', '') == request.resource.data.get('email', '')
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken)).data.get('companyId', '') == request.resource.data.get('companyId', '')
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken)).data.get('role', '') == request.resource.data.get('role', '');
+    }
+
     // User profiles
     match /users/{userId} {
       // Own profile, or teammates in the same company. Every stored-field read
@@ -221,8 +263,28 @@ service cloud.firestore {
         || (isSuperAdmin() && resource.data.get('companyId', '') == '')
       );
 
-      // New account (register / invite accept / Google)
-      allow create: if signedIn() && request.auth.uid == userId;
+      // New account. Only the four real provisioning shapes are allowed, and
+      // never a client-minted super_admin or self-granted customPermissions.
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.get('role', '') != 'super_admin'
+        && customPermissionsEmptyOrAbsent(request.resource.data)
+        && (
+          // (1) Invitation-backed: the only legitimate way to be provisioned
+          //     into an EXISTING tenant with a privileged role or portal sub-roles.
+          provisionedViaValidInvitation()
+          // (2) Ordinary self-provisioning (login() orphan placeholder, plain
+          //     member joining): never elevated, never a tenant administrator.
+          || (request.resource.data.get('role', '') in ['employee', 'viewer']
+              && !portalSubRolesElevating(request.resource.data))
+          // (3) New-tenant onboarding (register / loginWithGoogle): admin of a
+          //     company that does NOT exist yet, so a caller can only stand up
+          //     their own tenant — never inject themselves into someone else's.
+          || (request.resource.data.get('role', '') == 'admin'
+              && request.resource.data.get('companyId', '') != ''
+              && !exists(/databases/$(database)/documents/companies/$(request.resource.data.get('companyId', '')))
+              && !portalSubRolesElevating(request.resource.data))
+        );
 
       // Self update (without privilege escalation), or company admin updating teammates.
       // Plus reconciliation assignment: a platform super_admin may attach an
@@ -230,7 +292,17 @@ service cloud.firestore {
       // set a non-empty companyId, so this branch can only consume orphans, never
       // move an existing tenant's member.
       allow update: if signedIn() && (
-        (hasUserDoc() && isCompanyAdmin(resource.data.get('companyId', '')))
+        // Company-admin teammate management, with privilege-escalation guards:
+        // a tenant admin may never mint or edit a super_admin, and may never
+        // move a member across tenants. A platform super_admin is exempt on the
+        // role clauses (the only legitimate path to grant the super_admin role);
+        // cross-tenant / orphan moves go through the reconciliation branch below.
+        (hasUserDoc() && isCompanyAdmin(resource.data.get('companyId', ''))
+          && (isSuperAdmin() || (
+            resource.data.get('role', '') != 'super_admin'
+            && request.resource.data.get('role', '') != 'super_admin'
+          ))
+          && request.resource.data.get('companyId', '') == resource.data.get('companyId', ''))
         || (
           isSuperAdmin()
           && resource.data.get('companyId', '') == ''
@@ -466,13 +538,53 @@ service cloud.firestore {
           && !(hasRemPermission(companyId, 'real_estate.approve'));
       }
       
+      // Lease lifecycle legality, enforced on the SERVER from the CURRENT status
+      // (resource.data.status) to the proposed one (request.resource.data.status).
+      // Mirrors LEASE_TRANSITIONS in src/features/real-estate/lib/rem-rules.ts so a
+      // lease can NEVER be resurrected from a terminal state, while every legitimate
+      // lifecycle edge — including expiring -> active restored by the due-date
+      // processor — and ordinary metadata edits (status unchanged) remain allowed.
+      function remLeaseEdgeAllowed(from, to) {
+        return (
+          (from == 'draft' && to in ['pending_approval', 'active', 'cancelled'])
+          || (from == 'pending_approval' && to in ['active', 'draft', 'cancelled'])
+          || (from == 'active' && to in ['expiring', 'expired', 'terminated', 'renewed'])
+          || (from == 'expiring' && to in ['expired', 'terminated', 'renewed', 'active'])
+          || (from == 'expired' && to in ['renewed', 'terminated'])
+        );
+      }
+
+      // REM code counters live in settings/real_estate.sequences and are bumped
+      // inside allocateRemCode's transaction (merge set, so request.resource.data
+      // reflects the whole merged doc — untouched kinds stay equal, the allocated
+      // kind grows by one). A counter may therefore only ever move FORWARD: a
+      // rewind is exactly the mechanism behind duplicate property/lease codes, so
+      // it is denied here while legitimate generation stays allowed.
+      function remSeqNotRewound(kind) {
+        return request.resource.data.get('sequences', {}).get(kind, {}).get('nextNumber', 0)
+          >= resource.data.get('sequences', {}).get(kind, {}).get('nextNumber', 0);
+      }
+
+      function remSequenceNotRewound() {
+        return remSeqNotRewound('property')
+          && remSeqNotRewound('building')
+          && remSeqNotRewound('unit')
+          && remSeqNotRewound('lease')
+          && remSeqNotRewound('inspection');
+      }
+
       // Leases: never hard-deletable — terminated/expired history must survive.
       match /rem_leases/{leaseId} {
         allow read: if domainAccessAllowed(companyId, 'rem_leases');
         allow create: if domainAccessAllowed(companyId, 'rem_leases')
+          && request.resource.data.get('status', '') in ['draft', 'pending_approval', 'active']
           && !remLeaseStateEscalates(request.resource.data);
         allow update: if domainAccessAllowed(companyId, 'rem_leases')
-          && !remLeaseStateEscalates(request.resource.data);
+          && !remLeaseStateEscalates(request.resource.data)
+          && (
+            request.resource.data.get('status', '') == resource.data.get('status', '')
+            || remLeaseEdgeAllowed(resource.data.get('status', ''), request.resource.data.get('status', ''))
+          );
         allow delete: if false;
       }
       
@@ -481,7 +593,11 @@ service cloud.firestore {
       // domain, and deletion is never allowed (financial history preservation).
       match /rem_rent_installments/{installmentId} {
         allow read: if domainAccessAllowed(companyId, 'rem_rent_installments');
-        allow create: if domainAccessAllowed(companyId, 'rem_rent_installments');
+        // Schedule generation opens every period UNCOLLECTED (paidAmount 0); a
+        // fabricated collected amount at creation is rejected — money only ever
+        // lands through the collect-gated UPDATE below (or the trusted callable).
+        allow create: if domainAccessAllowed(companyId, 'rem_rent_installments')
+          && request.resource.data.get('paidAmount', 0) == 0;
         allow update: if domainAccessAllowed(companyId, 'rem_rent_installments') && (
           hasRemPermission(companyId, 'real_estate.collect')
           || (
@@ -497,8 +613,23 @@ service cloud.firestore {
       // the audit trail of voided-but-recorded transactions.
       match /rem_rent_payments/{paymentId} {
         allow read: if domainAccessAllowed(companyId, 'rem_rent_payments');
-        allow create, update: if domainAccessAllowed(companyId, 'rem_rent_payments')
-          && hasRemPermission(companyId, 'real_estate.collect');
+        // Only the collect permission records a payment, the amount must be a
+        // positive number, and the actor is bound to the authenticated uid (a
+        // forged createdBy is rejected) — mirrors the shared `payments` amount gate.
+        allow create: if domainAccessAllowed(companyId, 'rem_rent_payments')
+          && hasRemPermission(companyId, 'real_estate.collect')
+          && request.resource.data.get('amount', 0) > 0
+          && request.resource.data.get('createdBy', '') == request.auth.uid;
+        // The only legitimate UPDATE is the void/correction: void flags + reason
+        // may change, but the money fields (amount, allocations, lease, actor) are
+        // immutable, so a collector can never rewrite a recorded payment's total.
+        allow update: if domainAccessAllowed(companyId, 'rem_rent_payments')
+          && hasRemPermission(companyId, 'real_estate.collect')
+          && resource != null
+          && request.resource.data.get('amount', 0) == resource.data.get('amount', 0)
+          && request.resource.data.get('allocations', []) == resource.data.get('allocations', [])
+          && request.resource.data.get('leaseId', '') == resource.data.get('leaseId', '')
+          && request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '');
         allow delete: if false;
       }
       
@@ -510,6 +641,42 @@ service cloud.firestore {
         allow create: if domainAccessAllowed(companyId, 'rem_security_deposits');
         allow update: if domainAccessAllowed(companyId, 'rem_security_deposits')
           && hasRemPermission(companyId, 'real_estate.deposits');
+        allow delete: if false;
+      }
+
+      // Property expenses are the domain's canonical expense records. Recording a
+      // cost is open to the domain, but the accountant review outcome
+      // (approvalStatus -> approved/rejected) and any rewrite of an APPROVED
+      // amount require the real_estate.approve atom — mirroring the shared `bills`
+      // gate so a client can neither self-approve nor quietly amend an approved
+      // expense. The actor is bound to the authenticated uid. Hard deletion is
+      // denied (the UI archives instead); financial history is preserved.
+      match /rem_property_expenses/{expenseId} {
+        allow read: if domainAccessAllowed(companyId, 'rem_property_expenses');
+        allow create: if domainAccessAllowed(companyId, 'rem_property_expenses')
+          && request.resource.data.get('amount', 0) > 0
+          && request.resource.data.get('createdBy', '') == request.auth.uid
+          && (
+            hasRemPermission(companyId, 'real_estate.approve')
+            || (
+              request.resource.data.get('approvalStatus', 'pending') != 'approved'
+              && request.resource.data.get('approvalStatus', 'pending') != 'rejected'
+            )
+          );
+        // `resource != null` keeps UPDATE semantics (same footgun as `bills`).
+        allow update: if domainAccessAllowed(companyId, 'rem_property_expenses')
+          && resource != null && (
+            hasRemPermission(companyId, 'real_estate.approve')
+            || (
+              // Non-reviewers never move the approval outcome, and never rewrite
+              // the money of an already-approved expense.
+              request.resource.data.get('approvalStatus', '') == resource.data.get('approvalStatus', '')
+              && (
+                resource.data.get('approvalStatus', '') != 'approved'
+                || request.resource.data.get('amount', 0) == resource.data.get('amount', 0)
+              )
+            )
+          );
         allow delete: if false;
       }
       
@@ -573,6 +740,15 @@ service cloud.firestore {
           data.get('userId', '') == request.auth.uid
           || employeeAccountUid(data.get('employeeId', '')) == request.auth.uid
         );
+      }
+
+      // Stricter gate for CREATE: an employee opening a shift MUST be the
+      // account behind the employee record. The old OR with data.userId alone
+      // let anyone punch for any employeeId by stamping their own uid.
+      function isOwnAttendanceCreate(data) {
+        return signedIn()
+          && employeeAccountUid(data.get('employeeId', '')) == request.auth.uid
+          && (data.get('userId', '') == '' || data.get('userId', '') == request.auth.uid);
       }
 
       // Schedule configuration is transparent to the company; only holders of
@@ -669,7 +845,7 @@ service cloud.firestore {
         allow read: if belongsToCompany(companyId);
         allow create: if belongsToCompany(companyId) && (
           peopleHrAllowed(companyId, 'people.correct_attendance')
-          || isMyAttendance(request.resource.data)
+          || isOwnAttendanceCreate(request.resource.data)
         );
         allow update: if belongsToCompany(companyId) && resource != null && (
           // identity is immutable for every writer
@@ -695,9 +871,20 @@ service cloud.firestore {
       // policy, which now requires the schedule-management capability.
       match /settings/{settingId} {
         allow read: if belongsToCompany(companyId);
-        allow create, update: if belongsToCompany(companyId) && (
+        // First REM code allocation creates the counter doc — no prior value to
+        // rewind, so a plain member gate is enough (attendance still needs the
+        // schedule-management capability).
+        allow create: if belongsToCompany(companyId) && (
           settingId != 'attendance'
           || peopleHrAllowed(companyId, 'people.manage_schedules')
+        );
+        // settings/real_estate additionally guards its sequence counters against
+        // rewinds; every other setting keeps the original member-writable contract
+        // (attendance excepted, behind the schedule-management capability).
+        allow update: if belongsToCompany(companyId) && resource != null && (
+          (settingId == 'real_estate' && remSequenceNotRewound())
+          || (settingId == 'attendance' && peopleHrAllowed(companyId, 'people.manage_schedules'))
+          || (settingId != 'attendance' && settingId != 'real_estate')
         );
         allow delete: if isCompanyAdmin(companyId);
       }
@@ -727,6 +914,7 @@ service cloud.firestore {
           && collection != 'rem_rent_installments'
           && collection != 'rem_rent_payments'
           && collection != 'rem_security_deposits'
+          && collection != 'rem_property_expenses'
           && collection != 'attendance'
           && collection != 'settings'
           && collection != 'module_definitions'
@@ -752,6 +940,7 @@ service cloud.firestore {
           && collection != 'rem_rent_installments'
           && collection != 'rem_rent_payments'
           && collection != 'rem_security_deposits'
+          && collection != 'rem_property_expenses'
           && collection != 'attendance'
           && collection != 'settings'
           && collection != 'module_definitions'
@@ -774,6 +963,7 @@ service cloud.firestore {
             && collection != 'rem_rent_installments'
             && collection != 'rem_rent_payments'
             && collection != 'rem_security_deposits'
+            && collection != 'rem_property_expenses'
             && collection != 'attendance'
             && collection != 'settings'
             && collection != 'module_definitions'
@@ -793,6 +983,7 @@ service cloud.firestore {
             && collection != 'rem_rent_installments'
             && collection != 'rem_rent_payments'
             && collection != 'rem_security_deposits'
+            && collection != 'rem_property_expenses'
             && collection != 'attendance'
             && collection != 'settings'
             && collection != 'module_definitions'
