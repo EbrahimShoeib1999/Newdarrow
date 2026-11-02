@@ -1037,7 +1037,6 @@ try {
     await waitForVisibleDialog("contact form");
     if (!(await setLabeled("First Name", NOVA_FIRST))) throw new Error("first name not filled");
     if (!(await setLabeled("Last Name", NOVA_LAST))) throw new Error("last name not filled");
-<<<<<<< HEAD
     // Individual contacts need phone OR email to pass validation; provide both
     // so a mis-targeted field cannot silently block the submit.
     await setLabeled("Primary Phone", "0500000099");
@@ -1064,18 +1063,6 @@ try {
     await waitUntil(async () => (await bodyText()).includes(NOVA_LAST), 30000, "new contact repaints the list");
     await shot("19-client-registered");
     return `client "${persisted.firstName} ${persisted.lastName}" created via the CRM form (id=${String(persisted.id).slice(0, 8)}…)`;
-=======
-    // Individual contacts need phone OR email to pass validation.
-    if (!(await setLabeled("Primary Phone", "0500000099"))) throw new Error("phone not filled");
-    if (!(await clickTextExact(["Save Contact"]))) throw new Error("Save Contact button not found");
-    await waitUntil(async () => {
-      const rows = await fsList(`companies/${COMPANY_ID}/contacts`);
-      return rows.some((c) => (c.firstName || "").includes(NOVA_FIRST) && (c.lastName || "").includes(NOVA_LAST));
-    }, 30000, "new contact persisted to Firestore under the tenant");
-    await waitUntil(async () => (await bodyText()).includes(NOVA_LAST), 30000, "new contact repaints the list");
-    await shot("19-client-registered");
-    return "client created through the real CRM form and persisted under the tenant";
->>>>>>> b1e1fdfaceff7cdce716d06b7dd999caacac1cce
   });
 
   // ---------- Step 20: campaign detail in-context links actually navigate ----------
