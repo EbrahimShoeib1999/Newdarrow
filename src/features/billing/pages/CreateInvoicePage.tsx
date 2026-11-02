@@ -58,56 +58,62 @@ export default function CreateInvoicePage() {
   const { t: tCommon } = useTranslation("common");
   const navigate = useNavigate();
   const location = useLocation();
-  const fromQuotation = (location.state as { fromQuotation?: {
-    quotationId?: string;
-    contactId: string;
-    data: {
-      currency: string;
-      vatRate: number;
-      pricesIncludeVat: boolean;
-      notes?: string;
-      validityDuration: number;
-      validityUnit: "day" | "month";
-      items: Array<{
-        nameAr?: string;
-        nameEn?: string;
-        description?: string;
+  const fromQuotation = (location.state as {
+    fromQuotation?: {
+      quotationId?: string;
+      contactId: string;
+      data: {
+        currency: string;
+        vatRate: number;
+        pricesIncludeVat: boolean;
+        notes?: string;
+        validityDuration: number;
+        validityUnit: "day" | "month";
+        items: Array<{
+          nameAr?: string;
+          nameEn?: string;
+          description?: string;
+          quantity: number;
+          unitPrice: number;
+        }>;
+      };
+    }
+  })?.fromQuotation;
+
+  const fromContract = (location.state as {
+    fromContract?: {
+      contractId: string;
+      contractNumber?: string;
+      contactId?: string;
+      customerName?: string;
+      dealId?: string;
+      milestoneId?: string;
+      /** Delivery project reference carried through for roll-ups (never an amount). */
+      projectId?: string;
+      title?: string;
+      currency?: string;
+      amount?: number;
+      vatRate?: number;
+      items?: Array<{
+        description: string;
         quantity: number;
         unitPrice: number;
+        taxRate?: number;
+        total?: number;
       }>;
-    };
-  } })?.fromQuotation;
+    }
+  })?.fromContract;
 
-  const fromContract = (location.state as { fromContract?: {
-    contractId: string;
-    contractNumber?: string;
-    contactId?: string;
-    customerName?: string;
-    dealId?: string;
-    milestoneId?: string;
-    /** Delivery project reference carried through for roll-ups (never an amount). */
-    projectId?: string;
-    title?: string;
-    currency?: string;
-    amount?: number;
-    vatRate?: number;
-    items?: Array<{
-      description: string;
-      quantity: number;
-      unitPrice: number;
-      taxRate?: number;
-      total?: number;
-    }>;
-  } })?.fromContract;
-
-  const fromDeal = (location.state as { fromDeal?: {
-    dealId: string;
-    contactId?: string;
-    amount?: number;
-    currency?: string;
-    title?: string;
-    projectId?: string;
-  } })?.fromDeal;
+  const fromDeal = (location.state as {
+    fromDeal?: {
+      dealId: string;
+      contactId?: string;
+      amount?: number;
+      currency?: string;
+      title?: string;
+      projectId?: string;
+    }
+  })?.fromDeal;
 
   const { data: contactsRes } = useContactsQuery();
   const contacts = contactsRes?.data || [];
@@ -228,27 +234,27 @@ export default function CreateInvoicePage() {
 
       const items = fromContract.items && fromContract.items.length > 0
         ? fromContract.items.map((i) => {
-            const beforeTax = i.quantity * i.unitPrice;
-            const tax = beforeTax * ((i.taxRate ?? vatRate) / 100);
-            return {
-              description: i.description,
-              quantity: i.quantity,
-              unitPrice: i.unitPrice,
-              taxRate: i.taxRate ?? vatRate,
-            taxRateId: effectiveDefaultTax?.id ?? null,
-              discount: 0,
-              total: beforeTax + tax,
-            };
-          })
-        : [{
-            description: fromContract.title || `دفعة تعاقدية - عقد #${fromContract.contractNumber || fromContract.contractId}`,
-            quantity: 1,
-            unitPrice: fromContract.amount || 0,
-            taxRate: vatRate,
+          const beforeTax = i.quantity * i.unitPrice;
+          const tax = beforeTax * ((i.taxRate ?? vatRate) / 100);
+          return {
+            description: i.description,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            taxRate: i.taxRate ?? vatRate,
             taxRateId: effectiveDefaultTax?.id ?? null,
             discount: 0,
-            total: (fromContract.amount || 0) * (1 + vatRate / 100),
-          }];
+            total: beforeTax + tax,
+          };
+        })
+        : [{
+          description: fromContract.title || `دفعة تعاقدية - عقد #${fromContract.contractNumber || fromContract.contractId}`,
+          quantity: 1,
+          unitPrice: fromContract.amount || 0,
+          taxRate: vatRate,
+          taxRateId: effectiveDefaultTax?.id ?? null,
+          discount: 0,
+          total: (fromContract.amount || 0) * (1 + vatRate / 100),
+        }];
 
       const subTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
       const totalTax = items.reduce((s, i) => s + (i.quantity * i.unitPrice * (i.taxRate ?? 0)) / 100, 0);
@@ -535,9 +541,9 @@ export default function CreateInvoicePage() {
               {isEditing ? t("invoices.create.edit_title") : t("invoices.create.title")}
             </span>
           </nav>
-          <h1 className="text-xl md:text-2xl font-bold text-default-900 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />
-            <span className="truncate">
+          <h1 className="text-xl md:text-2xl font-bold text-default-900 flex items-start gap-2">
+            <FileText className="mt-1 shrink-0 w-5 h-5 text-primary" />
+            <span className="min-w-0 break-words">
               {isEditing ? t("invoices.create.edit_title") : t("invoices.create.title")}
             </span>
           </h1>
@@ -702,255 +708,255 @@ export default function CreateInvoicePage() {
 
         {formReady && (
           <>
-        {/* Items Table */}
-        <Card className="border border-default-100 shadow-sm rounded-2xl">
-          <CardHeader className="px-5 md:px-6 py-4 flex justify-between items-center bg-default-50/60 rounded-t-2xl">
-            <h3 className="font-bold text-base md:text-lg text-default-800 flex items-center gap-2">
-              {t("invoices.create.item_details")}
-              <Chip size="sm" variant="flat" className="h-5 text-[10px] font-bold">
-                {fields.length}
-              </Chip>
-            </h3>
-            <span className="hidden md:inline text-xs text-default-500">
-              {t("invoices.create.sub_total_hint")}
-            </span>
-          </CardHeader>
-          <Divider />
-          <CardBody className="p-0 overflow-x-auto">
-            <table className="w-full min-w-[820px] text-start">
-              <thead className="bg-default-50/70 text-xs md:text-sm font-semibold text-default-600 uppercase tracking-wide">
-                <tr>
-                  <th className="p-3 md:p-4 w-[32%] text-start">{t("invoices.create.product_item")}</th>
-                  <th className="p-3 md:p-4 w-[10%] text-center">{t("invoices.create.quantity")}</th>
-                  <th className="p-3 md:p-4 w-[16%] text-end">{t("invoices.create.rate")}</th>
-                  <th className="p-3 md:p-4 w-[20%] text-start">{t("invoices.create.tax")}</th>
-                  <th className="p-3 md:p-4 w-[16%] text-end">{t("invoices.create.amount")}</th>
-                  <th className="p-3 md:p-4 w-[6%]"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {fields.map((field, index) => {
-                  const q = Number(watch(`items.${index}.quantity`)) || 0;
-                  const r = Number(watch(`items.${index}.unitPrice`)) || 0;
-                  const d = Number(watch(`items.${index}.discount`)) || 0;
-                  const tx = Number(watch(`items.${index}.taxRate`)) || 0;
-                  const amtBeforeTax = (q * r) - d;
-                  const lineVat = (amtBeforeTax * tx) / 100;
-                  const lineTotal = amtBeforeTax + lineVat;
-
-                  return (
-                    <tr key={field.id} className="border-b border-default-100/70 last:border-b-0 group hover:bg-default-50/40 transition-colors">
-                      <td className="p-3 md:p-4 align-top">
-                        <div className="flex flex-col gap-1.5">
-                          <Select
-                            {...selectFieldProps({ compact: true })}
-                            size="sm"
-                            aria-label={t("invoices.create.product_item")}
-                            placeholder={t("invoices.create.select_product")}
-                            variant="flat"
-                            onChange={(e) => handleProductSelect(index, e.target.value)}
-                          >
-                            {products.map((p) => (
-                              <SelectItem key={p.id} textValue={p.name}>
-                                {p.name}
-                              </SelectItem>
-                            ))}
-                          </Select>
-                          <Input
-                            size="sm"
-                            placeholder={t("invoices.create.item_description")}
-                            variant="flat"
-                            classNames={{ input: "text-sm" }}
-                            {...register(`items.${index}.description` as const)}
-                            isInvalid={!!errors.items?.[index]?.description}
-                          />
-                        </div>
-                      </td>
-                      <td className="p-3 md:p-4 align-top">
-                        <Input
-                          size="sm"
-                          type="number"
-                          variant="flat"
-                          className="w-full"
-                          classNames={{ input: "text-center" }}
-                          {...register(`items.${index}.quantity` as const, { valueAsNumber: true })}
-                        />
-                      </td>
-                      <td className="p-3 md:p-4 align-top">
-                        <Input
-                          size="sm"
-                          type="number"
-                          variant="flat"
-                          dir="ltr"
-                          classNames={{ input: "text-end tabular-nums" }}
-                          startContent={<RiyalSymbol size={12} className="text-default-400" />}
-                          {...register(`items.${index}.unitPrice` as const, { valueAsNumber: true })}
-                        />
-                      </td>
-                      <td className="p-3 md:p-4 align-top">
-                        <div className="flex flex-col gap-1">
-                          <LineTaxRateSelect
-                            taxes={effectiveTaxes}
-                            taxRateId={watch(`items.${index}.taxRateId`)}
-                            onChange={(tax) => {
-                              setValue(`items.${index}.taxRateId`, tax?.id ?? null);
-                              setValue(`items.${index}.taxRate`, tax?.rate ?? 0);
-                            }}
-                          />
-                          {tx > 0 && amtBeforeTax > 0 ? (
-                            <span className="text-[11px] text-default-500 rtl:text-start ltr:text-end">
-                              {t("invoices.create.line_tax_amount", { amount: lineVat.toFixed(2) })}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="p-3 md:p-4 align-top text-end">
-                        <div className="flex flex-col items-end gap-0.5">
-                          <BillingMoney
-                            amount={lineTotal}
-                            currency={currency}
-                            className="font-semibold text-default-800 tabular-nums"
-                          />
-                          {tx > 0 && amtBeforeTax > 0 ? (
-                            <span className="text-[11px] text-default-400 tabular-nums">
-                              {t("invoices.create.line_amount_before_tax")}: {amtBeforeTax.toFixed(2)}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="p-3 md:p-4 align-top text-end">
-                        <Button
-                          isIconOnly
-                          variant="light"
-                          color="danger"
-                          size="sm"
-                          onPress={() => remove(index)}
-                          className={fields.length <= 1 ? "opacity-30 pointer-events-none" : "opacity-60 group-hover:opacity-100 transition-opacity"}
-                          aria-label={t("invoices.create.remove_line", "Remove line")}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </td>
+            {/* Items Table */}
+            <Card className="border border-default-100 shadow-sm rounded-2xl">
+              <CardHeader className="px-5 md:px-6 py-4 flex justify-between items-center bg-default-50/60 rounded-t-2xl">
+                <h3 className="font-bold text-base md:text-lg text-default-800 flex items-center gap-2">
+                  {t("invoices.create.item_details")}
+                  <Chip size="sm" variant="flat" className="h-5 text-[10px] font-bold">
+                    {fields.length}
+                  </Chip>
+                </h3>
+                <span className="hidden md:inline text-xs text-default-500">
+                  {t("invoices.create.sub_total_hint")}
+                </span>
+              </CardHeader>
+              <Divider />
+              <CardBody className="p-0 overflow-x-auto">
+                <table className="w-full min-w-[820px] text-start">
+                  <thead className="bg-default-50/70 text-xs md:text-sm font-semibold text-default-600 uppercase tracking-wide">
+                    <tr>
+                      <th className="p-3 md:p-4 w-[32%] text-start">{t("invoices.create.product_item")}</th>
+                      <th className="p-3 md:p-4 w-[10%] text-center">{t("invoices.create.quantity")}</th>
+                      <th className="p-3 md:p-4 w-[16%] text-end">{t("invoices.create.rate")}</th>
+                      <th className="p-3 md:p-4 w-[20%] text-start">{t("invoices.create.tax")}</th>
+                      <th className="p-3 md:p-4 w-[16%] text-end">{t("invoices.create.amount")}</th>
+                      <th className="p-3 md:p-4 w-[6%]"></th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {fields.map((field, index) => {
+                      const q = Number(watch(`items.${index}.quantity`)) || 0;
+                      const r = Number(watch(`items.${index}.unitPrice`)) || 0;
+                      const d = Number(watch(`items.${index}.discount`)) || 0;
+                      const tx = Number(watch(`items.${index}.taxRate`)) || 0;
+                      const amtBeforeTax = (q * r) - d;
+                      const lineVat = (amtBeforeTax * tx) / 100;
+                      const lineTotal = amtBeforeTax + lineVat;
 
-            <div className="p-3 md:p-4 border-t border-default-100">
-              <Button
-                variant="bordered"
-                color="primary"
-                size="sm"
-                startContent={<Plus className="w-4 h-4" />}
-                onPress={appendLine}
-                className="rounded-lg"
-              >
-                {t("invoices.create.add_line")}
-              </Button>
-            </div>
-          </CardBody>
-        </Card>
+                      return (
+                        <tr key={field.id} className="border-b border-default-100/70 last:border-b-0 group hover:bg-default-50/40 transition-colors">
+                          <td className="p-3 md:p-4 align-top">
+                            <div className="flex flex-col gap-1.5">
+                              <Select
+                                {...selectFieldProps({ compact: true })}
+                                size="sm"
+                                aria-label={t("invoices.create.product_item")}
+                                placeholder={t("invoices.create.select_product")}
+                                variant="flat"
+                                onChange={(e) => handleProductSelect(index, e.target.value)}
+                              >
+                                {products.map((p) => (
+                                  <SelectItem key={p.id} textValue={p.name}>
+                                    {p.name}
+                                  </SelectItem>
+                                ))}
+                              </Select>
+                              <Input
+                                size="sm"
+                                placeholder={t("invoices.create.item_description")}
+                                variant="flat"
+                                classNames={{ input: "text-sm" }}
+                                {...register(`items.${index}.description` as const)}
+                                isInvalid={!!errors.items?.[index]?.description}
+                              />
+                            </div>
+                          </td>
+                          <td className="p-3 md:p-4 align-top">
+                            <Input
+                              size="sm"
+                              type="number"
+                              variant="flat"
+                              className="w-full"
+                              classNames={{ input: "text-center" }}
+                              {...register(`items.${index}.quantity` as const, { valueAsNumber: true })}
+                            />
+                          </td>
+                          <td className="p-3 md:p-4 align-top">
+                            <Input
+                              size="sm"
+                              type="number"
+                              variant="flat"
+                              dir="ltr"
+                              classNames={{ input: "text-end tabular-nums" }}
+                              startContent={<RiyalSymbol size={12} className="text-default-400" />}
+                              {...register(`items.${index}.unitPrice` as const, { valueAsNumber: true })}
+                            />
+                          </td>
+                          <td className="p-3 md:p-4 align-top">
+                            <div className="flex flex-col gap-1">
+                              <LineTaxRateSelect
+                                taxes={effectiveTaxes}
+                                taxRateId={watch(`items.${index}.taxRateId`)}
+                                onChange={(tax) => {
+                                  setValue(`items.${index}.taxRateId`, tax?.id ?? null);
+                                  setValue(`items.${index}.taxRate`, tax?.rate ?? 0);
+                                }}
+                              />
+                              {tx > 0 && amtBeforeTax > 0 ? (
+                                <span className="text-[11px] text-default-500 rtl:text-start ltr:text-end">
+                                  {t("invoices.create.line_tax_amount", { amount: lineVat.toFixed(2) })}
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="p-3 md:p-4 align-top text-end">
+                            <div className="flex flex-col items-end gap-0.5">
+                              <BillingMoney
+                                amount={lineTotal}
+                                currency={currency}
+                                className="font-semibold text-default-800 tabular-nums"
+                              />
+                              {tx > 0 && amtBeforeTax > 0 ? (
+                                <span className="text-[11px] text-default-400 tabular-nums">
+                                  {t("invoices.create.line_amount_before_tax")}: {amtBeforeTax.toFixed(2)}
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="p-3 md:p-4 align-top text-end">
+                            <Button
+                              isIconOnly
+                              variant="light"
+                              color="danger"
+                              size="sm"
+                              onPress={() => remove(index)}
+                              className={fields.length <= 1 ? "opacity-30 pointer-events-none" : "opacity-60 group-hover:opacity-100 transition-opacity"}
+                              aria-label={t("invoices.create.remove_line", "Remove line")}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
 
-        {/* Notes / terms on the left, summary card on the right (stacked on mobile). */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-          <div className="lg:col-span-2 space-y-4">
-            <Textarea
-              label={t("invoices.create.notes")}
-              placeholder={t("invoices.create.notes_placeholder")}
-              variant="bordered"
-              minRows={2}
-              className="[&_.inner-wrapper]:!min-h-[80px]"
-              {...register("notes")}
-            />
-            <Textarea
-              label={t("invoices.create.terms")}
-              placeholder={t("invoices.create.terms_placeholder")}
-              variant="bordered"
-              minRows={2}
-              className="[&_.inner-wrapper]:!min-h-[80px]"
-              {...register("termsAndConditions")}
-            />
-          </div>
-
-          <Card className="lg:col-span-1 lg:sticky lg:top-4 border border-default-200 shadow-sm rounded-2xl bg-content1 overflow-hidden">
-            <div className="px-5 py-3 bg-default-50/70 border-b border-default-100">
-              <h3 className="text-sm font-bold text-default-800">{t("invoices.create.summary_title")}</h3>
-            </div>
-            <CardBody className="p-5 space-y-3">
-              <div className="flex items-baseline justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm text-default-700">{t("invoices.create.sub_total")}</div>
-                  <div className="text-[11px] text-default-400">{t("invoices.create.sub_total_hint")}</div>
+                <div className="p-3 md:p-4 border-t border-default-100">
+                  <Button
+                    variant="bordered"
+                    color="primary"
+                    size="sm"
+                    startContent={<Plus className="w-4 h-4" />}
+                    onPress={appendLine}
+                    className="rounded-lg"
+                  >
+                    {t("invoices.create.add_line")}
+                  </Button>
                 </div>
-                <BillingMoney amount={subTotal} currency={currency} className="font-medium tabular-nums" />
+              </CardBody>
+            </Card>
+
+            {/* Notes / terms on the left, summary card on the right (stacked on mobile). */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+              <div className="lg:col-span-2 space-y-4">
+                <Textarea
+                  label={t("invoices.create.notes")}
+                  placeholder={t("invoices.create.notes_placeholder")}
+                  variant="bordered"
+                  minRows={2}
+                  className="[&_.inner-wrapper]:!min-h-[80px]"
+                  {...register("notes")}
+                />
+                <Textarea
+                  label={t("invoices.create.terms")}
+                  placeholder={t("invoices.create.terms_placeholder")}
+                  variant="bordered"
+                  minRows={2}
+                  className="[&_.inner-wrapper]:!min-h-[80px]"
+                  {...register("termsAndConditions")}
+                />
               </div>
-              {totalDiscount > 0 && (
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-sm text-danger">{t("invoices.create.discount")}</span>
-                  <BillingMoney amount={-totalDiscount} currency={currency} className="tabular-nums text-danger" />
+
+              <Card className="lg:col-span-1 lg:sticky lg:top-4 border border-default-200 shadow-sm rounded-2xl bg-content1 overflow-hidden">
+                <div className="px-5 py-3 bg-default-50/70 border-b border-default-100">
+                  <h3 className="text-sm font-bold text-default-800">{t("invoices.create.summary_title")}</h3>
                 </div>
-              )}
-              {/* VAT row: percentage beside the label + monetary amount beside
+                <CardBody className="p-5 space-y-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm text-default-700">{t("invoices.create.sub_total")}</div>
+                      <div className="text-[11px] text-default-400">{t("invoices.create.sub_total_hint")}</div>
+                    </div>
+                    <BillingMoney amount={subTotal} currency={currency} className="font-medium tabular-nums" />
+                  </div>
+                  {totalDiscount > 0 && (
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm text-danger">{t("invoices.create.discount")}</span>
+                      <BillingMoney amount={-totalDiscount} currency={currency} className="tabular-nums text-danger" />
+                    </div>
+                  )}
+                  {/* VAT row: percentage beside the label + monetary amount beside
                   it — critical for the requirement. The rate is derived from
                   the stored amounts, so mixed-rate invoices show the true
                   effective percentage, never a hardcoded 15. */}
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-sm text-default-700">
-                  {t("invoices.create.vat_row_label", {
-                    rate: invoiceVatPercent(subTotal, totalTax, effectiveDefaultTax?.rate ?? 0),
-                  })}
-                </span>
-                <BillingMoney amount={totalTax} currency={currency} className="font-medium tabular-nums" />
-              </div>
-              <Divider className="my-1" />
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-sm font-bold text-default-900">{t("invoices.create.total")}</span>
-                <BillingMoney
-                  amount={grandTotal}
-                  currency={currency}
-                  className="text-xl md:text-2xl font-extrabold text-primary tabular-nums"
-                />
-              </div>
-            </CardBody>
-          </Card>
-        </div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm text-default-700">
+                      {t("invoices.create.vat_row_label", {
+                        rate: invoiceVatPercent(subTotal, totalTax, effectiveDefaultTax?.rate ?? 0),
+                      })}
+                    </span>
+                    <BillingMoney amount={totalTax} currency={currency} className="font-medium tabular-nums" />
+                  </div>
+                  <Divider className="my-1" />
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm font-bold text-default-900">{t("invoices.create.total")}</span>
+                    <BillingMoney
+                      amount={grandTotal}
+                      currency={currency}
+                      className="text-xl md:text-2xl font-extrabold text-primary tabular-nums"
+                    />
+                  </div>
+                </CardBody>
+              </Card>
+            </div>
 
-        {/* Sticky action bar */}
-        <div className="fixed bottom-0 inset-x-0 sm:static sm:bottom-auto z-10 bg-background/85 backdrop-blur-md border-t sm:border sm:rounded-2xl sm:shadow-md sm:mt-2 px-4 py-3">
-          {isEditing && existingInvoice?.status === "pending" && !canIssueImmediately && (
-            <p className="w-full text-xs text-warning mb-2">
-              {tCommon("documentApproval.lockedHint")}
-            </p>
-          )}
-          <div className="flex justify-end gap-2 md:gap-3 w-full max-w-6xl mx-auto">
-            <Button
-              variant="flat"
-              color="default"
-              onPress={() => handleSubmit((data) => onSubmit(data as any, "draft"))()}
-              isLoading={isSubmitting || updateInvoice.isPending || createInvoice.isPending || createContact.isPending}
-              isDisabled={!formReady}
-              startContent={<Save className="w-4 h-4" />}
-              className="min-w-[130px] md:min-w-[150px]"
-            >
-              {isEditing ? t("invoices.create.update_draft") : t("invoices.create.save_draft")}
-            </Button>
-            <Button
-              color="primary"
-              onPress={() => handleSubmit((data) => onSubmit(data as any, "sent"))()}
-              isLoading={isSubmitting || updateInvoice.isPending || createInvoice.isPending || createContact.isPending}
-              isDisabled={!canUsePrimaryAction || !formReady}
-              startContent={<Send className="w-4 h-4" />}
-              className="min-w-[150px] md:min-w-[170px] font-semibold"
-            >
-              {isEditing
-                ? t("invoices.create.update_send")
-                : canIssueImmediately
-                  ? t("invoices.create.save_send")
-                  : t("invoices.create.save_submit")}
-            </Button>
-          </div>
-        </div>
+            {/* Sticky action bar */}
+            <div className="fixed bottom-0 inset-x-0 sm:static sm:bottom-auto z-10 bg-background/85 backdrop-blur-md border-t sm:border sm:rounded-2xl sm:shadow-md sm:mt-2 px-4 py-3">
+              {isEditing && existingInvoice?.status === "pending" && !canIssueImmediately && (
+                <p className="w-full text-xs text-warning mb-2">
+                  {tCommon("documentApproval.lockedHint")}
+                </p>
+              )}
+              <div className="flex justify-end gap-2 md:gap-3 w-full max-w-6xl mx-auto">
+                <Button
+                  variant="flat"
+                  color="default"
+                  onPress={() => handleSubmit((data) => onSubmit(data as any, "draft"))()}
+                  isLoading={isSubmitting || updateInvoice.isPending || createInvoice.isPending || createContact.isPending}
+                  isDisabled={!formReady}
+                  startContent={<Save className="w-4 h-4" />}
+                  className="min-w-[130px] md:min-w-[150px]"
+                >
+                  {isEditing ? t("invoices.create.update_draft") : t("invoices.create.save_draft")}
+                </Button>
+                <Button
+                  color="primary"
+                  onPress={() => handleSubmit((data) => onSubmit(data as any, "sent"))()}
+                  isLoading={isSubmitting || updateInvoice.isPending || createInvoice.isPending || createContact.isPending}
+                  isDisabled={!canUsePrimaryAction || !formReady}
+                  startContent={<Send className="w-4 h-4" />}
+                  className="min-w-[150px] md:min-w-[170px] font-semibold"
+                >
+                  {isEditing
+                    ? t("invoices.create.update_send")
+                    : canIssueImmediately
+                      ? t("invoices.create.save_send")
+                      : t("invoices.create.save_submit")}
+                </Button>
+              </div>
+            </div>
           </>
         )}
       </form>
