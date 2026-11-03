@@ -48,5 +48,8 @@ export function mapFirestoreUser(
     portalAccess: parsePortalAccess(data?.portalAccess),
     portalSubRoles: parsePortalSubRoles(data?.portalSubRoles),
     customPermissions: parseCustomPermissions(data?.customPermissions),
+    country: (data?.country as string) || fallbacks.country || undefined,
+    branchId: (data?.branchId as string) || fallbacks.branchId || undefined,
+    workLocationId: (data?.workLocationId as string) || fallbacks.workLocationId || undefined,
   };
 }

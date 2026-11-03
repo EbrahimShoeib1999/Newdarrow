@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/constants";
 import { PeopleService } from "../api/people.service";
 import { useCompany } from "@/features/companies/context/company-context";
+import { useAuth } from "@/features/auth/context/auth-context";
 import type { LeaveRequest, PerformanceReview, Asset, Announcement, Employee, CreateWorkLocationDTO, AttendanceLatePolicy } from "../types/people.types";
 import { toast } from "sonner";
 import i18n from "@/lib/i18n";
@@ -10,9 +11,10 @@ const t = (key: string) => i18n.t(key, { ns: "people" });
 
 export function useEmployeesQuery() {
   const { companyId } = useCompany();
+  const { user } = useAuth();
   
   return useQuery({
-    queryKey: QUERY_KEYS.people.employees(companyId!),
+    queryKey: [...QUERY_KEYS.people.employees(companyId!), user?.id],
     queryFn: () => PeopleService.getEmployees(companyId!),
     enabled: !!companyId,
   });

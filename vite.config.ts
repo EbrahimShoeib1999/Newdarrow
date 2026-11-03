@@ -27,7 +27,7 @@ export default defineConfig({
     // those explicitly, but only for the throwaway E2E server, so a real dev
     // session still hot-reloads on any file change.
     watch: process.env.E2E_NO_HMR
-      ? { ignored: ["**/firestore-debug.log", "**/*.log", "tmp/**"] }
+      ? null
       : undefined,
   },
   build: {

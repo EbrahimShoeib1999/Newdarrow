@@ -11,6 +11,8 @@ import {
   Tab,
   Tabs,
   useDisclosure,
+  Select,
+  SelectItem,
 } from "@heroui/react";
 import {
   AlertTriangle,
@@ -40,6 +42,7 @@ import { EmployeeCard } from "../components/EmployeeCard";
 import { EmployeeTable } from "../components/EmployeeTable";
 import { OrgChart } from "../components/OrgChart";
 import { HireEmployeeModal } from "../components/HireEmployeeModal";
+import { selectFieldProps } from "@/components/shared/select-field";
 import {
   TerminateEmployeeModal,
   type TerminateAction,
@@ -52,7 +55,7 @@ import {
 } from "../hooks/use-people";
 import type { Employee } from "../types/people.types";
 import { employeeDisplayName } from "../utils/geo";
-import { useMemo, useState } from "react";
+import { type Key, useMemo, useState } from "react";
 import { TimeTrackerWidget } from "../components/TimeTrackerWidget";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -121,6 +124,9 @@ export default function PeopleDashboardPage() {
   const offboardMutation = useOffboardEmployeeMutation();
   const deleteEmployeeMutation = useDeleteEmployeeMutation();
   const [searchQuery, setSearchQuery] = useState("");
+  const [countryFilter, setCountryFilter] = useState<string>("");
+  const [workModeFilter, setWorkModeFilter] = useState<string>("");
+  const [locationFilter, setLocationFilter] = useState<string>("");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [activeTab, setActiveTab] = useState<MainTab>("directory");
   const { data: announcementsResponse } = useAnnouncementsQuery();
@@ -174,21 +180,54 @@ export default function PeopleDashboardPage() {
     });
   };
 
+
   const { canManageEmployees } = useAppPermissions();
-  const employees = employeesResponse?.data || [];
+  const employees = useMemo(
+    () => employeesResponse?.data || [],
+    [employeesResponse?.data]
+  );
+
+  const availableCountries = useMemo(() => {
+    const list = ["Saudi Arabia", "Egypt"];
+    employees.forEach((e) => {
+      if (e.country && !list.includes(e.country)) list.push(e.country);
+    });
+    return list;
+  }, [employees]);
+
+  const availableLocations = useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach((e) => {
+      if (e.officeLocation) set.add(e.officeLocation);
+      else if (e.workLocationId) set.add(e.workLocationId);
+    });
+    return Array.from(set);
+  }, [employees]);
 
   const filteredEmployees = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return employees;
-    return employees.filter(
-      (e) =>
+    return employees.filter((e) => {
+      const matchSearch =
+        !q ||
         employeeDisplayName(e, i18n.language).toLowerCase().includes(q) ||
         (e.nameAr || "").toLowerCase().includes(q) ||
         (e.jobTitle || "").toLowerCase().includes(q) ||
         (e.department || "").toLowerCase().includes(q) ||
-        (e.email || "").toLowerCase().includes(q)
-    );
-  }, [employees, searchQuery, i18n.language]);
+        (e.email || "").toLowerCase().includes(q);
+
+      const matchCountry = !countryFilter || e.country === countryFilter;
+      const matchWorkMode =
+        !workModeFilter ||
+        (e.workMode === workModeFilter || (workModeFilter === "office" && (!e.workMode || e.workMode === "onsite")));
+      const matchLocation =
+        !locationFilter ||
+        e.officeLocation === locationFilter ||
+        e.workLocationId === locationFilter;
+
+      return matchSearch && matchCountry && matchWorkMode && matchLocation;
+    });
+
+  }, [employees, searchQuery, countryFilter, workModeFilter, locationFilter, i18n.language]);
 
   const activeCount = employees.filter((e) => e.status === "active").length;
   const onboardingCount = employees.filter(
@@ -633,7 +672,7 @@ export default function PeopleDashboardPage() {
         color="primary"
         variant="underlined"
         selectedKey={activeTab}
-        onSelectionChange={(key: any) => setActiveTab(key as MainTab)}
+        onSelectionChange={(key: Key) => setActiveTab(key as MainTab)}
         classNames={{
           tabList:
             "gap-6 w-full relative rounded-none p-0 border-b border-divider",
@@ -699,6 +738,76 @@ export default function PeopleDashboardPage() {
               </div>
             </div>
 
+            {/* Country / Work Mode / Location Filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                {...selectFieldProps({ compact: true })}
+                placeholder="Country (All)"
+                aria-label="Filter by Country"
+                size="sm"
+                className="w-40"
+                selectedKeys={countryFilter ? [countryFilter] : []}
+                onSelectionChange={(keys) => {
+                  setCountryFilter(Array.from(keys as Set<string>)[0] || "");
+                }}
+              >
+                {availableCountries.map((c) => (
+                  <SelectItem key={c} textValue={c}>{c}</SelectItem>
+                ))}
+              </Select>
+
+              <Select
+                {...selectFieldProps({ compact: true })}
+                placeholder="Work Mode (All)"
+                aria-label="Filter by Work Mode"
+                size="sm"
+                className="w-36"
+                selectedKeys={workModeFilter ? [workModeFilter] : []}
+                onSelectionChange={(keys) => {
+                  setWorkModeFilter(Array.from(keys as Set<string>)[0] || "");
+                }}
+              >
+                <SelectItem key="office" textValue="Office">Office</SelectItem>
+                <SelectItem key="remote" textValue="Remote">Remote</SelectItem>
+                <SelectItem key="field" textValue="Field">Field</SelectItem>
+              </Select>
+
+              {availableLocations.length > 0 && (
+                <Select
+                  {...selectFieldProps({ compact: true })}
+                  placeholder="Location (All)"
+                  aria-label="Filter by Location"
+                  size="sm"
+                  className="w-40"
+                  selectedKeys={locationFilter ? [locationFilter] : []}
+                  onSelectionChange={(keys) => {
+                    setLocationFilter(Array.from(keys as Set<string>)[0] || "");
+                  }}
+                >
+                  {availableLocations.map((loc) => (
+                    <SelectItem key={loc} textValue={loc}>{loc}</SelectItem>
+                  ))}
+                </Select>
+              )}
+
+              {(countryFilter || workModeFilter || locationFilter || searchQuery) && (
+                <Button
+                  size="sm"
+                  variant="flat"
+                  color="danger"
+                  className="h-8 text-xs font-semibold"
+                  onPress={() => {
+                    setCountryFilter("");
+                    setWorkModeFilter("");
+                    setLocationFilter("");
+                    setSearchQuery("");
+                  }}
+                >
+                  {t("extra.clear_filters")}
+                </Button>
+              )}
+            </div>
+
             {isLoading ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {[1, 2, 3, 4].map((i) => (
@@ -716,11 +825,16 @@ export default function PeopleDashboardPage() {
                 <p className="text-sm text-default-400">
                   {t("dashboard.try_adjusting")}
                 </p>
-                {searchQuery && (
+                {(searchQuery || countryFilter || workModeFilter || locationFilter) && (
                   <Button
                     size="sm"
                     variant="flat"
-                    onPress={() => setSearchQuery("")}
+                    onPress={() => {
+                      setSearchQuery("");
+                      setCountryFilter("");
+                      setWorkModeFilter("");
+                      setLocationFilter("");
+                    }}
                   >
                     {t("extra.clear_filters")}
                   </Button>

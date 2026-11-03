@@ -20,6 +20,9 @@ export interface User {
   portalSubRoles?: PortalSubRoles;
   /** Granular custom permissions granted to this user. */
   customPermissions?: import("@/lib/permissions").Permission[];
+  country?: string;
+  branchId?: string;
+  workLocationId?: string;
 }
 
 export interface LoginRequest {

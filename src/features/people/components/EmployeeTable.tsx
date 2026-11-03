@@ -65,7 +65,17 @@ export function EmployeeTable({ employees, onView, onEdit, onDelete, onHire }: E
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [roleFilter, setRoleFilter] = useState<string>("");
+  const [countryFilter, setCountryFilter] = useState<string>("");
+  const [workModeFilter, setWorkModeFilter] = useState<string>("");
   const [page, setPage] = useState(1);
+
+  const availableCountries = useMemo(() => {
+    const list = ["Saudi Arabia", "Egypt"];
+    employees.forEach((e) => {
+      if (e.country && !list.includes(e.country)) list.push(e.country);
+    });
+    return list;
+  }, [employees]);
 
   const filtered = useMemo(() => {
     return employees.filter((e) => {
@@ -78,20 +88,26 @@ export function EmployeeTable({ employees, onView, onEdit, onDelete, onHire }: E
       const matchDept = !departmentFilter || e.department === departmentFilter;
       const matchStatus = !statusFilter || e.status === statusFilter;
       const matchRole = !roleFilter || e.role === roleFilter;
-      return matchSearch && matchDept && matchStatus && matchRole;
+      const matchCountry = !countryFilter || e.country === countryFilter;
+      const matchWorkMode =
+        !workModeFilter ||
+        (e.workMode === workModeFilter || (workModeFilter === "office" && (!e.workMode || e.workMode === "onsite")));
+      return matchSearch && matchDept && matchStatus && matchRole && matchCountry && matchWorkMode;
     });
-  }, [employees, search, departmentFilter, statusFilter, roleFilter, i18n.language]);
+  }, [employees, search, departmentFilter, statusFilter, roleFilter, countryFilter, workModeFilter, i18n.language]);
 
   const pages = Math.ceil(filtered.length / ROWS_PER_PAGE) || 1;
   const paginated = filtered.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
-  const hasFilters = !!(search || departmentFilter || statusFilter || roleFilter);
+  const hasFilters = !!(search || departmentFilter || statusFilter || roleFilter || countryFilter || workModeFilter);
 
   const clearFilters = () => {
     setSearch("");
     setDepartmentFilter("");
     setStatusFilter("");
     setRoleFilter("");
+    setCountryFilter("");
+    setWorkModeFilter("");
     setPage(1);
   };
 
@@ -212,6 +228,32 @@ export function EmployeeTable({ employees, onView, onEdit, onDelete, onHire }: E
             </div>
           );
 
+        case "countryLocation":
+          return (
+            <div className="flex flex-col gap-0.5">
+              <span className="font-semibold text-xs text-foreground">
+                {employee.country || "—"}
+              </span>
+              <span className="text-[11px] text-default-400">
+                {employee.officeLocation || employee.workLocationId || "—"}
+              </span>
+            </div>
+          );
+
+        case "workMode": {
+          const mode = employee.workMode || (employee.workType === "remote" ? "remote" : "office");
+          return (
+            <Chip
+              size="sm"
+              variant="flat"
+              color={mode === "remote" ? "warning" : mode === "field" ? "secondary" : "default"}
+              className="capitalize font-bold text-xs"
+            >
+              {mode}
+            </Chip>
+          );
+        }
+
         default:
           return null;
       }
@@ -222,6 +264,8 @@ export function EmployeeTable({ employees, onView, onEdit, onDelete, onHire }: E
   const columns = [
     { name: t("timesheets.col_employee"), uid: "name" },
     { name: `${t("profile.job_title")} / ${t("profile.department")}`, uid: "role" },
+    { name: "Location / Country", uid: "countryLocation" },
+    { name: "Work Mode", uid: "workMode" },
     { name: t("profile.role"), uid: "systemRole" },
     { name: t("timesheets.col_status"), uid: "status" },
     { name: t("profile.joined"), uid: "joiningDate" },
@@ -290,6 +334,40 @@ export function EmployeeTable({ employees, onView, onEdit, onDelete, onHire }: E
             {ROLES.map((r) => (
               <SelectItem key={r} textValue={t(`roles.${r}`)} className="capitalize">{t(`roles.${r}`)}</SelectItem>
             ))}
+          </Select>
+
+          <Select
+            {...selectFieldProps({ compact: true })}
+            placeholder="Country"
+            aria-label="Filter by Country"
+            size="sm"
+            className="w-full sm:w-32"
+            selectedKeys={countryFilter ? [countryFilter] : []}
+            onSelectionChange={(keys) => {
+              setCountryFilter(Array.from(keys as Set<string>)[0] || "");
+              setPage(1);
+            }}
+          >
+            {availableCountries.map((c) => (
+              <SelectItem key={c} textValue={c}>{c}</SelectItem>
+            ))}
+          </Select>
+
+          <Select
+            {...selectFieldProps({ compact: true })}
+            placeholder="Work Mode"
+            aria-label="Filter by Work Mode"
+            size="sm"
+            className="w-full sm:w-32"
+            selectedKeys={workModeFilter ? [workModeFilter] : []}
+            onSelectionChange={(keys) => {
+              setWorkModeFilter(Array.from(keys as Set<string>)[0] || "");
+              setPage(1);
+            }}
+          >
+            <SelectItem key="office" textValue="Office">Office</SelectItem>
+            <SelectItem key="remote" textValue="Remote">Remote</SelectItem>
+            <SelectItem key="field" textValue="Field">Field</SelectItem>
           </Select>
 
           {hasFilters && (

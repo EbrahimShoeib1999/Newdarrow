@@ -169,6 +169,26 @@ export function EmployeeCard({
                     <span className="truncate">{departmentLabel}</span>
                   </Chip>
                 ) : null}
+                {employee.country ? (
+                  <Chip
+                    size="sm"
+                    variant="flat"
+                    color="secondary"
+                    className="h-5 text-[10px] font-semibold"
+                  >
+                    {employee.country}
+                  </Chip>
+                ) : null}
+                {employee.workMode ? (
+                  <Chip
+                    size="sm"
+                    variant="flat"
+                    color={employee.workMode === "remote" ? "warning" : "default"}
+                    className="h-5 text-[10px] font-semibold capitalize"
+                  >
+                    {employee.workMode}
+                  </Chip>
+                ) : null}
                 <Chip
                   size="sm"
                   variant="flat"

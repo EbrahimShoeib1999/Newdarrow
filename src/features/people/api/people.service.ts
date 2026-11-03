@@ -1,9 +1,9 @@
-import { 
-  collection, 
-  getDocs, 
-  getDoc, 
-  doc, 
-  addDoc, 
+import {
+  collection,
+  getDocs,
+  getDoc,
+  doc,
+  addDoc,
   updateDoc,
   setDoc,
   deleteDoc,
@@ -55,6 +55,8 @@ import {
   zonedDayKeyOf,
 } from "../lib/work-schedule-rules";
 import { WorkScheduleService } from "./work-schedule.service";
+import { useAuthStore } from "@/stores/auth.store";
+import { hasEffectivePermission } from "@/lib/permissions/effective-permissions";
 
 const SERVICE_NAME = "PeopleService";
 
@@ -147,6 +149,36 @@ function enrichEmployeeFromUser(
       ? data.joiningDate.toDate().toISOString()
       : data.joiningDate;
 
+  const rawCountry = (data.country as string) || (user?.country as string) || "";
+  const officeLocation = (data.officeLocation as string) || "";
+  const country =
+    rawCountry ||
+    (/saudi|riyadh|jeddah|dammam|khobar/i.test(officeLocation)
+      ? "Saudi Arabia"
+      : /egypt|cairo|alexandria|giza/i.test(officeLocation)
+        ? "Egypt"
+        : undefined);
+
+  const rawWorkMode = (data.workMode as string) || (data.workType as string) || "";
+  const workMode =
+    rawWorkMode === "remote"
+      ? "remote"
+      : rawWorkMode === "field"
+        ? "field"
+        : rawWorkMode === "onsite" || rawWorkMode === "office"
+          ? "office"
+          : officeLocation.toLowerCase().startsWith("remot")
+            ? "remote"
+            : "office";
+
+  const branchId = (data.branchId as string) || (user?.branchId as string) || undefined;
+  const workLocationId =
+    (data.workLocationId as string) ||
+    (user?.workLocationId as string) ||
+    (Array.isArray(data.attendanceLocationIds) && data.attendanceLocationIds[0]
+      ? String(data.attendanceLocationIds[0])
+      : undefined);
+
   return {
     id,
     ...data,
@@ -156,6 +188,11 @@ function enrichEmployeeFromUser(
     nameAr,
     avatarUrl,
     email: String(data.email || "").trim() || userEmail,
+    country,
+    workMode,
+    branchId,
+    workLocationId,
+    officeLocation: officeLocation || undefined,
     joiningDate,
   } as Employee;
 }
@@ -401,7 +438,15 @@ export const PeopleService = {
   },
 
   // Employee Management
-  async getEmployees(companyId: string): Promise<ApiResponse<Employee[]>> {
+  async getEmployees(
+    companyId: string,
+    callerScope?: {
+      userId?: string;
+      branchId?: string;
+      workLocationId?: string;
+      hasCompanyWideAccess?: boolean;
+    }
+  ): Promise<ApiResponse<Employee[]>> {
     return withLogging(SERVICE_NAME, "getEmployees", (async () => {
       const employeesRef = collection(db, "companies", companyId, "employees");
       const usersQuery = query(
@@ -424,17 +469,60 @@ export const PeopleService = {
         if (email) usersByEmail.set(email, userData);
       }
 
-      const employees = querySnapshot.docs.map((docSnap) => {
+      let employees = querySnapshot.docs.map((docSnap) => {
         const data = docSnap.data() as Record<string, unknown>;
         return enrichEmployeeFromUser(
           docSnap.id,
-          data,
+          { ...data, companyId: data.companyId || companyId },
           usersById,
           usersByEmail
         );
       });
 
       return {
+        // Scope resolution:
+        // A manager with people.view_all_reports can see employees across all branches and office locations
+        // belonging to the same authorized company.
+        // A manager without company-wide visibility must remain restricted to their authorized scope.
+        ...(() => {
+          let scope = callerScope;
+          if (!scope && typeof window !== "undefined") {
+            try {
+              const authUser = useAuthStore.getState().user;
+              if (authUser && authUser.companyId === companyId) {
+                const role = authUser.role;
+                const canViewAll =
+                  role === "admin" ||
+                  role === "super_admin" ||
+                  hasEffectivePermission(
+                    {
+                      role: authUser.role,
+                      portalSubRoles: authUser.portalSubRoles,
+                      customPermissions: authUser.customPermissions,
+                    },
+                    "people.view_all_reports"
+                  );
+                scope = {
+                  userId: authUser.id,
+                  branchId: authUser.branchId,
+                  workLocationId: authUser.workLocationId,
+                  hasCompanyWideAccess: Boolean(canViewAll),
+                };
+              }
+            } catch (scopeErr) {
+              console.warn("[PeopleService:getEmployees] Failed to resolve auth caller scope", scopeErr);
+            }
+          }
+          if (scope && !scope.hasCompanyWideAccess) {
+            employees = employees.filter((emp) => {
+              if (scope!.branchId && emp.branchId) return emp.branchId === scope!.branchId;
+              if (scope!.workLocationId && emp.workLocationId) return emp.workLocationId === scope!.workLocationId;
+              if (scope!.userId && emp.managerId) return emp.managerId === scope!.userId;
+              return false;
+            });
+          }
+          return {};
+        })(),
         data: employees,
         message: "Success",
       };
@@ -502,7 +590,7 @@ export const PeopleService = {
     return withLogging(SERVICE_NAME, "getLeaveRequests", (async () => {
       const leaveRef = collection(db, "companies", companyId, "leave_requests");
       const querySnapshot = await getDocs(leaveRef);
-      
+
       const requests = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         return {
@@ -705,7 +793,7 @@ export const PeopleService = {
       const docRef = doc(db, "companies", companyId, "attendance", attendanceId);
       const snap = await getDoc(docRef);
       const data = snap.data()!;
-      
+
       const checkIn = data.checkIn instanceof Timestamp ? data.checkIn.toDate() : new Date(data.checkIn);
       const checkOut = new Date();
       const totalHours = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60);
@@ -738,7 +826,7 @@ export const PeopleService = {
     return withLogging(SERVICE_NAME, "getAttendance", (async () => {
       const attendanceRef = collection(db, "companies", companyId, "attendance");
       const q = query(attendanceRef, where("employeeId", "==", employeeId));
-      
+
       const querySnapshot = await getDocs(q);
       const records = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
@@ -760,7 +848,7 @@ export const PeopleService = {
   async getAllAttendance(companyId: string): Promise<ApiResponse<Attendance[]>> {
     return withLogging(SERVICE_NAME, "getAllAttendance", (async () => {
       const attendanceRef = collection(db, "companies", companyId, "attendance");
-      
+
       const querySnapshot = await getDocs(attendanceRef);
       const records = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
@@ -1122,7 +1210,7 @@ export const PeopleService = {
       const reviewsRef = collection(db, "companies", companyId, "performance_reviews");
       const q = query(reviewsRef, where("employeeId", "==", employeeId));
       const querySnapshot = await getDocs(q);
-      
+
       const reviews = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         return {
@@ -1161,7 +1249,7 @@ export const PeopleService = {
     return withLogging(SERVICE_NAME, "getAssets", (async () => {
       const assetsRef = collection(db, "companies", companyId, "assets");
       const querySnapshot = await getDocs(assetsRef);
-      
+
       const assets = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         return {
@@ -1217,7 +1305,7 @@ export const PeopleService = {
     return withLogging(SERVICE_NAME, "getAnnouncements", (async () => {
       const annRef = collection(db, "companies", companyId, "announcements");
       const querySnapshot = await getDocs(annRef);
-      
+
       const announcements = querySnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         return {

@@ -52,6 +52,14 @@ export interface Employee {
   onboardingTasks?: ChecklistItem[];
   offboardingTasks?: ChecklistItem[];
   skills?: { name: string; level: number }[];
+  country?: string;
+  workLocationId?: string;
+  branchId?: string;
+  workMode?: "office" | "remote" | "field" | string;
+  companyId?: string;
+  requireGps?: boolean;
+  mandatoryGps?: boolean;
+  geofenceEnabled?: boolean;
 }
 
 export interface LeaveRequest {
@@ -176,6 +184,9 @@ export interface AttendanceLatePolicy {
    * IANA id (validated on read and write).
    */
   timezone?: string | null;
+  requireGps?: boolean;
+  mandatoryGps?: boolean;
+  geofenceEnabled?: boolean;
   updatedAt?: Date | Timestamp;
   updatedBy?: string;
 }
@@ -200,6 +211,8 @@ export interface WorkLocation {
   /** Allowed distance from the pin, in meters (Jisr default is typically 100–200). */
   radiusMeters: number;
   isActive: boolean;
+  geofenceEnabled?: boolean;
+  requireGps?: boolean;
   createdAt?: Date | Timestamp | string;
   updatedAt?: Date | Timestamp | string;
 }
@@ -207,8 +220,8 @@ export interface WorkLocation {
 export type CreateWorkLocationDTO = Omit<WorkLocation, "id" | "createdAt" | "updatedAt">;
 
 export interface AttendanceGeoPayload {
-  lat: number;
-  lng: number;
+  lat?: number;
+  lng?: number;
   accuracyMeters?: number;
   locationId?: string;
   locationName?: string;

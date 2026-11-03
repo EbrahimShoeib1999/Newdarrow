@@ -1,5 +1,5 @@
 import { PeopleService } from "../api/people.service";
-import type { AttendanceGeoPayload, WorkLocation } from "../types/people.types";
+import type { AttendanceGeoPayload, WorkLocation, AttendanceLatePolicy } from "../types/people.types";
 import {
   AttendanceGeoError,
   findMatchingWorkLocation,
@@ -13,13 +13,19 @@ export async function captureAttendanceGeo(
 ): Promise<AttendanceGeoPayload | undefined> {
   const empRes = await PeopleService.getEmployee(companyId, employeeId);
   const employee = empRes.data;
+
   // A worker explicitly authorized to be off-site must not be trapped by the
   // office geofence. Such employees default to flexible capture, and even when
   // left in geofence mode are never hard-blocked for having no assigned
   // location — there is simply no fence to enforce for them (Saudi-labor /
   // remote-work requirement: no office GPS for remote-authorized staff).
   const remoteAuthorized =
-    employee.workType === "remote" || employee.allowRemoteTimer === true;
+    employee.workType === "remote" ||
+    employee.allowRemoteTimer === true ||
+    employee.workType === "field" ||
+    employee.workMode === "remote" ||
+    employee.workMode === "field";
+
   const mode =
     employee.attendanceCheckMode ?? (remoteAuthorized ? "flexible" : "geofence");
 
@@ -62,7 +68,57 @@ export async function captureAttendanceGeo(
     throw new AttendanceGeoError("not_assigned", "No attendance location assigned");
   }
 
-  const coords = await getCurrentCoordinates();
+  // Active office employee with an active office assignment:
+  let policy: AttendanceLatePolicy | null = null;
+  try {
+    const pRes = await PeopleService.attendanceSettings.get(companyId);
+    policy = pRes?.data ?? null;
+  } catch {
+    policy = null;
+  }
+
+  const isGpsMandatory =
+    employee.requireGps === true ||
+    employee.mandatoryGps === true ||
+    policy?.requireGps === true ||
+    policy?.mandatoryGps === true;
+
+  const isGeofenceDisabled =
+    policy?.geofenceEnabled === false ||
+    employee.geofenceEnabled === false ||
+    policy?.requireGps === false ||
+    employee.requireGps === false ||
+    (assigned.length > 0 && assigned.every((l) => l.geofenceEnabled === false));
+
+  // If Geofence is explicitly disabled or GPS explicitly not required:
+  if (isGeofenceDisabled) {
+    return {
+      lat: assigned[0].lat,
+      lng: assigned[0].lng,
+      distanceMeters: 0,
+      locationId: assigned[0].id,
+      locationName: assigned[0].name,
+    };
+  }
+
+  let coords: { lat: number; lng: number; accuracyMeters?: number } | null = null;
+  try {
+    coords = await getCurrentCoordinates();
+  } catch (err) {
+    if (isGpsMandatory) {
+      if (err instanceof AttendanceGeoError) throw err;
+      throw new AttendanceGeoError("permission_denied", "GPS is required by policy");
+    }
+    // "Do not require GPS for office employees unless explicitly configured":
+    return {
+      lat: assigned[0].lat,
+      lng: assigned[0].lng,
+      distanceMeters: 0,
+      locationId: assigned[0].id,
+      locationName: assigned[0].name,
+    };
+  }
+
   const match = findMatchingWorkLocation(coords, assigned);
   if (!match) {
     const nearest = nearestWorkLocation(coords, assigned);
