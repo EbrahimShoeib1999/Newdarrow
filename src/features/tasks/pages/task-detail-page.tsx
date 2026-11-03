@@ -218,13 +218,12 @@ function SubtasksList({ parentId, parentTask }: SubtasksListProps) {
               return (
                 <div key={st.id} className="flex items-center gap-2">
                   <div
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs transition-all ${
-                      isDone
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs transition-all ${isDone
                         ? "bg-success-50/80 border-success-200 text-success-800 font-semibold"
                         : isInProgress
-                        ? "bg-primary-50 border-primary-300 text-primary-800 font-bold shadow-sm"
-                        : "bg-default-100/60 border-default-200 text-default-600"
-                    }`}
+                          ? "bg-primary-50 border-primary-300 text-primary-800 font-bold shadow-sm"
+                          : "bg-default-100/60 border-default-200 text-default-600"
+                      }`}
                   >
                     <span className="w-5 h-5 rounded-full bg-white dark:bg-black/30 flex items-center justify-center text-[10px] font-mono font-bold">
                       {st.sequenceOrder || idx + 1}
@@ -477,24 +476,24 @@ export function TaskDetailPage() {
   const baseTask = data?.data;
   const task = baseTask
     ? {
-        ...baseTask,
-        ...pendingChanges,
-        status: normalizeTaskStatusValue(
-          pendingChanges.status ?? baseTask.status
-        ),
-        priority: normalizeTaskPriorityValue(
-          pendingChanges.priority ?? baseTask.priority
-        ),
-        history: pendingChanges.history ?? baseTask.history,
-        assignee:
-          allUsers?.find(
-            (u) =>
-              u.id ===
-              (pendingChanges.assigneeId !== undefined
-                ? pendingChanges.assigneeId
-                : baseTask.assigneeId)
-          ) || null,
-      }
+      ...baseTask,
+      ...pendingChanges,
+      status: normalizeTaskStatusValue(
+        pendingChanges.status ?? baseTask.status
+      ),
+      priority: normalizeTaskPriorityValue(
+        pendingChanges.priority ?? baseTask.priority
+      ),
+      history: pendingChanges.history ?? baseTask.history,
+      assignee:
+        allUsers?.find(
+          (u) =>
+            u.id ===
+            (pendingChanges.assigneeId !== undefined
+              ? pendingChanges.assigneeId
+              : baseTask.assigneeId)
+        ) || null,
+    }
     : null;
 
   const isOverdue = Boolean(
@@ -675,10 +674,10 @@ export function TaskDetailPage() {
     task.status === "done"
       ? 100
       : task.status === "in_progress"
-      ? 50
-      : task.status === "in_review"
-      ? 80
-      : 0;
+        ? 50
+        : task.status === "in_review"
+          ? 80
+          : 0;
 
   const totalLoggedMinutes = (task.timeLogs || []).reduce(
     (acc: number, l: any) => acc + l.hours * 60 + l.minutes,
@@ -693,9 +692,9 @@ export function TaskDetailPage() {
 
   const assigneeName = task.assignee
     ? localizedName(i18n.language, {
-        name: task.assignee.name,
-        nameAr: task.assignee.nameAr,
-      })
+      name: task.assignee.name,
+      nameAr: task.assignee.nameAr,
+    })
     : null;
 
   const displayUserName = (user: { name: string; nameAr?: string | null }) =>
@@ -721,9 +720,9 @@ export function TaskDetailPage() {
         </span>
       </nav>
 
-      <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-default-200 bg-content1 shadow-sm lg:min-h-[calc(100vh-64px)] lg:flex-row">
+      <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-default-200 bg-content1 shadow-sm lg:min-h-[calc(100vh-80px)] lg:flex-row">
         {/* LEFT SIDEBAR */}
-        <aside className="flex w-full shrink-0 flex-col border-b border-default-200 bg-content1 lg:sticky lg:top-16 lg:h-[calc(100vh-64px)] lg:w-[280px] lg:border-b-0 lg:border-e">
+        <aside className="flex w-full shrink-0 flex-col border-b border-default-200 bg-content1 lg:sticky lg:top-20 lg:h-[calc(100vh-80px)] lg:w-[280px] lg:border-b-0 lg:border-e">
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
             <Button
               variant="bordered"
@@ -762,39 +761,39 @@ export function TaskDetailPage() {
               </div>
             </div>
 
-              {task.parentId && parentTaskRecord && (
-                <div className="rounded-lg border border-default-200 bg-content1 p-3 shadow-sm">
-                  <p className="mb-1.5 text-[11px] font-medium text-default-500">
-                    {t("detail.parentTask")}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/tasks/${parentTaskRecord.id}`)}
-                    className="w-full truncate text-start text-sm font-semibold text-primary hover:underline"
-                  >
-                    {parentTaskRecord.title}
-                  </button>
-                </div>
-              )}
+            {task.parentId && parentTaskRecord && (
+              <div className="rounded-lg border border-default-200 bg-content1 p-3 shadow-sm">
+                <p className="mb-1.5 text-[11px] font-medium text-default-500">
+                  {t("detail.parentTask")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/tasks/${parentTaskRecord.id}`)}
+                  className="w-full truncate text-start text-sm font-semibold text-primary hover:underline"
+                >
+                  {parentTaskRecord.title}
+                </button>
+              </div>
+            )}
 
-              {task.projectId && (
-                <div className="rounded-lg border border-default-200 bg-content1 p-3 shadow-sm">
-                  <p className="mb-1.5 text-[11px] font-medium text-default-500">
-                    {t("detail.relatedProject")}
-                  </p>
-                  <Link
-                    to={`/projects/${task.projectId}`}
-                    className="flex items-center gap-1.5 truncate text-start text-sm font-semibold text-primary hover:underline"
-                  >
-                    <Layers className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate" dir="auto">
-                      {relatedProject?.name || task.projectId}
-                    </span>
-                  </Link>
-                </div>
-              )}
+            {task.projectId && (
+              <div className="rounded-lg border border-default-200 bg-content1 p-3 shadow-sm">
+                <p className="mb-1.5 text-[11px] font-medium text-default-500">
+                  {t("detail.relatedProject")}
+                </p>
+                <Link
+                  to={`/projects/${task.projectId}`}
+                  className="flex items-center gap-1.5 truncate text-start text-sm font-semibold text-primary hover:underline"
+                >
+                  <Layers className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate" dir="auto">
+                    {relatedProject?.name || task.projectId}
+                  </span>
+                </Link>
+              </div>
+            )}
 
-              <div className="space-y-2.5 rounded-lg border border-default-200 bg-content1 p-3 shadow-sm">
+            <div className="space-y-2.5 rounded-lg border border-default-200 bg-content1 p-3 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-default-500">{t("detail.sections.progress")}</span>
                 <span className="text-sm font-semibold text-primary">{progressPercent}%</span>
@@ -887,8 +886,8 @@ export function TaskDetailPage() {
                   key === "comments"
                     ? task.commentsCount || 0
                     : key === "attachments"
-                    ? task.attachments?.length || 0
-                    : undefined,
+                      ? task.attachments?.length || 0
+                      : undefined,
               }))}
             />
           </nav>
@@ -1003,7 +1002,7 @@ export function TaskDetailPage() {
                   </div>
                 )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 md:gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 md:gap-6">
                   {task.type === "subtask" && (
                     <div className="sm:col-span-2">
                       <SearchableSelect
@@ -1038,7 +1037,7 @@ export function TaskDetailPage() {
                     triggerLabel={
                       task.sprintId
                         ? allSprints?.data?.find((s) => s.id === task.sprintId)?.name ??
-                          t("form.sprint.unassigned")
+                        t("form.sprint.unassigned")
                         : t("form.sprint.unassigned")
                     }
                     onSelectionChange={(key) => {
@@ -1096,10 +1095,10 @@ export function TaskDetailPage() {
                       renderValue={
                         assigneeName
                           ? () => (
-                              <span className="truncate" dir="auto">
-                                {assigneeName}
-                              </span>
-                            )
+                            <span className="truncate" dir="auto">
+                              {assigneeName}
+                            </span>
+                          )
                           : undefined
                       }
                       onSelectionChange={(key) => {
@@ -1148,108 +1147,108 @@ export function TaskDetailPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-                    <SearchableSelect
-                      label={t("form.statusLabel")}
-                      aria-label={t("form.statusLabel")}
-                      searchPlaceholder={t("form.search.placeholder")}
-                      selectedKey={task.status}
-                      triggerLabel={t(`status.${task.status}`)}
-                      renderValue={() => <StatusBadge status={task.status} />}
-                      onSelectionChange={(key) =>
-                        key && handleInlineChange("status", key)
-                      }
-                    >
-                      {TASK_STATUSES.map((s) => (
-                        <SelectItem key={s} textValue={t(`status.${s}`)}>
-                          {t(`status.${s}`)}
-                        </SelectItem>
-                      ))}
-                    </SearchableSelect>
-
-                    <SearchableSelect
-                      label={t("detail.sections.priority")}
-                      aria-label={t("detail.sections.priority")}
-                      searchPlaceholder={t("form.search.placeholder")}
-                      selectedKey={task.priority}
-                      triggerLabel={t(`priority.${task.priority}`)}
-                      renderValue={() => <PriorityBadge priority={task.priority} />}
-                      onSelectionChange={(key) =>
-                        key && handleInlineChange("priority", key)
-                      }
-                    >
-                      {TASK_PRIORITIES.map((p) => (
-                        <SelectItem key={p} textValue={t(`priority.${p}`)}>
-                          <PriorityBadge priority={p} />
-                        </SelectItem>
-                      ))}
-                    </SearchableSelect>
-
-                    <SearchableSelect
-                      label={t("detail.sections.itemType")}
-                      aria-label={t("detail.sections.itemType")}
-                      searchPlaceholder={t("form.search.placeholder")}
-                      selectedKey={task.type}
-                      triggerLabel={t(`type.${task.type}`)}
-                      onSelectionChange={(key) =>
-                        key && handleTypeChange(String(key))
-                      }
-                    >
-                      <SelectItem key="task" textValue={t("type.task")}>
-                        {t("type.task")}
+                  <SearchableSelect
+                    label={t("form.statusLabel")}
+                    aria-label={t("form.statusLabel")}
+                    searchPlaceholder={t("form.search.placeholder")}
+                    selectedKey={task.status}
+                    triggerLabel={t(`status.${task.status}`)}
+                    renderValue={() => <StatusBadge status={task.status} />}
+                    onSelectionChange={(key) =>
+                      key && handleInlineChange("status", key)
+                    }
+                  >
+                    {TASK_STATUSES.map((s) => (
+                      <SelectItem key={s} textValue={t(`status.${s}`)}>
+                        {t(`status.${s}`)}
                       </SelectItem>
-                      <SelectItem key="subtask" textValue={t("type.subtask")}>
-                        {t("type.subtask")}
+                    ))}
+                  </SearchableSelect>
+
+                  <SearchableSelect
+                    label={t("detail.sections.priority")}
+                    aria-label={t("detail.sections.priority")}
+                    searchPlaceholder={t("form.search.placeholder")}
+                    selectedKey={task.priority}
+                    triggerLabel={t(`priority.${task.priority}`)}
+                    renderValue={() => <PriorityBadge priority={task.priority} />}
+                    onSelectionChange={(key) =>
+                      key && handleInlineChange("priority", key)
+                    }
+                  >
+                    {TASK_PRIORITIES.map((p) => (
+                      <SelectItem key={p} textValue={t(`priority.${p}`)}>
+                        <PriorityBadge priority={p} />
                       </SelectItem>
-                    </SearchableSelect>
+                    ))}
+                  </SearchableSelect>
 
-                    <FieldBox label={t("detail.sections.startDate")} icon={<CalendarRange className="w-3.5 h-3.5" />}>
-                      <AppDatePicker
-                        aria-label={t("detail.sections.startDate")}
-                        radius="sm"
-                        classNames={{
-                          base: "w-full",
-                          inputWrapper:
-                            "bg-transparent shadow-none border-none w-full min-h-0 h-8 px-0",
-                          label: "sr-only",
-                        }}
-                        value={
-                          task.startDate
-                            ? parseDate(task.startDate.split("T")[0])
-                            : null
-                        }
-                        onChange={(date: any) =>
-                          handleInlineChange(
-                            "startDate",
-                            date ? date.toString() : null
-                          )
-                        }
-                      />
-                    </FieldBox>
+                  <SearchableSelect
+                    label={t("detail.sections.itemType")}
+                    aria-label={t("detail.sections.itemType")}
+                    searchPlaceholder={t("form.search.placeholder")}
+                    selectedKey={task.type}
+                    triggerLabel={t(`type.${task.type}`)}
+                    onSelectionChange={(key) =>
+                      key && handleTypeChange(String(key))
+                    }
+                  >
+                    <SelectItem key="task" textValue={t("type.task")}>
+                      {t("type.task")}
+                    </SelectItem>
+                    <SelectItem key="subtask" textValue={t("type.subtask")}>
+                      {t("type.subtask")}
+                    </SelectItem>
+                  </SearchableSelect>
 
-                    <FieldBox label={t("detail.sections.endDate")} icon={<CalendarRange className="w-3.5 h-3.5" />}>
-                      <AppDatePicker
-                        aria-label={t("detail.sections.endDate")}
-                        radius="sm"
-                        classNames={{
-                          base: "w-full",
-                          inputWrapper:
-                            "bg-transparent shadow-none border-none w-full min-h-0 h-8 px-0",
-                          label: "sr-only",
-                        }}
-                        value={
-                          task.dueDate
-                            ? parseDate(task.dueDate.split("T")[0])
-                            : null
-                        }
-                        onChange={(date: any) =>
-                          handleInlineChange(
-                            "dueDate",
-                            date ? date.toString() : null
-                          )
-                        }
-                      />
-                    </FieldBox>
-                  </div>
+                  <FieldBox label={t("detail.sections.startDate")} icon={<CalendarRange className="w-3.5 h-3.5" />}>
+                    <AppDatePicker
+                      aria-label={t("detail.sections.startDate")}
+                      radius="sm"
+                      classNames={{
+                        base: "w-full",
+                        inputWrapper:
+                          "bg-transparent shadow-none border-none w-full min-h-0 h-8 px-0",
+                        label: "sr-only",
+                      }}
+                      value={
+                        task.startDate
+                          ? parseDate(task.startDate.split("T")[0])
+                          : null
+                      }
+                      onChange={(date: any) =>
+                        handleInlineChange(
+                          "startDate",
+                          date ? date.toString() : null
+                        )
+                      }
+                    />
+                  </FieldBox>
+
+                  <FieldBox label={t("detail.sections.endDate")} icon={<CalendarRange className="w-3.5 h-3.5" />}>
+                    <AppDatePicker
+                      aria-label={t("detail.sections.endDate")}
+                      radius="sm"
+                      classNames={{
+                        base: "w-full",
+                        inputWrapper:
+                          "bg-transparent shadow-none border-none w-full min-h-0 h-8 px-0",
+                        label: "sr-only",
+                      }}
+                      value={
+                        task.dueDate
+                          ? parseDate(task.dueDate.split("T")[0])
+                          : null
+                      }
+                      onChange={(date: any) =>
+                        handleInlineChange(
+                          "dueDate",
+                          date ? date.toString() : null
+                        )
+                      }
+                    />
+                  </FieldBox>
+                </div>
               </div>
             </SectionCard>
 
