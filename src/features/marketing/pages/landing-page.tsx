@@ -35,8 +35,8 @@ function LandingNav({ isAuthenticated }: { isAuthenticated: boolean }) {
       className="sticky top-0 z-50"
     >
       <header className="border-b border-default-100 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-2 md:px-4 overflow-x-hidden">
-          <Link to="/" className="shrink-0 transition-transform duration-300 hover:scale-105">
+        <div className="mx-auto flex h-20 max-w-6xl items-center justify-between gap-2 px-2 md:px-4 overflow-x-hidden">
+          <Link to="/" className="shrink-0">
             <Logo size="md" className="h-11" />
           </Link>
 
@@ -318,7 +318,7 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
         </section>
 
         {/* Apps grid */}
-        <section id="apps" className="bg-background px-4 py-16 md:px-6 md:py-24 border-y border-default-100 scroll-mt-20">
+        <section id="apps" className="bg-background px-4 py-16 md:px-6 md:py-24 border-y border-default-100 scroll-mt-24">
           <div className="mx-auto max-w-5xl">
             <AnimatedDiv triggerOnScroll variants={fadeInUpVariants} className="mb-14 text-center">
               <span className="text-xs font-bold uppercase tracking-widest text-primary mb-2 block">
@@ -337,31 +337,31 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
                   Boolean(app.portal) &&
                   !accessiblePortals.includes(app.portal!);
                 return (
-                <AnimatedDiv
-                  key={app.id}
-                  triggerOnScroll
-                  amount={0.15}
-                  delay={index * 0.05}
-                  variants={scaleInVariants}
-                >
-                  <div className="p-4 rounded-3xl bg-default-50/70 border border-default-200/60 hover:border-primary/40 hover:bg-background hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 flex flex-col items-center text-center">
-                    <AppTile
-                      label={t(app.labelKey)}
-                      icon={app.icon}
-                      gradient={app.gradient}
-                      restrictedHint={t("apps.restricted")}
-                      disabled={restricted}
-                      to={isAuthenticated || restricted ? app.path : "/login"}
-                      state={
-                        isAuthenticated || restricted
-                          ? undefined
-                          : // Unauthenticated: existing login flow, preserving the
+                  <AnimatedDiv
+                    key={app.id}
+                    triggerOnScroll
+                    amount={0.15}
+                    delay={index * 0.05}
+                    variants={scaleInVariants}
+                  >
+                    <div className="p-4 rounded-3xl bg-default-50/70 border border-default-200/60 hover:border-primary/40 hover:bg-background hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 flex flex-col items-center text-center">
+                      <AppTile
+                        label={t(app.labelKey)}
+                        icon={app.icon}
+                        gradient={app.gradient}
+                        restrictedHint={t("apps.restricted")}
+                        disabled={restricted}
+                        to={isAuthenticated || restricted ? app.path : "/login"}
+                        state={
+                          isAuthenticated || restricted
+                            ? undefined
+                            : // Unauthenticated: existing login flow, preserving the
                             // intended return destination.
                             { from: { pathname: app.path } }
-                      }
-                    />
-                  </div>
-                </AnimatedDiv>
+                        }
+                      />
+                    </div>
+                  </AnimatedDiv>
                 );
               })}
             </div>
@@ -386,7 +386,7 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
             supported scope with honest availability. Cards never activate a
             module, change tenant config, or link into a gated internal route —
             live and inquiry cards both point to the public /register path. */}
-        <section id="activities" className="bg-default-50 px-4 py-16 md:px-6 md:py-24 scroll-mt-20">
+        <section id="activities" className="bg-default-50 px-4 py-16 md:px-6 md:py-24 scroll-mt-24">
           <div className="mx-auto max-w-5xl">
             <AnimatedDiv triggerOnScroll variants={fadeInUpVariants} className="mb-14 text-center">
               <span className="text-xs font-bold uppercase tracking-widest text-primary mb-2 block">
@@ -460,7 +460,7 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
         </section>
 
         {/* Features Bento */}
-        <section id="features" className="px-4 py-16 md:px-6 md:py-24 bg-default-50 scroll-mt-20">
+        <section id="features" className="px-4 py-16 md:px-6 md:py-24 bg-default-50 scroll-mt-24">
           <div className="mx-auto max-w-5xl">
             <AnimatedDiv triggerOnScroll className="mb-14 text-center">
               <span className="text-xs font-bold uppercase tracking-widest text-primary mb-2 block">
@@ -520,7 +520,7 @@ export function LandingPage({ isAuthenticated = false }: { isAuthenticated?: boo
         </section>
 
         {/* CTA Banner */}
-        <section id="cta" className="px-4 py-16 md:px-6 md:py-24 scroll-mt-20">
+        <section id="cta" className="px-4 py-16 md:px-6 md:py-24 scroll-mt-24">
           <AnimatedDiv triggerOnScroll amount={0.3} variants={scaleInVariants} className="mx-auto max-w-4xl">
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary-600 to-violet-700 px-8 py-16 text-center text-white shadow-2xl transition-shadow duration-300 hover:shadow-primary/30">
               {/* Radial glow background */}
