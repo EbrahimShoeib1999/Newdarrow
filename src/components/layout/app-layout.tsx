@@ -53,7 +53,7 @@ export function AppLayout({ children }: { children?: React.ReactNode } = {}) {
         />
         <main
           className={cn(
-            "flex-1 pt-20 sm:pt-24",
+            "flex-1 pt-24 sm:pt-28",
             isPicker ? "px-5 pb-6 md:px-10 md:pb-10" : "px-5 pb-6 md:px-8 md:pb-8",
             "print:pt-0 print:p-0 print:m-0 print:block"
           )}

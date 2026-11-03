@@ -57,13 +57,13 @@ export function Header({
   return (
     <header
       className={cn(
-        "fixed top-0 z-40 flex h-14 sm:h-16 items-center justify-between gap-1.5 sm:gap-3",
+        "fixed top-0 z-40 flex h-16 sm:h-20 items-center justify-between gap-1.5 sm:gap-3",
         "border-b border-default-100 glass px-2 sm:px-4 shadow-premium",
         "inset-x-0 transition-[inset] duration-300 max-w-full overflow-hidden",
         hasPortalSidebar &&
-          (sidebarCollapsed
-            ? "md:inset-x-auto md:start-[5.5rem] md:end-0"
-            : "md:inset-x-auto md:start-72 md:end-0")
+        (sidebarCollapsed
+          ? "md:inset-x-auto md:start-[5.5rem] md:end-0"
+          : "md:inset-x-auto md:start-72 md:end-0")
       )}
     >
       {/* Start side controls */}
@@ -130,15 +130,14 @@ export function Header({
                 isIconOnly
                 variant="flat"
                 size="sm"
-                className={`min-w-0 w-8 h-8 ${
-                  isCheckedIn && !isOnBreak
+                className={`min-w-0 w-8 h-8 ${isCheckedIn && !isOnBreak
                     ? "bg-success/10 text-success"
                     : isOnBreak && isCheckedIn
                       ? "bg-warning/10 text-warning"
                       : !isCheckedIn &&
-                        !isOnBreak &&
-                        "bg-default/10 text-primary"
-                }`}
+                      !isOnBreak &&
+                      "bg-default/10 text-primary"
+                  }`}
               >
                 <Clock
                   className={`w-3.5 h-3.5 ${isCheckedIn && !isOnBreak ? "animate-pulse" : ""}`}

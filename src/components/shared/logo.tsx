@@ -83,7 +83,7 @@ export function Logo({
       aria-label={title ?? "Droo"}
       onClick={onClick}
       className={cn(
-        "group inline-flex items-center justify-center rounded-xl outline-none transition-all duration-200 hover:scale-[1.04] active:scale-95 hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2",
+        "group inline-flex items-center justify-center rounded-xl outline-none transition-[filter,opacity] duration-200 hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2",
         className
       )}
     >
