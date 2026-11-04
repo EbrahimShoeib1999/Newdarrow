@@ -1,11 +1,77 @@
 import type { InvoiceItem } from "../schemas/invoice";
 
-export function invoiceLineBeforeTax(item: InvoiceItem): number {
-  return Math.max(0, item.quantity * item.unitPrice - (item.discount || 0));
+/** Minor currency unit: 1 SAR = 100 halalas */
+export function toHalalas(amount: unknown): number {
+  return Math.round((Number(amount) || 0) * 100);
 }
 
-export function invoiceLineVat(item: InvoiceItem): number {
-  return invoiceLineBeforeTax(item) * (item.taxRate / 100);
+export function fromHalalas(halalas: number): number {
+  return halalas / 100;
+}
+
+export function roundMoney(amount: unknown): number {
+  return Math.round((Number(amount) || 0) * 100) / 100;
+}
+
+export interface ComputedInvoiceLine {
+  gross: number;
+  discount: number;
+  beforeTax: number;
+  vat: number;
+  total: number;
+  grossHalalas: number;
+  discountHalalas: number;
+  beforeTaxHalalas: number;
+  vatHalalas: number;
+  totalHalalas: number;
+}
+
+/**
+ * Computes exact financial minor units (halalas) for a single line item,
+ * eliminating JavaScript floating-point drift and rounding discrepancies.
+ */
+export function computeInvoiceLineValues(item: {
+  quantity: unknown;
+  unitPrice: unknown;
+  taxRate?: unknown;
+  discount?: unknown;
+}): ComputedInvoiceLine {
+  const q = Number(item.quantity) || 0;
+  const r = Number(item.unitPrice) || 0;
+  const d = Math.max(0, Number(item.discount) || 0);
+  const tx = Math.max(0, Number(item.taxRate) || 0);
+
+  // Exact halala integer calculation
+  const grossHalalas = Math.max(0, Math.round(q * r * 100));
+  const discountHalalas = Math.min(grossHalalas, Math.round(d * 100));
+  const beforeTaxHalalas = Math.max(0, grossHalalas - discountHalalas);
+  const vatHalalas = Math.max(0, Math.round((beforeTaxHalalas * tx) / 100));
+  const totalHalalas = beforeTaxHalalas + vatHalalas;
+
+  return {
+    gross: fromHalalas(grossHalalas),
+    discount: fromHalalas(discountHalalas),
+    beforeTax: fromHalalas(beforeTaxHalalas),
+    vat: fromHalalas(vatHalalas),
+    total: fromHalalas(totalHalalas),
+    grossHalalas,
+    discountHalalas,
+    beforeTaxHalalas,
+    vatHalalas,
+    totalHalalas,
+  };
+}
+
+export function invoiceLineBeforeTax(item: Pick<InvoiceItem, "quantity" | "unitPrice" | "discount">): number {
+  return computeInvoiceLineValues(item).beforeTax;
+}
+
+export function invoiceLineVat(item: Pick<InvoiceItem, "quantity" | "unitPrice" | "discount" | "taxRate">): number {
+  return computeInvoiceLineValues(item).vat;
+}
+
+export function invoiceLineTotal(item: Pick<InvoiceItem, "quantity" | "unitPrice" | "discount" | "taxRate">): number {
+  return computeInvoiceLineValues(item).total;
 }
 
 /**
@@ -21,28 +87,33 @@ export interface InvoiceTotals {
 }
 
 export function computeInvoiceTotals(
-  items: Array<{ quantity: unknown; unitPrice: unknown; taxRate: unknown; discount?: unknown }>
+  items: Array<{ quantity: unknown; unitPrice: unknown; taxRate: unknown; discount?: unknown }>,
+  invoiceDiscount: unknown = 0
 ): InvoiceTotals {
-  let subTotal = 0;
-  let totalDiscount = 0;
-  let totalTax = 0;
+  let subTotalHalalas = 0;
+  let lineDiscountHalalas = 0;
+  let taxHalalas = 0;
+
   for (const item of items) {
-    const q = Number(item.quantity) || 0;
-    const r = Number(item.unitPrice) || 0;
-    const d = Math.max(0, Number(item.discount) || 0);
-    const tx = Number(item.taxRate) || 0;
-    const gross = Math.max(0, q * r);
-    const beforeTax = Math.max(0, gross - d);
-    subTotal += gross;
-    totalDiscount += d;
-    totalTax += beforeTax * (tx / 100);
+    const line = computeInvoiceLineValues(item);
+    subTotalHalalas += line.grossHalalas;
+    lineDiscountHalalas += line.discountHalalas;
+    taxHalalas += line.vatHalalas;
   }
-  // 2-dp money rounding, consistent with the rest of the system.
-  subTotal = Math.round(subTotal * 100) / 100;
-  totalDiscount = Math.round(totalDiscount * 100) / 100;
-  totalTax = Math.round(totalTax * 100) / 100;
-  const grandTotal = Math.round((subTotal - totalDiscount + totalTax) * 100) / 100;
-  return { subTotal, totalDiscount, totalTax, grandTotal };
+
+  const rawInvDiscount = Math.max(0, toHalalas(invoiceDiscount));
+  const maxAllowableInvDiscount = Math.max(0, subTotalHalalas - lineDiscountHalalas);
+  const appliedInvDiscountHalalas = Math.min(maxAllowableInvDiscount, rawInvDiscount);
+  const totalDiscountHalalas = lineDiscountHalalas + appliedInvDiscountHalalas;
+
+  const grandTotalHalalas = subTotalHalalas - totalDiscountHalalas + taxHalalas;
+
+  return {
+    subTotal: fromHalalas(subTotalHalalas),
+    totalDiscount: fromHalalas(totalDiscountHalalas),
+    totalTax: fromHalalas(taxHalalas),
+    grandTotal: fromHalalas(grandTotalHalalas),
+  };
 }
 
 /**

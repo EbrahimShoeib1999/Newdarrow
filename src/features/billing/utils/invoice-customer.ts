@@ -65,6 +65,22 @@ export function findContactByCustomerInput(
     const label = invoiceCustomerPickerLabel(c).toLowerCase();
     const name = contactDisplayName(c).toLowerCase();
     const company = c.accountName?.trim().toLowerCase() ?? "";
-    return label === q || name === q || (company && company === q);
+    const legalName = c.legalName?.trim().toLowerCase() ?? "";
+    const fullName = c.fullName?.trim().toLowerCase() ?? "";
+    const email = c.email?.trim().toLowerCase() ?? "";
+    const personName = `${c.firstName || ""} ${c.lastName || ""}`.trim().toLowerCase();
+    const combo = personName && company ? `${personName} — ${company}`.toLowerCase() : "";
+    const comboRev = personName && company ? `${company} — ${personName}`.toLowerCase() : "";
+    return (
+      label === q ||
+      name === q ||
+      personName === q ||
+      (combo && combo === q) ||
+      (comboRev && comboRev === q) ||
+      (company && company === q) ||
+      (legalName && legalName === q) ||
+      (fullName && fullName === q) ||
+      (email && email === q)
+    );
   });
 }

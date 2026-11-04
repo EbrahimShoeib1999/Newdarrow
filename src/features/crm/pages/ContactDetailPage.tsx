@@ -467,6 +467,11 @@ export function ContactDetailPage() {
                     <FieldBox label={t("contacts.form.taxNumber") || "Tax Number"}>
                       {contact.taxNumber || "—"}
                     </FieldBox>
+                    {contact.nationalId && (
+                      <FieldBox label={t("contacts.form.nationalId") || (isAr ? "الرقم الوطني" : "National ID")}>
+                        {contact.nationalId}
+                      </FieldBox>
+                    )}
                     {contact.mainActivity && (
                       <FieldBox label={t("contacts.form.mainActivity")}>{contact.mainActivity}</FieldBox>
                     )}

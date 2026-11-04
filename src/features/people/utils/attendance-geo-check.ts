@@ -30,9 +30,36 @@ export async function captureAttendanceGeo(
     employee.attendanceCheckMode ?? (remoteAuthorized ? "flexible" : "geofence");
 
   const locRes = await PeopleService.getWorkLocations(companyId);
-  const assigned = (employee.attendanceLocationIds ?? [])
+  let assigned = (employee.attendanceLocationIds ?? [])
     .map((id) => locRes.data.find((l) => l.id === id))
     .filter((l): l is WorkLocation => !!l && l.isActive);
+
+  // Fallback location resolution for office employees
+  if (assigned.length === 0) {
+    if (employee.workLocationId) {
+      const match = locRes.data.find((l) => l.id === employee.workLocationId && l.isActive);
+      if (match) assigned = [match];
+    }
+    if (assigned.length === 0 && employee.officeLocation) {
+      const match = locRes.data.find(
+        (l) =>
+          l.isActive &&
+          (l.name.trim().toLowerCase() === employee.officeLocation?.trim().toLowerCase() ||
+           l.id === employee.officeLocation)
+      );
+      if (match) assigned = [match];
+    }
+    if (
+      assigned.length === 0 &&
+      !remoteAuthorized &&
+      (!employee.attendanceLocationIds || employee.attendanceLocationIds.length === 0)
+    ) {
+      const activeLocs = locRes.data.filter((l) => l.isActive);
+      if (activeLocs.length === 1) {
+        assigned = [activeLocs[0]];
+      }
+    }
+  }
 
   if (mode === "flexible" || (remoteAuthorized && assigned.length === 0)) {
     try {

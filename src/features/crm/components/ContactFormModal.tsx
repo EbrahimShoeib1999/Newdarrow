@@ -63,6 +63,7 @@ interface ContactFormModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   contact?: Contact | null;
+  onSuccess?: (contact: Contact) => void;
 }
 
 const ENTITY_TYPES: { key: EntityType; labelAr: string; labelEn: string; icon: any }[] = [
@@ -108,7 +109,7 @@ const COMMON_SERVICES = [
   "علاقات عامة",
 ];
 
-export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormModalProps) {
+export function ContactFormModal({ isOpen, onOpenChange, contact, onSuccess }: ContactFormModalProps) {
   const { t, i18n } = useTranslation("crm");
   const isAr = i18n.language === "ar";
   const { data: users } = useAllUsers();
@@ -441,10 +442,12 @@ export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormM
     const dto = toCreateContactDTO(values);
 
     if (isEdit && contact) {
-      await updateContact.mutateAsync({ id: contact.id, data: dto });
+      const res = await updateContact.mutateAsync({ id: contact.id, data: dto });
+      onSuccess?.(res.data);
       onOpenChange(false);
     } else {
-      await createContact.mutateAsync(dto);
+      const res = await createContact.mutateAsync(dto);
+      onSuccess?.(res.data);
       if (keepOpenAfterSave) {
         // Reset form for new entry keeping entityType
         reset({
@@ -772,7 +775,7 @@ export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormM
                           />
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                           <Controller
                             name="establishmentType"
                             control={control}
@@ -807,6 +810,12 @@ export function ContactFormModal({ isOpen, onOpenChange, contact }: ContactFormM
                             label={t("contacts.form.unifiedNumber")}
                             placeholder="700xxxxxxx"
                             {...register("unifiedNumber")}
+                          />
+
+                          <Input
+                            label={t("contacts.form.nationalId", "الرقم الوطني")}
+                            placeholder="70xxxxxxxx / 10xxxxxxxx"
+                            {...register("nationalId")}
                           />
                         </div>
 

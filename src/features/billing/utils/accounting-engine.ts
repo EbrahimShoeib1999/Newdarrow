@@ -42,7 +42,9 @@ export function requireAccount(
 }
 
 export function getInvoiceAmountDue(invoice: Invoice): number {
-  return Math.max(0, invoice.grandTotal - (invoice.amountPaid ?? 0));
+  const totalHalalas = Math.round((Number(invoice.grandTotal) || 0) * 100);
+  const paidHalalas = Math.round((Number(invoice.amountPaid) || 0) * 100);
+  return Math.max(0, (totalHalalas - paidHalalas) / 100);
 }
 
 export function syncInvoiceStatuses<T extends Invoice>(invoices: T[]): T[] {
