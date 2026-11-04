@@ -47,7 +47,7 @@ export function mapFirestoreUser(
     profileMissing: data === undefined,
     portalAccess: parsePortalAccess(data?.portalAccess),
     portalSubRoles: parsePortalSubRoles(data?.portalSubRoles),
-    customPermissions: parseCustomPermissions(data?.customPermissions),
+    customPermissions: parseCustomPermissions(data?.customPermissions ?? data?.permissions),
     country: (data?.country as string) || fallbacks.country || undefined,
     branchId: (data?.branchId as string) || fallbacks.branchId || undefined,
     workLocationId: (data?.workLocationId as string) || fallbacks.workLocationId || undefined,

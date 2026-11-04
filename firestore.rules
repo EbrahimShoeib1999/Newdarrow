@@ -46,7 +46,7 @@ service cloud.firestore {
     function customPermissions() {
       return userDoc().get('customPermissions', []) is list
         ? userDoc().get('customPermissions', [])
-        : [];
+        : (userDoc().get('permissions', []) is list ? userDoc().get('permissions', []) : []);
     }
 
     // Effective Billing sub-role; empty string means "fall back to the global role".

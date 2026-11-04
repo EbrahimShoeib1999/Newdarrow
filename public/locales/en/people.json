@@ -344,9 +344,9 @@
     "sync_error_permission": "You don't have permission to load your attendance for this company.",
     "sync_error_generic": "Couldn't load your attendance session. Check your connection and retry.",
     "sync_retry": "Retry",
-    "block_employment_inactive": "Shift start is blocked: this employment record is inactive (terminated or suspended).",
-    "block_location_not_assigned": "Shift start is blocked: no work location is assigned for the office check-in yet — ask HR to assign one.",
-    "block_location_inactive": "Shift start is blocked: the assigned work location was removed or deactivated — ask HR to update the assignment."
+    "block_employment_inactive": "Work start is blocked: this employment record is inactive (terminated or suspended).",
+    "block_location_not_assigned": "Work start is blocked: no work location is assigned for the office check-in yet — ask HR to assign one.",
+    "block_location_inactive": "Work start is blocked: the assigned work location was removed or deactivated — ask HR to update the assignment."
   },
   "departments": {
     "Engineering": "Engineering",
@@ -424,9 +424,9 @@
     "users_load_failed": "Failed to load users"
   },
   "attendance_toast": {
-    "shift_started": "Shift started!",
+    "shift_started": "Work started!",
     "break_started": "Break started.",
-    "shift_completed": "Shift completed.",
+    "shift_completed": "Work completed.",
     "checkin_failed": "Failed to check in.",
     "break_failed": "Failed to start break",
     "checkout_failed": "Failed to check out",
@@ -436,8 +436,8 @@
     "gps_denied": "Location permission is required to check in. Allow GPS and try again.",
     "gps_unavailable": "Could not read your GPS location. Try again near the workplace.",
     "location_not_assigned": "No attendance location is assigned to you. Ask your manager to set it.",
-    "location_inactive": "Your assigned work location was removed or deactivated. Ask HR to update the assignment before starting a shift.",
-    "employment_inactive": "Your employment record is not active, so you cannot start a shift. Contact HR.",
+    "location_inactive": "Your assigned work location was removed or deactivated. Ask HR to update the assignment before starting work.",
+    "employment_inactive": "Your employment record is not active, so you cannot start work. Contact HR.",
     "outside_location": "You are outside {{name}} ({{distance}} m away, allowed {{radius}} m).",
     "late_checkin": "You checked in {{minutes}} min late.",
     "late_checkin_deducted": "You checked in {{minutes}} min late — this occurrence will be deducted from your pay.",

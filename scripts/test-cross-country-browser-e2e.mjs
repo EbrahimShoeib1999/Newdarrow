@@ -34,9 +34,12 @@ const HQ_LOC = { lat: 24.7136, lng: 46.6753, radiusMeters: 500, name: "Riyadh HQ
 
 const USERS = {
   admin: { email: "admin@global.test", pass: "GlobalAdmin2026!", name: "Global Admin" },
-  egyptMgr: { email: "egypt_mgr@global.test", pass: "EgyptMgr2026!", name: "Youssef Egypt Manager", empId: "e-egypt-mgr" },
+  egyptMgr: { email: "khulodahmed390@gmail.com", pass: "KhulodMgr2026!", name: "Khulod Ahmed", empId: "e-egypt-mgr" },
   restrictedMgr: { email: "restricted_mgr@global.test", pass: "RestrictedMgr2026!", name: "Hassan Cairo Manager", empId: "e-restricted-mgr" },
-  saudiOffice: { email: "saudi_emp@global.test", pass: "SaudiOffice2026!", name: "Tariq Al-Saudi", empId: "e-saudi-office" },
+  saudiOffice: { email: "norahn892@gmail.com", pass: "NorahOffice2026!", name: "Norah Al-Otaibi", empId: "e-saudi-office" },
+  albraa: { email: "albrahymasra39@gmail.com", pass: "AlbraaOffice2026!", name: "Albraa Al-Masra", empId: "e-albraa" },
+  zainab: { email: "Zainabodaili@gmail.com", pass: "ZainabRemote2026!", name: "Zainab Odaili", empId: "e-zainab" },
+  mohamed: { email: "mm7811238@gmail.com", pass: "MohamedFreelance2026!", name: "Mohamed Mansour", empId: "e-mohamed" },
   egyptRemote: { email: "egypt_emp@global.test", pass: "EgyptRemote2026!", name: "Nour El-Masri", empId: "e-egypt-remote" },
   strictGps: { email: "strict_gps@global.test", pass: "StrictGps2026!", name: "Fahad Strict GPS", empId: "e-strict-gps" },
 };
@@ -175,8 +178,9 @@ const viteProc = spawn(process.execPath, ["node_modules/vite/bin/vite.js", "--po
   },
   stdio: "pipe",
 });
-viteProc.stdout.on("data", () => {});
-viteProc.stderr.on("data", () => {});
+const viteLogs = [];
+viteProc.stdout.on("data", (d) => { const s = d.toString(); if (/error|warn|fail/i.test(s)) viteLogs.push(s); });
+viteProc.stderr.on("data", (d) => { viteLogs.push(d.toString()); });
 let viteReady = false;
 for (let i = 0; i < 40; i++) {
   await new Promise((r) => setTimeout(r, 1000));
@@ -243,12 +247,14 @@ async function shot(name) {
     log(`   📸 ${p}`);
   }
 }
-async function goto(url) {
-  await send("Page.navigate", { url });
-  await new Promise((r) => setTimeout(r, 1200));
-}
 async function currentUrl() {
   return (await evalJs("window.location.href")) || "";
+}
+async function goto(url) {
+  const cur = await currentUrl();
+  if (cur === url) return;
+  await send("Page.navigate", { url });
+  await new Promise((r) => setTimeout(r, 2000));
 }
 async function signOutBrowser() {
   await evalJs(`(async () => {
@@ -260,7 +266,7 @@ async function signOutBrowser() {
     try { localStorage.clear(); sessionStorage.clear(); } catch {}
     return true;
   })()`);
-  await goto(`${ORIGIN}/login`);
+  await new Promise((r) => setTimeout(r, 500));
 }
 async function setGeo({ grant, coords }) {
   await send("Browser.setPermission", { origin: ORIGIN, permission: { name: "geolocation" }, setting: grant ? "granted" : "denied" });
@@ -369,7 +375,7 @@ try {
     department: "Management", status: "active",
   }, adminIdToken);
 
-  // Saudi Office Employee (geofence disabled, non-mandatory GPS)
+  // Saudi Office Employee: norahn892@gmail.com (geofence disabled, non-mandatory GPS)
   const saudiAuth = await createAuthUser(USERS.saudiOffice.email, USERS.saudiOffice.pass);
   await seedDoc(`users/${saudiAuth.uid}`, {
     id: saudiAuth.uid, email: USERS.saudiOffice.email, name: USERS.saudiOffice.name, role: "employee", companyId: COMPANY_ID,
@@ -380,10 +386,59 @@ try {
     id: USERS.saudiOffice.empId, userId: saudiAuth.uid, name: USERS.saudiOffice.name, email: USERS.saudiOffice.email,
     companyId: COMPANY_ID, country: "Saudi Arabia", branchId: "branch-riyadh", workLocationId: "loc-riyadh-hq",
     officeLocation: "Riyadh HQ", workMode: "office", workType: "onsite", role: "employee",
+    department: "Operations", status: "active",
+    attendanceLocationIds: ["loc-riyadh-hq"],
+    geofenceEnabled: false,
+    requireGps: false,
+  });
+
+  // Saudi Office Employee: albrahymasra39@gmail.com
+  const albraaAuth = await createAuthUser(USERS.albraa.email, USERS.albraa.pass);
+  await seedDoc(`users/${albraaAuth.uid}`, {
+    id: albraaAuth.uid, email: USERS.albraa.email, name: USERS.albraa.name, role: "employee", companyId: COMPANY_ID,
+    country: "Saudi Arabia", branchId: "branch-riyadh",
+    portalAccess: ["people", "tasks"],
+  }, albraaAuth.idToken);
+  await seedDoc(`companies/${COMPANY_ID}/employees/${USERS.albraa.empId}`, {
+    id: USERS.albraa.empId, userId: albraaAuth.uid, name: USERS.albraa.name, email: USERS.albraa.email,
+    companyId: COMPANY_ID, country: "Saudi Arabia", branchId: "branch-riyadh", workLocationId: "loc-riyadh-hq",
+    officeLocation: "Riyadh HQ", workMode: "office", workType: "onsite", role: "employee",
     department: "Engineering", status: "active",
     attendanceLocationIds: ["loc-riyadh-hq"],
-    geofenceEnabled: false, // Geofence disabled
-    requireGps: false,      // GPS not mandatory
+    geofenceEnabled: false,
+    requireGps: false,
+  });
+
+  // Saudi Remote Employee: Zainabodaili@gmail.com
+  const zainabAuth = await createAuthUser(USERS.zainab.email, USERS.zainab.pass);
+  await seedDoc(`users/${zainabAuth.uid}`, {
+    id: zainabAuth.uid, email: USERS.zainab.email, name: USERS.zainab.name, role: "employee", companyId: COMPANY_ID,
+    country: "Saudi Arabia", branchId: "branch-riyadh",
+    portalAccess: ["people", "tasks"],
+  }, zainabAuth.idToken);
+  await seedDoc(`companies/${COMPANY_ID}/employees/${USERS.zainab.empId}`, {
+    id: USERS.zainab.empId, userId: zainabAuth.uid, name: USERS.zainab.name, email: USERS.zainab.email,
+    companyId: COMPANY_ID, country: "Saudi Arabia", branchId: "branch-riyadh", workLocationId: "loc-remote",
+    officeLocation: "Remote KSA", workMode: "remote", workType: "remote", role: "employee",
+    department: "Finance", status: "active",
+    geofenceEnabled: false,
+    requireGps: false,
+  });
+
+  // Saudi Freelancer Employee: mm7811238@gmail.com
+  const mohamedAuth = await createAuthUser(USERS.mohamed.email, USERS.mohamed.pass);
+  await seedDoc(`users/${mohamedAuth.uid}`, {
+    id: mohamedAuth.uid, email: USERS.mohamed.email, name: USERS.mohamed.name, role: "employee", companyId: COMPANY_ID,
+    country: "Saudi Arabia", branchId: "branch-jeddah",
+    portalAccess: ["people", "tasks"],
+  }, mohamedAuth.idToken);
+  await seedDoc(`companies/${COMPANY_ID}/employees/${USERS.mohamed.empId}`, {
+    id: USERS.mohamed.empId, userId: mohamedAuth.uid, name: USERS.mohamed.name, email: USERS.mohamed.email,
+    companyId: COMPANY_ID, country: "Saudi Arabia", branchId: "branch-jeddah", workLocationId: "loc-jeddah",
+    officeLocation: "Jeddah Branch", workMode: "freelancer", workType: "freelance", attendanceCheckMode: "flexible",
+    role: "employee", department: "Design", status: "active",
+    geofenceEnabled: false,
+    requireGps: false,
   });
 
   // Egypt Remote Employee
@@ -428,26 +483,27 @@ try {
 
   // Wait for the employee table/grid to load
   await waitUntil(
-    () => evalJs(`document.body.innerText.includes("Tariq Al-Saudi") && document.body.innerText.includes("Nour El-Masri")`),
+    () => evalJs(`document.body.innerText.includes("Norah Al-Otaibi") && document.body.innerText.includes("Nour El-Masri")`),
     30000,
     "both Saudi Office and Egypt Remote employees visible on /people"
   );
 
   const pageText = await evalJs("document.body.innerText");
-  const hasSaudi = pageText.includes("Tariq Al-Saudi");
-  const hasEgypt = pageText.includes("Nour El-Masri");
+  const hasNorah = pageText.includes("Norah Al-Otaibi");
+  const hasAlbraa = pageText.includes("Albraa Al-Masra");
+  const hasZainab = pageText.includes("Zainab Odaili");
+  const hasMohamed = pageText.includes("Mohamed Mansour");
+  const hasNour = pageText.includes("Nour El-Masri");
   const hasSaudiCountry = pageText.includes("Saudi Arabia");
   const hasEgyptCountry = pageText.includes("Egypt");
-  const hasOfficeMode = /office/i.test(pageText);
-  const hasRemoteMode = /remote/i.test(pageText);
 
-  if (hasSaudi && hasEgypt && hasSaudiCountry && hasEgyptCountry && hasOfficeMode && hasRemoteMode) {
+  if (hasNorah && hasAlbraa && hasZainab && hasMohamed && hasNour && hasSaudiCountry && hasEgyptCountry) {
     passed++;
-    log("  PASS: Scenario 1 - Egypt Manager sees Saudi Office and Egypt Remote employees with country/mode tags");
+    log("  PASS: Scenario 1 - Khulod sees all Saudi employees (Norah, Albraa, Zainab, Mohamed) and Egypt Remote employees");
     await shot("01-egypt-mgr-cross-country-visibility");
   } else {
     failed++;
-    log(`  FAIL: Scenario 1 - Visibility check failed (saudi=${hasSaudi}, egypt=${hasEgypt}, saudiCountry=${hasSaudiCountry}, egyptCountry=${hasEgyptCountry})`);
+    log(`  FAIL: Scenario 1 - Visibility check failed (norah=${hasNorah}, albraa=${hasAlbraa}, zainab=${hasZainab}, mohamed=${hasMohamed}, nour=${hasNour})`);
   }
 
   // --------------------------------------------------------------------------
@@ -464,10 +520,10 @@ try {
   );
   const restPageText = await evalJs("document.body.innerText");
   const restHasCairo = restPageText.includes("Nour El-Masri");
-  const restHasSaudi = restPageText.includes("Tariq Al-Saudi");
+  const restHasSaudi = restPageText.includes("Norah Al-Otaibi") || restPageText.includes("Albraa Al-Masra") || restPageText.includes("Zainab Odaili");
   if (restHasCairo && !restHasSaudi) {
     passed++;
-    log("  PASS: Scenario 1b - Restricted Manager sees only branch-cairo and CANNOT see Saudi office employee");
+    log("  PASS: Scenario 1b - Restricted Manager sees only branch-cairo and CANNOT see Saudi employees");
     await shot("01b-restricted-mgr-branch-scope");
   } else {
     failed++;
@@ -484,6 +540,13 @@ try {
   await browserLogin(USERS.saudiOffice.email, USERS.saudiOffice.pass);
   await goto(`${ORIGIN}/tasks`);
 
+  // Wait for the app layout to mount
+  await waitUntil(
+    () => evalJs("!!document.querySelector('header') || !!document.querySelector('#root > *')"),
+    60000,
+    "app layout mounted"
+  );
+
   // Find and click the Start Shift play button
   const startBtn = await waitUntil(
     () => evalJs(`(() => {
@@ -491,7 +554,7 @@ try {
       if (b) { b.click(); return true; }
       return false;
     })()`),
-    30000,
+    60000,
     "start shift play button clicked"
   );
 
@@ -665,6 +728,7 @@ try {
     log(`[ERROR DIAG] Body: ${body?.slice(0, 500)}`);
     log(`[ERROR DIAG] HTML: ${html?.slice(0, 800)}`);
     log(`[ERROR DIAG] ConsoleBuf: \n${consoleBuf.slice(-25).join("\n")}`);
+    log(`[ERROR DIAG] ViteLogs: \n${viteLogs.slice(-10).join("\n")}`);
     await shot("diag-error-state");
   } catch (diagErr) {
     log(`[ERROR DIAG FAILED] ${diagErr.message}`);

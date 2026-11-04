@@ -485,7 +485,20 @@ export const PeopleService = {
         // belonging to the same authorized company.
         // A manager without company-wide visibility must remain restricted to their authorized scope.
         ...(() => {
-          let scope = callerScope;
+          let scope = callerScope ? {
+            userId: (callerScope as any).userId || (callerScope as any).uid,
+            branchId: callerScope.branchId,
+            workLocationId: callerScope.workLocationId,
+            hasCompanyWideAccess: callerScope.hasCompanyWideAccess !== undefined
+              ? callerScope.hasCompanyWideAccess
+              : Boolean(
+                  (callerScope as any).role === "admin" ||
+                  (callerScope as any).role === "super_admin" ||
+                  (callerScope as any).permissions?.includes("people.view_all_reports") ||
+                  (callerScope as any).customPermissions?.includes("people.view_all_reports")
+                ),
+          } : undefined;
+
           if (!scope && typeof window !== "undefined") {
             try {
               const authUser = useAuthStore.getState().user;

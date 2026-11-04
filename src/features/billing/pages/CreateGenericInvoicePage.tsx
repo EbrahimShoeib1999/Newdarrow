@@ -24,6 +24,7 @@ import { useBillingSettings } from "../hooks/use-billing-settings";
 import { useCreateGenericDocumentMutation } from "../hooks/use-generic-documents";
 import { genericDocumentSchema, type CreateGenericDocumentDTO } from "../schemas/generic-document";
 import { BillingMoney } from "../components/BillingMoney";
+import { computeInvoiceTotals, computeInvoiceLineValues } from "../utils/invoice-line-utils";
 import { LineTaxRateSelect } from "../components/LineTaxRateSelect";
 import { RiyalSymbol } from "@/components/shared/riyal-symbol";
 import {
@@ -90,18 +91,8 @@ export default function CreateGenericInvoicePage() {
 
   const watchItems = watch("items");
 
-  // Dynamic calculations
-  const subTotal = watchItems.reduce((acc, item) => acc + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
-  const totalDiscount = watchItems.reduce((acc, item) => acc + (Number(item.discount) || 0), 0);
-  const totalTax = watchItems.reduce((acc, item) => {
-    const q = Number(item.quantity) || 0;
-    const r = Number(item.unitPrice) || 0;
-    const d = Number(item.discount) || 0;
-    const tx = Number(item.taxRate) || 0;
-    const beforeTax = (q * r) - d;
-    return acc + (beforeTax * (tx / 100));
-  }, 0);
-  const grandTotal = subTotal - totalDiscount + totalTax;
+  // Dynamic calculations using canonical halala engine
+  const { subTotal, totalDiscount, totalTax, grandTotal } = computeInvoiceTotals(watchItems);
 
   const handleProductSelect = (index: number, productId: string) => {
     const product = products.find((p) => p.id === productId);
@@ -141,15 +132,15 @@ export default function CreateGenericInvoicePage() {
         totalDiscount,
         grandTotal,
         items: watchItems.map((item, index) => {
-          const q = Number(item.quantity) || 0;
-          const r = Number(item.unitPrice) || 0;
-          const d = Number(item.discount) || 0;
-          const tx = Number(item.taxRate) || 0;
-          const beforeTax = q * r - d;
+          const line = computeInvoiceLineValues(item);
           return {
             ...data.items[index],
             ...item,
-            total: beforeTax + beforeTax * (tx / 100),
+            quantity: Number(item.quantity) || 0,
+            unitPrice: Number(item.unitPrice) || 0,
+            discount: line.discount,
+            taxRate: Number(item.taxRate) || 0,
+            total: line.total,
           };
         }),
       };
@@ -265,28 +256,29 @@ export default function CreateGenericInvoicePage() {
               </thead>
               <tbody>
                 {fields.map((field, index) => {
-                  const q = Number(watch(`items.${index}.quantity`)) || 0;
-                  const r = Number(watch(`items.${index}.unitPrice`)) || 0;
-                  const d = Number(watch(`items.${index}.discount`)) || 0;
-                  const tx = Number(watch(`items.${index}.taxRate`)) || 0;
-                  const amtBeforeTax = (q * r) - d;
-                  const lineTotal = amtBeforeTax + (amtBeforeTax * (tx / 100));
+                  const line = computeInvoiceLineValues(watch(`items.${index}`));
+                  const lineTotal = line.total;
 
                   return (
                     <tr key={field.id} className="border-b border-default-100 group">
-                      <td className="p-4">
-                        <div className="flex flex-col gap-2">
+                      <td className="p-4 min-w-0 max-w-[280px]">
+                        <div className="flex flex-col gap-2 min-w-0">
                           <Select
                             {...selectFieldProps({ compact: true })}
                             size="sm"
                             aria-label="Select Product"
                             placeholder="Select Product..."
                             variant="flat"
+                            classNames={{
+                              value: "whitespace-normal [overflow-wrap:anywhere] break-normal text-xs leading-relaxed text-start min-w-0 py-1",
+                              trigger: "h-auto min-h-10 py-1.5",
+                              popoverContent: "max-w-[420px] w-full",
+                            }}
                             onChange={(e) => handleProductSelect(index, e.target.value)}
                           >
                             {products.map((p) => (
-                              <SelectItem key={p.id} textValue={p.name}>
-                                {p.name}
+                              <SelectItem key={p.id} textValue={p.name} className="whitespace-normal [overflow-wrap:anywhere] break-normal py-2">
+                                <span className="font-medium whitespace-normal [overflow-wrap:anywhere] break-normal text-xs">{p.name}</span>
                               </SelectItem>
                             ))}
                           </Select>

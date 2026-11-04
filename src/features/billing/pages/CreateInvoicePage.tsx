@@ -15,7 +15,7 @@ import {
   Spinner,
   Textarea,
 } from "@heroui/react";
-import { Plus, Trash2, Save, Send, ChevronRight, FileText, Users, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Save, Send, ChevronRight, FileText, Users, AlertTriangle, UserPlus, Edit } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
@@ -32,6 +32,7 @@ import { useCostCenters } from "../hooks/use-cost-centers";
 import { useBillingSettings } from "../hooks/use-billing-settings";
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, useInvoice } from "../hooks/use-invoices";
 import { invoiceSchema, type CreateInvoiceDTO } from "../schemas/invoice";
+import { ContactFormModal } from "@/features/crm/components/ContactFormModal";
 import { quotationDataToInvoiceForm } from "../utils/accounting-engine";
 import { BillingMoney } from "../components/BillingMoney";
 import { LineTaxRateSelect } from "../components/LineTaxRateSelect";
@@ -40,7 +41,7 @@ import {
   getTaxRateForProduct,
 } from "../utils/tax-utils";
 import { DEFAULT_TAXES } from "../data/product-defaults";
-import { computeInvoiceTotals, invoiceVatPercent } from "../utils/invoice-line-utils";
+import { computeInvoiceTotals, invoiceVatPercent, computeInvoiceLineValues } from "../utils/invoice-line-utils";
 import {
   DEFAULT_BILLING_CURRENCY,
   getDefaultBillingCurrency,
@@ -119,6 +120,9 @@ export default function CreateInvoicePage() {
   const contacts = contactsRes?.data || [];
   const createContact = useCreateContactMutation();
   const [customerInput, setCustomerInput] = useState("");
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [editContactModalOpen, setEditContactModalOpen] = useState(false);
+  const createdContactCache = useRef<Map<string, string>>(new Map());
 
   const { data: products = [] } = useProducts();
   const { data: costCenters = [] } = useCostCenters();
@@ -425,8 +429,17 @@ export default function CreateInvoicePage() {
       throw new Error("customer_required");
     }
 
+    const cacheKey = typedName.toLowerCase();
+    if (createdContactCache.current.has(cacheKey)) {
+      const cachedId = createdContactCache.current.get(cacheKey)!;
+      setValue("customerId", cachedId, { shouldValidate: true });
+      return { customerId: cachedId, customerName: typedName };
+    }
+
     const existing = findContactByCustomerInput(contacts, typedName);
     if (existing?.id) {
+      createdContactCache.current.set(cacheKey, existing.id);
+      setValue("customerId", existing.id, { shouldValidate: true });
       return {
         customerId: existing.id,
         customerName: typedName,
@@ -443,8 +456,14 @@ export default function CreateInvoicePage() {
       })
     );
 
+    const newId = created.data.id;
+    createdContactCache.current.set(cacheKey, newId);
+    setValue("customerId", newId, { shouldValidate: true });
+    setValue("customerName", typedName, { shouldValidate: true });
+    setCustomerInput(typedName);
+
     return {
-      customerId: created.data.id,
+      customerId: newId,
       customerName: typedName,
     };
   };
@@ -477,15 +496,15 @@ export default function CreateInvoicePage() {
         totalDiscount,
         grandTotal,
         items: watchItems.map((item, index) => {
-          const q = Number(item.quantity) || 0;
-          const r = Number(item.unitPrice) || 0;
-          const d = Number(item.discount) || 0;
-          const tx = Number(item.taxRate) || 0;
-          const beforeTax = q * r - d;
+          const line = computeInvoiceLineValues(item);
           return {
             ...data.items[index],
             ...item,
-            total: beforeTax + beforeTax * (tx / 100),
+            quantity: Number(item.quantity) || 0,
+            unitPrice: Number(item.unitPrice) || 0,
+            discount: line.discount,
+            taxRate: Number(item.taxRate) || 0,
+            total: line.total,
           };
         }),
       };
@@ -561,66 +580,102 @@ export default function CreateInvoicePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5">
               {/* Customer: pick existing or type a new company/client name */}
               <div className="md:col-span-2 xl:col-span-1">
-                <Controller
-                  control={control}
-                  name="customerId"
-                  render={({ field }) => (
-                    <Autocomplete
-                      label={t("invoices.create.customer")}
-                      placeholder={t("invoices.create.customer_placeholder")}
-                      description={t("invoices.create.customer_hint")}
-                      startContent={<Users className="w-4 h-4 text-default-400 pointer-events-none" />}
-                      variant="bordered"
-                      allowsCustomValue
-                      menuTrigger="focus"
-                      inputValue={customerInput}
-                      selectedKey={field.value || null}
-                      onInputChange={(value) => {
-                        setCustomerInput(value);
-                        setValue("customerName", value, { shouldValidate: true });
-                        const selected = contacts.find((c) => c.id === field.value);
-                        if (
-                          selected &&
-                          invoiceCustomerPickerLabel(selected) !== value
-                        ) {
-                          field.onChange("");
-                        }
-                      }}
-                      onSelectionChange={(key) => {
-                        const id = key != null ? String(key) : "";
-                        field.onChange(id);
-                        if (!id) return;
-                        const contact = contacts.find((c) => c.id === id);
-                        if (!contact) return;
-                        const label = invoiceCustomerPickerLabel(contact);
-                        setCustomerInput(label);
-                        setValue("customerName", label, { shouldValidate: true });
-                      }}
-                      onBlur={field.onBlur}
-                      isInvalid={!!errors.customerId}
-                      errorMessage={errors.customerId?.message as string | undefined}
-                      listboxProps={{
-                        emptyContent: t("invoices.create.customer_empty"),
-                      }}
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <Controller
+                      control={control}
+                      name="customerId"
+                      render={({ field }) => (
+                        <Autocomplete
+                          label={t("invoices.create.customer")}
+                          placeholder={t("invoices.create.customer_placeholder")}
+                          description={t("invoices.create.customer_hint")}
+                          startContent={<Users className="w-4 h-4 text-default-400 pointer-events-none shrink-0" />}
+                          variant="bordered"
+                          allowsCustomValue
+                          menuTrigger="focus"
+                          inputValue={customerInput}
+                          selectedKey={field.value || null}
+                          onInputChange={(value) => {
+                            setCustomerInput(value);
+                            setValue("customerName", value, { shouldValidate: true });
+                            const selected = contacts.find((c) => c.id === field.value);
+                            if (selected) {
+                              const label = invoiceCustomerPickerLabel(selected).toLowerCase();
+                              const acc = (selected.accountName || "").toLowerCase();
+                              const first = (selected.firstName || "").toLowerCase();
+                              const val = value.trim().toLowerCase();
+                              if (!val) {
+                                field.onChange("");
+                              } else if (val !== label && val !== acc && val !== first) {
+                                const found = findContactByCustomerInput(contacts, val);
+                                if (found?.id) {
+                                  field.onChange(found.id);
+                                }
+                              }
+                            }
+                          }}
+                          onSelectionChange={(key) => {
+                            const id = key != null ? String(key) : "";
+                            field.onChange(id);
+                            if (!id) return;
+                            const contact = contacts.find((c) => c.id === id);
+                            if (!contact) return;
+                            const label = invoiceCustomerPickerLabel(contact);
+                            setCustomerInput(label);
+                            setValue("customerName", label, { shouldValidate: true });
+                          }}
+                          onBlur={field.onBlur}
+                          isInvalid={!!errors.customerId}
+                          errorMessage={errors.customerId?.message as string | undefined}
+                          listboxProps={{
+                            emptyContent: t("invoices.create.customer_empty"),
+                          }}
+                        >
+                          {contacts.map((contact) => {
+                            const label = invoiceCustomerPickerLabel(contact);
+                            return (
+                              <AutocompleteItem key={contact.id!} textValue={label}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{label}</span>
+                                  {contact.email ? (
+                                    <span className="text-xs text-default-400">
+                                      {contact.email}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </AutocompleteItem>
+                            );
+                          })}
+                        </Autocomplete>
+                      )}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 pt-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      color="primary"
+                      className="h-10 text-xs font-semibold px-2.5"
+                      startContent={<UserPlus className="w-3.5 h-3.5" />}
+                      onPress={() => setContactModalOpen(true)}
                     >
-                      {contacts.map((contact) => {
-                        const label = invoiceCustomerPickerLabel(contact);
-                        return (
-                          <AutocompleteItem key={contact.id!} textValue={label}>
-                            <div className="flex flex-col">
-                              <span>{label}</span>
-                              {contact.email ? (
-                                <span className="text-xs text-default-400">
-                                  {contact.email}
-                                </span>
-                              ) : null}
-                            </div>
-                          </AutocompleteItem>
-                        );
-                      })}
-                    </Autocomplete>
-                  )}
-                />
+                      {t("invoices.create.add_contact", "عميل جديد")}
+                    </Button>
+                    {watch("customerId") && contacts.find((c) => c.id === watch("customerId")) && (
+                      <Button
+                        size="sm"
+                        variant="bordered"
+                        isIconOnly
+                        className="h-10 w-10 text-default-600"
+                        title={t("invoices.create.edit_contact", "تعديل بيانات العميل")}
+                        onPress={() => setEditContactModalOpen(true)}
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Invoice number — read-only + a visually distinct DRAFT chip. */}
@@ -723,42 +778,56 @@ export default function CreateInvoicePage() {
               </CardHeader>
               <Divider />
               <CardBody className="p-0 overflow-x-auto">
-                <table className="w-full min-w-[820px] text-start">
+                <table className="w-full min-w-[820px] text-start table-fixed">
                   <thead className="bg-default-50/70 text-xs md:text-sm font-semibold text-default-600 uppercase tracking-wide">
                     <tr>
-                      <th className="p-3 md:p-4 w-[32%] text-start">{t("invoices.create.product_item")}</th>
-                      <th className="p-3 md:p-4 w-[10%] text-center">{t("invoices.create.quantity")}</th>
+                      <th className="p-3 md:p-4 w-[34%] text-start">{t("invoices.create.product_item")}</th>
+                      <th className="p-3 md:p-4 w-[12%] text-center">{t("invoices.create.quantity")}</th>
                       <th className="p-3 md:p-4 w-[16%] text-end">{t("invoices.create.rate")}</th>
-                      <th className="p-3 md:p-4 w-[20%] text-start">{t("invoices.create.tax")}</th>
-                      <th className="p-3 md:p-4 w-[16%] text-end">{t("invoices.create.amount")}</th>
+                      <th className="p-3 md:p-4 w-[18%] text-start">{t("invoices.create.tax")}</th>
+                      <th className="p-3 md:p-4 w-[14%] text-end">{t("invoices.create.amount")}</th>
                       <th className="p-3 md:p-4 w-[6%]"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {fields.map((field, index) => {
-                      const q = Number(watch(`items.${index}.quantity`)) || 0;
-                      const r = Number(watch(`items.${index}.unitPrice`)) || 0;
-                      const d = Number(watch(`items.${index}.discount`)) || 0;
+                      const line = computeInvoiceLineValues(watch(`items.${index}`));
                       const tx = Number(watch(`items.${index}.taxRate`)) || 0;
-                      const amtBeforeTax = (q * r) - d;
-                      const lineVat = (amtBeforeTax * tx) / 100;
-                      const lineTotal = amtBeforeTax + lineVat;
+                      const amtBeforeTax = line.beforeTax;
+                      const lineVat = line.vat;
+                      const lineTotal = line.total;
 
                       return (
                         <tr key={field.id} className="border-b border-default-100/70 last:border-b-0 group hover:bg-default-50/40 transition-colors">
-                          <td className="p-3 md:p-4 align-top">
-                            <div className="flex flex-col gap-1.5">
+                          <td className="p-3 md:p-4 align-top min-w-0 max-w-[280px]">
+                            <div className="flex flex-col gap-1.5 min-w-0">
                               <Select
                                 {...selectFieldProps({ compact: true })}
                                 size="sm"
                                 aria-label={t("invoices.create.product_item")}
                                 placeholder={t("invoices.create.select_product")}
                                 variant="flat"
+                                classNames={{
+                                  value: "whitespace-normal [overflow-wrap:anywhere] break-normal text-xs leading-relaxed text-start min-w-0 py-1",
+                                  trigger: "h-auto min-h-10 py-1.5",
+                                  popoverContent: "max-w-[420px] w-full",
+                                }}
                                 onChange={(e) => handleProductSelect(index, e.target.value)}
                               >
                                 {products.map((p) => (
-                                  <SelectItem key={p.id} textValue={p.name}>
-                                    {p.name}
+                                  <SelectItem
+                                    key={p.id}
+                                    textValue={p.name}
+                                    className="whitespace-normal [overflow-wrap:anywhere] break-normal py-2"
+                                  >
+                                    <div className="flex flex-col min-w-0">
+                                      <span className="font-medium whitespace-normal [overflow-wrap:anywhere] break-normal text-xs">{p.name}</span>
+                                      {p.description && (
+                                        <span className="text-[10px] text-default-400 whitespace-normal [overflow-wrap:anywhere] break-normal line-clamp-2 mt-0.5">
+                                          {p.description}
+                                        </span>
+                                      )}
+                                    </div>
                                   </SelectItem>
                                 ))}
                               </Select>
@@ -960,6 +1029,31 @@ export default function CreateInvoicePage() {
           </>
         )}
       </form>
+      {/* Quick Contact Create/Edit Modals */}
+      <ContactFormModal
+        isOpen={contactModalOpen}
+        onOpenChange={setContactModalOpen}
+        onSuccess={(created) => {
+          setValue("customerId", created.id, { shouldValidate: true });
+          const label = invoiceCustomerPickerLabel(created);
+          setValue("customerName", label, { shouldValidate: true });
+          setCustomerInput(label);
+          toast.success(t("invoices.create.customer_created", "تمت إضافة العميل بنجاح"));
+        }}
+      />
+      {watch("customerId") && contacts.find((c) => c.id === watch("customerId")) && (
+        <ContactFormModal
+          isOpen={editContactModalOpen}
+          onOpenChange={setEditContactModalOpen}
+          contact={contacts.find((c) => c.id === watch("customerId"))}
+          onSuccess={(updated) => {
+            const label = invoiceCustomerPickerLabel(updated);
+            setValue("customerName", label, { shouldValidate: true });
+            setCustomerInput(label);
+            toast.success(t("invoices.create.customer_updated", "تم تحديث بيانات العميل بنجاح"));
+          }}
+        />
+      )}
     </div>
   );
 }

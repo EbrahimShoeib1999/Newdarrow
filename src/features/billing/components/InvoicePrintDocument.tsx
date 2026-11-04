@@ -94,10 +94,12 @@ function PartyBox({
   email,
   cr,
   vat,
+  nationalId,
   address,
   align,
   crLabel,
   vatLabel,
+  nationalIdLabel,
 }: {
   title: string;
   name: string;
@@ -105,10 +107,12 @@ function PartyBox({
   email?: string;
   cr?: string;
   vat?: string;
+  nationalId?: string;
   address?: string;
   align: "start" | "end";
   crLabel: string;
   vatLabel: string;
+  nationalIdLabel?: string;
 }) {
   const textAlign = align === "start" ? "left" : "right";
 
@@ -169,6 +173,11 @@ function PartyBox({
       {vat ? (
         <div style={{ fontSize: "10px", color: INVOICE_THEME.muted, textAlign }}>
           {vatLabel}: <span dir="ltr">{vat}</span>
+        </div>
+      ) : null}
+      {nationalId ? (
+        <div style={{ fontSize: "10px", color: INVOICE_THEME.muted, textAlign }}>
+          {nationalIdLabel || "الرقم الوطني"}: <span dir="ltr">{nationalId}</span>
         </div>
       ) : null}
       {address ? (
@@ -487,10 +496,12 @@ export function InvoicePrintDocument({
           email={customer?.email}
           cr={customer?.commercialRegister}
           vat={customer?.taxNumber}
+          nationalId={customer?.nationalId}
           address={customer?.billingAddress}
           align={isAr ? "end" : "start"}
           crLabel={t("invoices.detail.commercial_register")}
           vatLabel={t("invoices.detail.vat_number")}
+          nationalIdLabel={isAr ? "الرقم الوطني" : "National ID"}
         />
       </div>
 
