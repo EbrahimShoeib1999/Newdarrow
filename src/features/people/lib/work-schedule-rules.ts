@@ -251,6 +251,7 @@ export const FALLBACK_TIMEZONE = "UTC";
  * it is a valid IANA id (see {@link normalizeTimezone}).
  */
 export const TIMEZONE_OPTIONS: readonly string[] = [
+  "Africa/Cairo",
   "Asia/Riyadh",
   "Asia/Dubai",
   "Asia/Karachi",

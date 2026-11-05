@@ -257,7 +257,7 @@ export function resolveCheckInBlockReason(
   employee:
     | Pick<
         Employee,
-        "status" | "workType" | "allowRemoteTimer" | "attendanceCheckMode" | "attendanceLocationIds"
+        "status" | "workType" | "workMode" | "allowRemoteTimer" | "attendanceCheckMode" | "attendanceLocationIds"
       >
     | null
     | undefined,
@@ -265,8 +265,18 @@ export function resolveCheckInBlockReason(
 ): CheckInBlockCode | null {
   if (!employee) return null;
   if (!isEmploymentActive(employee.status)) return "employment_inactive";
+  // Keep this EXACTLY in sync with captureAttendanceGeo's remote-authorization
+  // test (attendance-geo-check.ts). A worker authorized off-site by work MODE
+  // (remote/field) or by the field work TYPE is just as remote-authorized as
+  // one flagged by workType==="remote" — otherwise this pre-click explanation
+  // tells a legitimately-remote employee they are blocked on a location that
+  // the actual click path never enforces for them (the reported asymmetry).
   const remoteAuthorized =
-    employee.workType === "remote" || employee.allowRemoteTimer === true;
+    employee.workType === "remote" ||
+    employee.allowRemoteTimer === true ||
+    employee.workType === "field" ||
+    employee.workMode === "remote" ||
+    employee.workMode === "field";
   const mode =
     employee.attendanceCheckMode ?? (remoteAuthorized ? "flexible" : "geofence");
   if (mode === "flexible" || remoteAuthorized) return null;

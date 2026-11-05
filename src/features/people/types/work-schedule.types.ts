@@ -101,7 +101,11 @@ export const ONLINE_SCHEDULE_DEFAULTS: ScheduleValues = {
   graceMinutes: 0,
   requiredDailyMinutes: null, // derived: 8h
   flexibleStartWindow: null,
-  timezone: "Asia/Riyadh",
+  // Remote/online work is centered on the Cairo working day (official start
+  // 11:00 Africa/Cairo). This is only the product DEFAULT for the online
+  // template — every schedule still carries its own IANA zone and an admin can
+  // change it; it is never a fixed UTC offset and never the device's zone.
+  timezone: "Africa/Cairo",
   overtime: null,
 };
 
