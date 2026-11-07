@@ -11,6 +11,7 @@ const ROLE_ORDER: UserRole[] = [
   "super_admin",
   "admin",
   "manager",
+  "global_hr_manager",
   "employee",
   "viewer",
 ];

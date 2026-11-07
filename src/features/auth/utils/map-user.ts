@@ -49,6 +49,11 @@ export function mapFirestoreUser(
     portalSubRoles: parsePortalSubRoles(data?.portalSubRoles),
     customPermissions: parseCustomPermissions(data?.customPermissions ?? data?.permissions),
     country: (data?.country as string) || fallbacks.country || undefined,
+    countryScope: Array.isArray(data?.countryScope)
+      ? (data.countryScope as string[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : Array.isArray(fallbacks.countryScope)
+        ? fallbacks.countryScope
+        : undefined,
     branchId: (data?.branchId as string) || fallbacks.branchId || undefined,
     workLocationId: (data?.workLocationId as string) || fallbacks.workLocationId || undefined,
   };

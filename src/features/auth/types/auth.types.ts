@@ -1,7 +1,13 @@
 import type { PortalId } from "@/lib/portal-permissions";
 import type { PortalSubRoles } from "@/lib/permissions/sub-roles";
 
-export type UserRole = "super_admin" | "admin" | "manager" | "employee" | "viewer";
+export type UserRole =
+  | "super_admin"
+  | "admin"
+  | "manager"
+  | "global_hr_manager"
+  | "employee"
+  | "viewer";
 
 export interface User {
   id: string;
@@ -21,6 +27,7 @@ export interface User {
   /** Granular custom permissions granted to this user. */
   customPermissions?: import("@/lib/permissions").Permission[];
   country?: string;
+  countryScope?: string[];
   branchId?: string;
   workLocationId?: string;
 }

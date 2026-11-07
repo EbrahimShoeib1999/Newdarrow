@@ -47,6 +47,8 @@
     "test:attendance-config-parity": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project attendance-parity-check \"node scripts/test-attendance-config-parity.mjs\"",
     "test:realtime-list-gate": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project realtime-list-gate-check \"node scripts/test-realtime-list-gate.mjs\"",
     "test:attendance-lifecycle-browser": "npx -y firebase-tools@13.35.1 emulators:exec --only auth,firestore --project test-attendance-lifecycle \"node scripts/test-attendance-lifecycle-browser.mjs\"",
+    "test:global-hr-manager": "npx tsx scripts/test-global-hr-manager.ts",
+    "activate:global-hr-manager": "npx tsx scripts/activate-global-hr-manager.ts",
     "test:auth-redirect": "npx -y firebase-tools@13.35.1 emulators:exec --only auth,firestore --project auth-redirect-acceptance \"npx tsx scripts/test-auth-redirect-targets.ts && node scripts/test-auth-redirect-browser.mjs\"",
     "test:accounting": "npx tsx scripts/test-accounting-lifecycle.ts",
     "test:accounting-concurrency": "npx -y firebase-tools@13.35.1 emulators:exec --only firestore --project accounting-concurrency-gate \"npx tsx scripts/test-accounting-concurrency.ts\"",

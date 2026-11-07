@@ -89,6 +89,7 @@ export const ROLE_LABELS: Record<UserRole, { en: string; ar: string }> = {
   super_admin: { en: "Super Admin", ar: "مدير عام" },
   admin: { en: "Admin", ar: "مسؤول" },
   manager: { en: "Manager", ar: "مدير" },
+  global_hr_manager: { en: "Global HR Manager", ar: "مدير الموارد البشرية العالمي" },
   employee: { en: "Employee", ar: "موظف" },
   viewer: { en: "Viewer", ar: "مشاهد" },
 };
@@ -233,6 +234,22 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "custom_modules.update",
     "custom_modules.archive",
   ],
+  global_hr_manager: [
+    "portals.people",
+    "company.view",
+    "people.view",
+    "people.manage_employees",
+    "people.approve_leave",
+    "people.view_performance",
+    "people.view_all_reports",
+    "people.view_schedules",
+    "people.manage_schedules",
+    "people.view_all_attendance",
+    "people.correct_attendance",
+    "people.view_lateness",
+    "people.evaluate_lateness",
+    "people.manage_lateness_policies",
+  ],
   employee: [
     "portals.tasks",
     "portals.crm",
@@ -293,7 +310,7 @@ export function isAdminRole(role: UserRole | undefined): boolean {
 }
 
 export function isManagerRole(role: UserRole | undefined): boolean {
-  return isAdminRole(role) || role === "manager";
+  return isAdminRole(role) || role === "manager" || role === "global_hr_manager";
 }
 
 export type AccessiblePortal =

@@ -7,7 +7,7 @@ import type {
 export type EmployeeStatus = 'active' | 'onboarding' | 'suspended' | 'terminated';
 export type LeaveType = 'vacation' | 'sick' | 'personal' | 'unpaid' | 'maternity' | 'paternity';
 export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
-export type UserRole = 'super_admin' | 'admin' | 'manager' | 'employee';
+export type UserRole = 'super_admin' | 'admin' | 'manager' | 'global_hr_manager' | 'employee';
 
 export interface ChecklistItem {
   id: string;

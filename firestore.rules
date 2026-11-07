@@ -27,6 +27,11 @@ service cloud.firestore {
         && userDoc().get('role', '') in ['super_admin', 'admin'];
     }
 
+    function isGlobalHrManager(companyId) {
+      return belongsToCompany(companyId)
+        && userDoc().get('role', '') == 'global_hr_manager';
+    }
+
     // Platform super admin, independent of any single tenant. Used only by the
     // account-reconciliation list gate below, which is pinned to unassigned
     // (empty-companyId) profiles so it exposes no tenant's roster.
@@ -696,6 +701,7 @@ service cloud.firestore {
       function peopleHrAllowed(companyId, permission) {
         return belongsToCompany(companyId) && (
           isCompanyAdmin(companyId)
+          || isGlobalHrManager(companyId)
           || permission in customPermissions()
           || (
             userDoc().get('role', '') == 'manager'

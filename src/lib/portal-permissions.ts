@@ -27,7 +27,7 @@ export const PORTAL_PATHS: Record<PortalId, string> = {
 export const PORTAL_ACCESS: Record<PortalId, readonly UserRole[]> = {
   tasks: ["super_admin", "admin", "manager", "employee"],
   crm: ["super_admin", "admin", "manager", "employee", "viewer"],
-  people: ["super_admin", "admin", "manager", "employee"],
+  people: ["super_admin", "admin", "manager", "global_hr_manager", "employee"],
   billing: ["super_admin", "admin", "manager"],
   chat: ["super_admin", "admin", "manager", "employee", "viewer"],
   projects: ["super_admin", "admin", "manager", "employee"],

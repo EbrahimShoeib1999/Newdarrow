@@ -110,6 +110,66 @@ async function lookupEmployeeEmail(
   };
 }
 
+function canonicalCountryKey(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return "";
+  if (normalized === "eg" || normalized.includes("egypt")) return "eg";
+  if (normalized === "sa" || normalized.includes("saudi") || normalized.includes("ksa")) return "sa";
+  return normalized.replace(/\s+/g, " ");
+}
+
+export function normalizeCountryScope(value: unknown): string[] {
+  if (!value) return [];
+  const values = Array.isArray(value) ? value : [value];
+  return Array.from(
+    new Set(
+      values
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter(Boolean)
+        .map((entry) => entry.toUpperCase() === "EG" || entry.toLowerCase().includes("egypt") ? "EG" : entry.toUpperCase() === "SA" || entry.toLowerCase().includes("saudi") || entry.toLowerCase().includes("ksa") ? "SA" : entry)
+    )
+  );
+}
+
+export function filterEmployeesByScope(
+  employees: Employee[],
+  scope?: {
+    role?: string;
+    userId?: string;
+    branchId?: string;
+    workLocationId?: string;
+    hasCompanyWideAccess?: boolean;
+    countryScope?: readonly string[] | string[] | null;
+  }
+): Employee[] {
+  if (!scope || scope.hasCompanyWideAccess) return employees;
+
+  const allowedCountries = normalizeCountryScope(scope.countryScope).map((country) => canonicalCountryKey(country));
+  const isGlobalScope = scope.role === "global_hr_manager";
+
+  if (isGlobalScope) {
+    if (!allowedCountries.length) return [];
+    return employees.filter((employee) => {
+      const employeeCountry = canonicalCountryKey(employee.country || "");
+      return employeeCountry === "" || allowedCountries.includes(employeeCountry);
+    });
+  }
+
+  if (scope.branchId) {
+    return employees.filter((emp) => !emp.branchId || emp.branchId === scope.branchId);
+  }
+
+  if (scope.workLocationId) {
+    return employees.filter((emp) => !emp.workLocationId || emp.workLocationId === scope.workLocationId);
+  }
+
+  if (scope.userId) {
+    return employees.filter((emp) => !emp.managerId || emp.managerId === scope.userId);
+  }
+
+  return employees;
+}
+
 function enrichEmployeeFromUser(
   id: string,
   data: Record<string, unknown>,
@@ -441,10 +501,12 @@ export const PeopleService = {
   async getEmployees(
     companyId: string,
     callerScope?: {
+      role?: string;
       userId?: string;
       branchId?: string;
       workLocationId?: string;
       hasCompanyWideAccess?: boolean;
+      countryScope?: readonly string[] | string[] | null;
     }
   ): Promise<ApiResponse<Employee[]>> {
     return withLogging(SERVICE_NAME, "getEmployees", (async () => {
@@ -486,9 +548,11 @@ export const PeopleService = {
         // A manager without company-wide visibility must remain restricted to their authorized scope.
         ...(() => {
           let scope = callerScope ? {
-            userId: (callerScope as any).userId || (callerScope as any).uid,
+            role: callerScope.role,
+            userId: callerScope.userId || (callerScope as any).uid,
             branchId: callerScope.branchId,
             workLocationId: callerScope.workLocationId,
+            countryScope: callerScope.countryScope,
             hasCompanyWideAccess: callerScope.hasCompanyWideAccess !== undefined
               ? callerScope.hasCompanyWideAccess
               : Boolean(
@@ -516,9 +580,11 @@ export const PeopleService = {
                     "people.view_all_reports"
                   );
                 scope = {
+                  role,
                   userId: authUser.id,
                   branchId: authUser.branchId,
                   workLocationId: authUser.workLocationId,
+                  countryScope: authUser.countryScope,
                   hasCompanyWideAccess: Boolean(canViewAll),
                 };
               }
@@ -526,14 +592,7 @@ export const PeopleService = {
               console.warn("[PeopleService:getEmployees] Failed to resolve auth caller scope", scopeErr);
             }
           }
-          if (scope && !scope.hasCompanyWideAccess) {
-            employees = employees.filter((emp) => {
-              if (scope!.branchId && emp.branchId) return emp.branchId === scope!.branchId;
-              if (scope!.workLocationId && emp.workLocationId) return emp.workLocationId === scope!.workLocationId;
-              if (scope!.userId && emp.managerId) return emp.managerId === scope!.userId;
-              return false;
-            });
-          }
+          employees = filterEmployeesByScope(employees, scope);
           return {};
         })(),
         data: employees,

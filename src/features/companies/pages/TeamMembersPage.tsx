@@ -53,6 +53,7 @@ const ROLE_COLORS: Record<UserRole, "primary" | "secondary" | "success" | "warni
   super_admin: "primary",
   admin: "secondary",
   manager: "success",
+  global_hr_manager: "warning",
   employee: "default",
   viewer: "warning",
 };
