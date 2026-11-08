@@ -80,10 +80,11 @@ export function useUpdateContactMutation() {
       }
       return res;
     },
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.crm.all });
-      queryClient.invalidateQueries({ queryKey: ["crm", "contact", id] });
+    onSuccess: () => {
       toast.success(t("contacts.toast.updated"));
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.crm.all });
     },
     onError: () => toast.error(t("contacts.toast.updateFailed")),
   });

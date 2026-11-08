@@ -1,7 +1,10 @@
 import { BRAND_PRIMARY_HEX, BRAND_SECONDARY_HEX } from "@/theme/brand-colors";
 
-/** Compact modern invoice layout — Droo branding. */
-export const INVOICE_LOGO = "/droo-logo-light.png";
+/** Default logo used for invoice documents when no company logo is configured. */
+export const INVOICE_LOGO = "/DR_LOGO__2_-2-01-removebg-preview.png";
+
+/** Keep the existing default branding for voucher documents. */
+export const VOUCHER_LOGO = "/droo-logo-light.png";
 
 /** Loaded via index.html — max weight 700; avoid 800 in print/PDF. */
 export const INVOICE_FONT =

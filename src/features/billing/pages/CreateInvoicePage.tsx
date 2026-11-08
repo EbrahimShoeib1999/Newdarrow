@@ -236,33 +236,32 @@ export default function CreateInvoicePage() {
       const customerName = fromContract.customerName || (contact ? invoiceCustomerPickerLabel(contact) : "");
       const vatRate = fromContract.vatRate ?? effectiveDefaultTax?.rate ?? 15;
 
-      const items = fromContract.items && fromContract.items.length > 0
+      const contractItems = fromContract.items && fromContract.items.length > 0
         ? fromContract.items.map((i) => {
-          const beforeTax = i.quantity * i.unitPrice;
-          const tax = beforeTax * ((i.taxRate ?? vatRate) / 100);
+          const taxRate = i.taxRate ?? vatRate;
           return {
             description: i.description,
             quantity: i.quantity,
             unitPrice: i.unitPrice,
-            taxRate: i.taxRate ?? vatRate,
+            taxRate,
             taxRateId: effectiveDefaultTax?.id ?? null,
             discount: 0,
-            total: beforeTax + tax,
           };
         })
         : [{
-          description: fromContract.title || `دفعة تعاقدية - عقد #${fromContract.contractNumber || fromContract.contractId}`,
-          quantity: 1,
-          unitPrice: fromContract.amount || 0,
-          taxRate: vatRate,
-          taxRateId: effectiveDefaultTax?.id ?? null,
-          discount: 0,
-          total: (fromContract.amount || 0) * (1 + vatRate / 100),
-        }];
+            description: fromContract.title || `دفعة تعاقدية - عقد #${fromContract.contractNumber || fromContract.contractId}`,
+            quantity: 1,
+            unitPrice: fromContract.amount || 0,
+            taxRate: vatRate,
+            taxRateId: effectiveDefaultTax?.id ?? null,
+            discount: 0,
+          }];
+      const items = contractItems.map((item) => ({
+        ...item,
+        total: computeInvoiceLineValues(item).total,
+      }));
 
-      const subTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-      const totalTax = items.reduce((s, i) => s + (i.quantity * i.unitPrice * (i.taxRate ?? 0)) / 100, 0);
-      const grandTotal = subTotal + totalTax;
+      const { subTotal, totalTax, grandTotal } = computeInvoiceTotals(items);
 
       const resetData = {
         invoiceNumber: "DRAFT",
@@ -303,12 +302,14 @@ export default function CreateInvoicePage() {
         taxRate: vatRate,
         taxRateId: effectiveDefaultTax?.id ?? null,
         discount: 0,
-        total: (fromDeal.amount || 0) * (1 + vatRate / 100),
+        total: computeInvoiceLineValues({
+          quantity: 1,
+          unitPrice: fromDeal.amount || 0,
+          taxRate: vatRate,
+        }).total,
       }];
 
-      const subTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-      const totalTax = items.reduce((s, i) => s + (i.quantity * i.unitPrice * (i.taxRate ?? 0)) / 100, 0);
-      const grandTotal = subTotal + totalTax;
+      const { subTotal, totalTax, grandTotal } = computeInvoiceTotals(items);
 
       const resetData = {
         invoiceNumber: "DRAFT",

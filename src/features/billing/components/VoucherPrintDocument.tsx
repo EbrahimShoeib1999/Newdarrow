@@ -4,7 +4,7 @@ import { MoneyAmount } from "@/components/shared/riyal-symbol";
 import type { Voucher } from "../schemas/voucher";
 import type { BillingSettings } from "../schemas/settings";
 import type { CompanyProfile } from "@/features/companies/types/company.types";
-import { INVOICE_FONT, INVOICE_LOGO, INVOICE_THEME } from "../constants/invoice-theme";
+import { INVOICE_FONT, INVOICE_THEME, VOUCHER_LOGO } from "../constants/invoice-theme";
 import { billingDateLocale } from "../utils/locale";
 import { amountInWords } from "../utils/amount-in-words";
 import { DEFAULT_BILLING_CURRENCY } from "../utils/billing-currency";
@@ -36,7 +36,7 @@ export function VoucherPrintDocument({
     undefined;
   const companyVat = profile?.taxNumber || company?.taxNumber;
   const companyPhone = profile?.phone || company?.phone;
-  const logoSrc = profile?.logoUrl?.trim() || INVOICE_LOGO;
+  const logoSrc = profile?.logoUrl?.trim() || VOUCHER_LOGO;
   const words = amountInWords(voucher.amount, {
     locale: i18n.language,
     currency: voucher.currency || DEFAULT_BILLING_CURRENCY,

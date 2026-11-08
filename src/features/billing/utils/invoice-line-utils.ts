@@ -1,8 +1,14 @@
 import type { InvoiceItem } from "../schemas/invoice";
 
 /** Minor currency unit: 1 SAR = 100 halalas */
+function roundToInteger(value: number): number {
+  const correction =
+    Math.sign(value) * Number.EPSILON * Math.max(1, Math.abs(value));
+  return Math.round(value + correction);
+}
+
 export function toHalalas(amount: unknown): number {
-  return Math.round((Number(amount) || 0) * 100);
+  return roundToInteger((Number(amount) || 0) * 100);
 }
 
 export function fromHalalas(halalas: number): number {
@@ -10,7 +16,7 @@ export function fromHalalas(halalas: number): number {
 }
 
 export function roundMoney(amount: unknown): number {
-  return Math.round((Number(amount) || 0) * 100) / 100;
+  return fromHalalas(toHalalas(amount));
 }
 
 export interface ComputedInvoiceLine {
@@ -42,10 +48,13 @@ export function computeInvoiceLineValues(item: {
   const tx = Math.max(0, Number(item.taxRate) || 0);
 
   // Exact halala integer calculation
-  const grossHalalas = Math.max(0, Math.round(q * r * 100));
-  const discountHalalas = Math.min(grossHalalas, Math.round(d * 100));
+  const grossHalalas = Math.max(0, roundToInteger(q * r * 100));
+  const discountHalalas = Math.min(grossHalalas, roundToInteger(d * 100));
   const beforeTaxHalalas = Math.max(0, grossHalalas - discountHalalas);
-  const vatHalalas = Math.max(0, Math.round((beforeTaxHalalas * tx) / 100));
+  const vatHalalas = Math.max(
+    0,
+    roundToInteger((beforeTaxHalalas * tx) / 100)
+  );
   const totalHalalas = beforeTaxHalalas + vatHalalas;
 
   return {
