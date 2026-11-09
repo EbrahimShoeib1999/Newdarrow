@@ -237,6 +237,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   global_hr_manager: [
     "portals.people",
     "company.view",
+    "pricing.view",
+    "users.manage_roles",
     "people.view",
     "people.manage_employees",
     "people.approve_leave",
@@ -249,6 +251,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "people.view_lateness",
     "people.evaluate_lateness",
     "people.manage_lateness_policies",
+    "people.decide_deductions",
   ],
   employee: [
     "portals.tasks",

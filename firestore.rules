@@ -187,6 +187,7 @@ service cloud.firestore {
     function canViewAllReports(companyId) {
       return belongsToCompany(companyId) && (
         userDoc().get('role', '') == 'super_admin'
+        || isGlobalHrManager(companyId)
         || 'people.view_all_reports' in customPermissions()
         || (
           userDoc().get('role', '') in ['admin', 'manager']
@@ -309,6 +310,17 @@ service cloud.firestore {
           ))
           && request.resource.data.get('companyId', '') == resource.data.get('companyId', ''))
         || (
+          hasUserDoc() && isGlobalHrManager(resource.data.get('companyId', ''))
+          && resource.data.get('role', '') in ['employee', 'viewer']
+          && request.resource.data.get('role', '') in ['employee', 'viewer']
+          && request.resource.data.get('companyId', '') == resource.data.get('companyId', '')
+          && request.resource.data.get('customPermissions', []) == resource.data.get('customPermissions', [])
+          && request.resource.data.get('portalSubRoles', {}) == resource.data.get('portalSubRoles', {})
+          && request.resource.data.get('portalAccess', []) == resource.data.get('portalAccess', [])
+          && request.resource.data.get('countryScope', []) == resource.data.get('countryScope', [])
+          && request.resource.data.get('status', 'active') == resource.data.get('status', 'active')
+        )
+        || (
           isSuperAdmin()
           && resource.data.get('companyId', '') == ''
           && request.resource.data.get('companyId', '') != ''
@@ -331,21 +343,35 @@ service cloud.firestore {
       // `.get('status','')` so an invite doc missing the field is a clean false
       // (denied) rather than a rules evaluation ERROR.
       allow get: if resource.data.get('status', '') == 'pending'
-        || (signedIn() && isCompanyAdmin(resource.data.get('companyId', '')));
+        || (signedIn() && (isCompanyAdmin(resource.data.get('companyId', '')) || isGlobalHrManager(resource.data.get('companyId', ''))));
 
-      // Admins list pending invites for their company (query must filter companyId).
+      // Admins and Global HR Managers list pending invites for their company (query must filter companyId).
       // The LIST gate reads each candidate doc, so the per-doc companyId is taken
       // through `.get()` to avoid an evaluation error on a malformed invite.
-      allow list: if signedIn() && isCompanyAdmin(resource.data.get('companyId', ''));
+      allow list: if signedIn() && (isCompanyAdmin(resource.data.get('companyId', '')) || isGlobalHrManager(resource.data.get('companyId', '')));
 
       allow create: if signedIn()
-        && isCompanyAdmin(request.resource.data.get('companyId', ''))
+        && (isCompanyAdmin(request.resource.data.get('companyId', '')) || isGlobalHrManager(request.resource.data.get('companyId', '')))
         && request.resource.data.get('status', '') == 'pending'
         && request.resource.data.get('email', 0) is string
-        && request.resource.data.get('token', '') == token;
+        && request.resource.data.get('token', '') == token
+        && (isCompanyAdmin(request.resource.data.get('companyId', '')) || (
+          request.resource.data.get('role', '') in ['employee', 'viewer']
+          && !portalSubRolesElevating(request.resource.data)
+          && customPermissionsEmptyOrAbsent(request.resource.data)
+        ));
 
       allow update: if signedIn() && (
         isCompanyAdmin(resource.data.get('companyId', ''))
+        || (
+          isGlobalHrManager(resource.data.get('companyId', ''))
+          && resource.data.get('role', '') in ['employee', 'viewer']
+          && request.resource.data.get('role', '') in ['employee', 'viewer']
+          && request.resource.data.get('companyId', '') == resource.data.get('companyId', '')
+          && request.resource.data.get('status', 'pending') == resource.data.get('status', 'pending')
+          && !portalSubRolesElevating(request.resource.data)
+          && customPermissionsEmptyOrAbsent(request.resource.data)
+        )
         || (
           resource.data.get('status', '') == 'pending'
           && request.resource.data.get('status', '') == 'accepted'
@@ -353,7 +379,10 @@ service cloud.firestore {
         )
       );
 
-      allow delete: if signedIn() && isCompanyAdmin(resource.data.get('companyId', ''));
+      allow delete: if signedIn() && (
+        isCompanyAdmin(resource.data.get('companyId', ''))
+        || (isGlobalHrManager(resource.data.get('companyId', '')) && resource.data.get('role', '') in ['employee', 'viewer'])
+      );
     }
 
     // OTP password-reset codes - secure against public enumeration and tampering.
@@ -482,6 +511,7 @@ service cloud.firestore {
       match /journals/{journalId} {
         allow read: if belongsToCompany(companyId);
         allow create: if belongsToCompany(companyId)
+          && !isGlobalHrManager(companyId)
           && request.resource.data.totalDebit == request.resource.data.totalCredit
           && request.resource.data.totalDebit >= 0;
         allow update, delete: if false;
@@ -491,8 +521,25 @@ service cloud.firestore {
       match /payments/{paymentId} {
         allow read: if belongsToCompany(companyId);
         allow create, update: if belongsToCompany(companyId)
+          && !isGlobalHrManager(companyId)
           && request.resource.data.amount > 0;
         allow delete: if false;
+      }
+
+      // Vouchers: Payment & Receipt vouchers (strictly isolated from HR operations)
+      match /vouchers/{voucherId} {
+        allow read: if belongsToCompany(companyId);
+        allow create, update: if belongsToCompany(companyId)
+          && !isGlobalHrManager(companyId);
+        allow delete: if isCompanyAdmin(companyId);
+      }
+
+      // Payroll payments/disbursements (execution isolated from HR)
+      match /payroll_payments/{paymentId} {
+        allow read: if belongsToCompany(companyId);
+        allow create, update: if belongsToCompany(companyId)
+          && !isGlobalHrManager(companyId);
+        allow delete: if isCompanyAdmin(companyId);
       }
 
       // Vendor bills are the canonical expense records. Any company member may
@@ -874,23 +921,25 @@ service cloud.firestore {
       }
 
       // Settings stay member-writable EXCEPT the legacy attendance cutoff
-      // policy, which now requires the schedule-management capability.
+      // policy and financial fiscal closing, which are strictly guarded.
       match /settings/{settingId} {
         allow read: if belongsToCompany(companyId);
         // First REM code allocation creates the counter doc — no prior value to
         // rewind, so a plain member gate is enough (attendance still needs the
-        // schedule-management capability).
+        // schedule-management capability; fiscal_closing requires company admin).
         allow create: if belongsToCompany(companyId) && (
-          settingId != 'attendance'
-          || peopleHrAllowed(companyId, 'people.manage_schedules')
+          (settingId != 'attendance' && settingId != 'fiscal_closing')
+          || (settingId == 'attendance' && peopleHrAllowed(companyId, 'people.manage_schedules'))
+          || (settingId == 'fiscal_closing' && isCompanyAdmin(companyId))
         );
         // settings/real_estate additionally guards its sequence counters against
         // rewinds; every other setting keeps the original member-writable contract
-        // (attendance excepted, behind the schedule-management capability).
+        // (attendance excepted, behind the schedule-management capability; fiscal_closing behind admin).
         allow update: if belongsToCompany(companyId) && resource != null && (
           (settingId == 'real_estate' && remSequenceNotRewound())
           || (settingId == 'attendance' && peopleHrAllowed(companyId, 'people.manage_schedules'))
-          || (settingId != 'attendance' && settingId != 'real_estate')
+          || (settingId == 'fiscal_closing' && isCompanyAdmin(companyId))
+          || (settingId != 'attendance' && settingId != 'real_estate' && settingId != 'fiscal_closing')
         );
         allow delete: if isCompanyAdmin(companyId);
       }
@@ -915,6 +964,8 @@ service cloud.firestore {
           && collection != 'conversations'
           && collection != 'journals'
           && collection != 'payments'
+          && collection != 'vouchers'
+          && collection != 'payroll_payments'
           && collection != 'bills'
           && collection != 'rem_leases'
           && collection != 'rem_rent_installments'
@@ -941,6 +992,8 @@ service cloud.firestore {
           && collection != 'conversations'
           && collection != 'journals'
           && collection != 'payments'
+          && collection != 'vouchers'
+          && collection != 'payroll_payments'
           && collection != 'bills'
           && collection != 'rem_leases'
           && collection != 'rem_rent_installments'
@@ -964,6 +1017,8 @@ service cloud.firestore {
             && collection != 'conversations'
             && collection != 'journals'
             && collection != 'payments'
+            && collection != 'vouchers'
+            && collection != 'payroll_payments'
             && collection != 'bills'
             && collection != 'rem_leases'
             && collection != 'rem_rent_installments'
@@ -984,6 +1039,8 @@ service cloud.firestore {
             && collection != 'conversations'
             && collection != 'journals'
             && collection != 'payments'
+            && collection != 'vouchers'
+            && collection != 'payroll_payments'
             && collection != 'bills'
             && collection != 'rem_leases'
             && collection != 'rem_rent_installments'

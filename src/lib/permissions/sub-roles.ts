@@ -126,6 +126,7 @@ const DEFAULT_SUB_ROLES_BY_GLOBAL: Partial<
   super_admin: { tasks: "admin", crm: "admin", people: "admin", billing: "admin" },
   admin: { tasks: "admin", crm: "admin", people: "admin", billing: "admin" },
   manager: { tasks: "manager", crm: "manager", people: "manager", billing: "manager" },
+  global_hr_manager: { tasks: "member", crm: "viewer", people: "admin" },
   employee: { tasks: "member", crm: "sales", people: "employee" },
   viewer: { crm: "viewer" },
 };

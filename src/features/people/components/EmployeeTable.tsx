@@ -61,6 +61,7 @@ const ROWS_PER_PAGE = 8;
 
 export function EmployeeTable({ employees, onView, onEdit, onDelete, onHire }: EmployeeTableProps) {
   const { t, i18n } = useTranslation("people");
+  const isAr = i18n.language === "ar";
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -77,6 +78,11 @@ export function EmployeeTable({ employees, onView, onEdit, onDelete, onHire }: E
     return list;
   }, [employees]);
 
+  const countryOptions = useMemo(() => [
+    { key: "ALL", label: isAr ? "كل الدول (الكل)" : "All Countries" },
+    ...availableCountries.map((c) => ({ key: c, label: c })),
+  ], [availableCountries, isAr]);
+
   const filtered = useMemo(() => {
     return employees.filter((e) => {
       const fullName = employeeDisplayName(e, i18n.language).toLowerCase();
@@ -88,7 +94,7 @@ export function EmployeeTable({ employees, onView, onEdit, onDelete, onHire }: E
       const matchDept = !departmentFilter || e.department === departmentFilter;
       const matchStatus = !statusFilter || e.status === statusFilter;
       const matchRole = !roleFilter || e.role === roleFilter;
-      const matchCountry = !countryFilter || e.country === countryFilter;
+      const matchCountry = !countryFilter || countryFilter === "ALL" || e.country === countryFilter;
       const matchWorkMode =
         !workModeFilter ||
         (e.workMode === workModeFilter || (workModeFilter === "office" && (!e.workMode || e.workMode === "onsite")));
@@ -338,18 +344,19 @@ export function EmployeeTable({ employees, onView, onEdit, onDelete, onHire }: E
 
           <Select
             {...selectFieldProps({ compact: true })}
-            placeholder="Country"
+            placeholder={isAr ? "الدولة (الكل)" : "Country (All)"}
             aria-label="Filter by Country"
             size="sm"
-            className="w-full sm:w-32"
-            selectedKeys={countryFilter ? [countryFilter] : []}
+            className="w-full sm:w-40"
+            selectedKeys={countryFilter ? [countryFilter] : ["ALL"]}
             onSelectionChange={(keys) => {
-              setCountryFilter(Array.from(keys as Set<string>)[0] || "");
+              const sel = Array.from(keys as Set<string>)[0] || "";
+              setCountryFilter(sel === "ALL" ? "" : sel);
               setPage(1);
             }}
           >
-            {availableCountries.map((c) => (
-              <SelectItem key={c} textValue={c}>{c}</SelectItem>
+            {countryOptions.map((c) => (
+              <SelectItem key={c.key} textValue={c.label}>{c.label}</SelectItem>
             ))}
           </Select>
 

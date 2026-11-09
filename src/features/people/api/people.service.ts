@@ -142,18 +142,37 @@ export function filterEmployeesByScope(
     countryScope?: readonly string[] | string[] | null;
   }
 ): Employee[] {
-  if (!scope || scope.hasCompanyWideAccess) return employees;
+  if (!scope) return employees;
 
-  const allowedCountries = normalizeCountryScope(scope.countryScope).map((country) => canonicalCountryKey(country));
+  if (scope.role === "super_admin" || scope.role === "admin") {
+    return employees;
+  }
+
   const isGlobalScope = scope.role === "global_hr_manager";
+  const rawCountryScope = scope.countryScope;
+  const hasExplicitCountryScope = Array.isArray(rawCountryScope)
+    ? rawCountryScope.length > 0
+    : Boolean(rawCountryScope);
+  const allowedCountries = normalizeCountryScope(rawCountryScope).map((country) => canonicalCountryKey(country));
 
   if (isGlobalScope) {
-    if (!allowedCountries.length) return [];
+    if (scope.hasCompanyWideAccess) {
+      if (!hasExplicitCountryScope) return employees;
+      return employees.filter((employee) => {
+        const employeeCountry = canonicalCountryKey(employee.country || "");
+        return employeeCountry === "" || allowedCountries.includes(employeeCountry);
+      });
+    }
+
+    if (!hasExplicitCountryScope || !allowedCountries.length) return [];
+
     return employees.filter((employee) => {
       const employeeCountry = canonicalCountryKey(employee.country || "");
       return employeeCountry === "" || allowedCountries.includes(employeeCountry);
     });
   }
+
+  if (scope.hasCompanyWideAccess) return employees;
 
   if (scope.branchId) {
     return employees.filter((emp) => !emp.branchId || emp.branchId === scope.branchId);
@@ -558,6 +577,7 @@ export const PeopleService = {
               : Boolean(
                   (callerScope as any).role === "admin" ||
                   (callerScope as any).role === "super_admin" ||
+                  (callerScope as any).role === "global_hr_manager" ||
                   (callerScope as any).permissions?.includes("people.view_all_reports") ||
                   (callerScope as any).customPermissions?.includes("people.view_all_reports")
                 ),
@@ -571,6 +591,7 @@ export const PeopleService = {
                 const canViewAll =
                   role === "admin" ||
                   role === "super_admin" ||
+                  role === "global_hr_manager" ||
                   hasEffectivePermission(
                     {
                       role: authUser.role,

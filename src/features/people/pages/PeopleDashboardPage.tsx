@@ -195,6 +195,11 @@ export default function PeopleDashboardPage() {
     return list;
   }, [employees]);
 
+  const countryOptions = useMemo(() => [
+    { key: "ALL", label: isAr ? "كل الدول (الكل)" : "All Countries" },
+    ...availableCountries.map((c) => ({ key: c, label: c })),
+  ], [availableCountries, isAr]);
+
   const availableLocations = useMemo(() => {
     const set = new Set<string>();
     employees.forEach((e) => {
@@ -215,7 +220,7 @@ export default function PeopleDashboardPage() {
         (e.department || "").toLowerCase().includes(q) ||
         (e.email || "").toLowerCase().includes(q);
 
-      const matchCountry = !countryFilter || e.country === countryFilter;
+      const matchCountry = !countryFilter || countryFilter === "ALL" || e.country === countryFilter;
       const matchWorkMode =
         !workModeFilter ||
         (e.workMode === workModeFilter || (workModeFilter === "office" && (!e.workMode || e.workMode === "onsite")));
@@ -742,17 +747,18 @@ export default function PeopleDashboardPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Select
                 {...selectFieldProps({ compact: true })}
-                placeholder="Country (All)"
+                placeholder={isAr ? "الدولة (الكل)" : "Country (All)"}
                 aria-label="Filter by Country"
                 size="sm"
-                className="w-40"
-                selectedKeys={countryFilter ? [countryFilter] : []}
+                className="w-44"
+                selectedKeys={countryFilter ? [countryFilter] : ["ALL"]}
                 onSelectionChange={(keys) => {
-                  setCountryFilter(Array.from(keys as Set<string>)[0] || "");
+                  const sel = Array.from(keys as Set<string>)[0] || "";
+                  setCountryFilter(sel === "ALL" ? "" : sel);
                 }}
               >
-                {availableCountries.map((c) => (
-                  <SelectItem key={c} textValue={c}>{c}</SelectItem>
+                {countryOptions.map((c) => (
+                  <SelectItem key={c.key} textValue={c.label}>{c.label}</SelectItem>
                 ))}
               </Select>
 

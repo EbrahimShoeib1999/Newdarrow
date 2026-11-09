@@ -14,6 +14,7 @@ export function useAppPermissions() {
   const ctx = {
     role: user?.role,
     portalSubRoles: user?.portalSubRoles,
+    customPermissions: user?.customPermissions,
   };
 
   return {

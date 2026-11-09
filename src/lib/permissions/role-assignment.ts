@@ -15,6 +15,9 @@ export function getAssignableRoles(actorRole: UserRole | undefined): UserRole[] 
   if (actorRole === "admin") {
     return ALL_ROLES.filter((r) => r !== "super_admin");
   }
+  if (actorRole === "global_hr_manager") {
+    return ["employee", "viewer"];
+  }
   return [];
 }
 
