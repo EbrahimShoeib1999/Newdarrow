@@ -13,7 +13,7 @@ import {
 import { Plus, Trash2, Edit2, Star, User, Phone, Mail, ShieldCheck, Briefcase } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AssociatedContactPerson, ContactPersonType } from "../types/contacts.types";
-
+ 
 interface AssociatedContactsSectionProps {
   contacts: AssociatedContactPerson[];
   onChange: (contacts: AssociatedContactPerson[]) => void;
