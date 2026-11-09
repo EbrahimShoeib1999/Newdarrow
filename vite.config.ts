@@ -1,12 +1,91 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
 import path from "path";
 
-export default defineConfig({
+const lucideEntryPath = path.resolve(
+  __dirname,
+  "node_modules/lucide-react/dist/esm/lucide-react.js",
+);
+const lucideEntry = readFileSync(lucideEntryPath, "utf8");
+const lucideIconFiles = new Map<string, string>();
+const lucideExportPattern =
+  /export\s+\{([^}]+)\}\s+from\s+['"]\.\/icons\/([^'"]+)['"]/g;
+
+for (const match of lucideEntry.matchAll(lucideExportPattern)) {
+  for (const specifier of match[1].split(",")) {
+    const exportName = specifier.trim().match(/^default\s+as\s+([\w$]+)$/)?.[1];
+    if (exportName) {
+      lucideIconFiles.set(exportName, match[2]);
+    }
+  }
+}
+
+function lucideDeepImports() {
+  const importPattern =
+    /import\s*\{([^}]+)\}\s*from\s*(['"])lucide-react\2\s*;?/g;
+
+  return {
+    name: "lucide-deep-imports",
+    enforce: "pre" as const,
+    transform(code: string) {
+      if (!code.includes("lucide-react")) return null;
+
+      let changed = false;
+      const transformed = code.replace(
+        importPattern,
+        (_statement, bindings: string) => {
+          const iconImports: string[] = [];
+          const remainingImports: string[] = [];
+
+          for (const rawSpecifier of bindings.split(",")) {
+            const specifier = rawSpecifier.trim();
+            const parsed = specifier.match(
+              /^(type\s+)?([\w$]+)(?:\s+as\s+([\w$]+))?$/,
+            );
+            const isTypeOnly = parsed?.[1] !== undefined;
+            const importedName = parsed?.[2];
+            const localName = parsed?.[3] ?? importedName;
+            const iconFile = importedName
+              ? lucideIconFiles.get(importedName)
+              : undefined;
+
+            if (!parsed || isTypeOnly || !iconFile || !localName) {
+              remainingImports.push(specifier);
+              continue;
+            }
+
+            iconImports.push(
+              `import { default as ${localName} } from "lucide-react/dist/esm/icons/${iconFile}";`,
+            );
+          }
+
+          if (iconImports.length === 0) return _statement;
+
+          changed = true;
+          if (remainingImports.length > 0) {
+            iconImports.push(
+              `import { ${remainingImports.join(", ")} } from "lucide-react";`,
+            );
+          }
+          return iconImports.join("\n");
+        },
+      );
+
+      return changed ? { code: transformed, map: null } : null;
+    },
+  };
+}
+
+export default defineConfig(({ command }) => ({
   plugins: [
+    lucideDeepImports(),
     react({
       babel: {
-        plugins: [["babel-plugin-react-compiler", { target: "19" }]],
+        plugins:
+          command === "serve"
+            ? [["babel-plugin-react-compiler", { target: "19" }]]
+            : [],
       },
     }),
   ],
@@ -63,4 +142,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
