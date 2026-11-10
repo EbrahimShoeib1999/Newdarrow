@@ -53,6 +53,7 @@ import {
   useEmployeesQuery,
   useOffboardEmployeeMutation,
 } from "../hooks/use-people";
+import { canonicalCountryKey } from "../api/people.service";
 import type { Employee } from "../types/people.types";
 import { employeeDisplayName } from "../utils/geo";
 import { type Key, useMemo, useState } from "react";
@@ -220,10 +221,17 @@ export default function PeopleDashboardPage() {
         (e.department || "").toLowerCase().includes(q) ||
         (e.email || "").toLowerCase().includes(q);
 
-      const matchCountry = !countryFilter || countryFilter === "ALL" || e.country === countryFilter;
+      const matchCountry =
+        !countryFilter ||
+        countryFilter === "ALL" ||
+        canonicalCountryKey(e.country || "") === canonicalCountryKey(countryFilter);
+
+      const empMode = (e.workMode || (e.officeLocation?.toLowerCase().startsWith("remot") ? "remote" : "office")).toLowerCase();
       const matchWorkMode =
         !workModeFilter ||
-        (e.workMode === workModeFilter || (workModeFilter === "office" && (!e.workMode || e.workMode === "onsite")));
+        workModeFilter === "ALL" ||
+        empMode === workModeFilter.toLowerCase() ||
+        (workModeFilter.toLowerCase() === "office" && (empMode === "onsite" || empMode === "office"));
       const matchLocation =
         !locationFilter ||
         e.officeLocation === locationFilter ||

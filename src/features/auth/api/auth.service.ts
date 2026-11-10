@@ -23,6 +23,9 @@ import type {
 import { mapFirestoreUser } from "../utils/map-user";
 import { InvitesService } from "@/features/companies/api/invites.service";
 import { STORAGE_KEYS } from "@/lib/constants";
+import { DEFAULT_COMPANY_NAME } from "@/lib/constants/company";
+import { isReservedCompanyName } from "@/lib/company-defaults";
+import { acceptInvitationForUser } from "./invitation-onboarding";
 
 const SERVICE_NAME = "AuthService";
 const googleProvider = new GoogleAuthProvider();
@@ -35,16 +38,31 @@ async function buildLoginResponse(
     photoURL: string | null;
     refreshToken: string;
     getIdToken: (forceRefresh?: boolean) => Promise<string>;
+    getIdTokenResult?: (forceRefresh?: boolean) => Promise<{ claims: Record<string, unknown> }>;
   },
   userData: Record<string, unknown> | undefined
 ): Promise<LoginResponse> {
   const idToken = await firebaseUser.getIdToken();
-  const user = mapFirestoreUser(firebaseUser.uid, userData, {
-    email: firebaseUser.email || "",
-    name: firebaseUser.displayName || "",
-    avatar: firebaseUser.photoURL || "",
-    companyName: "D-Arrow Business",
-  });
+  let customClaims: Record<string, unknown> | undefined;
+  if (typeof firebaseUser.getIdTokenResult === "function") {
+    try {
+      const res = await firebaseUser.getIdTokenResult();
+      customClaims = res.claims;
+    } catch {
+      // ignore
+    }
+  }
+  const user = mapFirestoreUser(
+    firebaseUser.uid,
+    userData,
+    {
+      email: firebaseUser.email || "",
+      name: firebaseUser.displayName || "",
+      avatar: firebaseUser.photoURL || "",
+      companyName: DEFAULT_COMPANY_NAME,
+    },
+    customClaims
+  );
 
   return {
     user,
@@ -165,6 +183,13 @@ export const AuthService = {
 
   async register(data: RegisterRequest): Promise<ApiResponse<LoginResponse>> {
     return withLogging(SERVICE_NAME, "register", (async () => {
+      // Prevent public registration from duplicating or claiming the DArrow organization
+      if (isReservedCompanyName(data.companyName)) {
+        throw new Error(
+          "COMPANY_RESERVED: هذه الشركة مسجلة بالفعل في النظام. إذا كنت موظفاً، يُرجى طلب رابط دعوة من مسؤول الشركة أو تسجيل الدخول بدلاً من ذلك."
+        );
+      }
+
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         data.email,
@@ -239,7 +264,7 @@ export const AuthService = {
       if (!invite) {
         throw new Error("INVITE_NOT_FOUND");
       }
-      if (invite.status === "expired" || new Date(invite.expiresAt).getTime() < Date.now()) {
+      if (invite.status === "expired" || new Date(invite.expiresAt).getTime() <= Date.now()) {
         throw new Error("INVITE_EXPIRED");
       }
       if (invite.status === "revoked") {
@@ -252,46 +277,53 @@ export const AuthService = {
         throw new Error("INVITE_INVALID");
       }
 
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        invite.email,
-        input.password
+      let firebaseUser;
+      try {
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          invite.email,
+          input.password
+        );
+        firebaseUser = userCredential.user;
+      } catch (authErr: any) {
+        if (authErr?.code === "auth/email-already-in-use") {
+          try {
+            const loginCred = await signInWithEmailAndPassword(
+              auth,
+              invite.email,
+              input.password
+            );
+            firebaseUser = loginCred.user;
+          } catch (loginErr: any) {
+            if (
+              loginErr?.code === "auth/wrong-password" ||
+              loginErr?.code === "auth/invalid-credential"
+            ) {
+              throw new Error("EXISTING_ACCOUNT_WRONG_PASSWORD");
+            }
+            throw loginErr;
+          }
+        } else {
+          throw authErr;
+        }
+      }
+
+      if (input.name.trim() && !firebaseUser.displayName) {
+        try {
+          await updateProfile(firebaseUser, {
+            displayName: input.name.trim(),
+          });
+        } catch {
+          // non-blocking
+        }
+      }
+
+      const userData = await acceptInvitationForUser(
+        db,
+        firebaseUser,
+        input.token,
+        input.name
       );
-      const firebaseUser = userCredential.user;
-
-      await updateProfile(firebaseUser, {
-        displayName: input.name.trim(),
-      });
-
-      const userData: User = {
-        id: firebaseUser.uid,
-        email: invite.email,
-        name: input.name.trim(),
-        nameAr: "",
-        avatar:
-          firebaseUser.photoURL ||
-          `https://avatar.vercel.sh/${firebaseUser.uid}`,
-        role: invite.role,
-        companyId: invite.companyId,
-        companyName: invite.companyName,
-        portalAccess: invite.portalAccess ?? undefined,
-        portalSubRoles: invite.portalSubRoles ?? undefined,
-      };
-
-      await setDoc(doc(db, "users", firebaseUser.uid), {
-        ...userData,
-        portalAccess: invite.portalAccess ?? [],
-        portalSubRoles: invite.portalSubRoles ?? {},
-        // Provenance marker the Firestore create rule binds this self-provision
-        // to the real, still-pending invite (SEC-P0-01): a privileged (manager/
-        // admin) or portal-sub-role profile can only be created when it mirrors
-        // an existing invites/{token} doc addressed to this email/company/role.
-        invitationToken: input.token,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-
-      await InvitesService.markAccepted(input.token, firebaseUser.uid);
 
       const idToken = await getIdToken(firebaseUser);
       try {
@@ -299,6 +331,26 @@ export const AuthService = {
       } catch {
         // ignore
       }
+
+      return {
+        data: {
+          user: userData,
+          accessToken: idToken,
+          refreshToken: firebaseUser.refreshToken,
+        },
+        message: "Invite accepted",
+      };
+    })());
+  },
+
+  async acceptInviteForCurrentUser(token: string): Promise<ApiResponse<LoginResponse>> {
+    return withLogging(SERVICE_NAME, "acceptInviteForCurrentUser", (async () => {
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser) {
+        throw new Error("NO_CURRENT_USER");
+      }
+      const userData = await acceptInvitationForUser(db, firebaseUser, token);
+      const idToken = await getIdToken(firebaseUser, true);
 
       return {
         data: {

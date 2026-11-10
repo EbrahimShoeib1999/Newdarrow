@@ -239,6 +239,55 @@ export const UsersService = {
   },
 
   /**
+   * Platform Admin capability: list all users across all tenants.
+   */
+  async listAllPlatformUsers(actorRole: UserRole): Promise<User[]> {
+    return withLogging(SERVICE_NAME, "listAllPlatformUsers", (async () => {
+      if (actorRole !== "platform_admin") {
+        throw new Error("Only a platform administrator can list all platform users");
+      }
+      const usersRef = collection(db, "users");
+      const snap = await getDocs(usersRef);
+      return snap.docs.map((d) =>
+        mapFirestoreUser(d.id, d.data() as Record<string, unknown>)
+      );
+    })());
+  },
+
+  /**
+   * Account status lifecycle management: activate, suspend, or disable user.
+   */
+  async updateUserStatus(
+    actorRole: UserRole,
+    targetUserId: string,
+    newStatus: "active" | "suspended" | "disabled",
+    companyId?: string
+  ): Promise<void> {
+    return withLogging(SERVICE_NAME, "updateUserStatus", (async () => {
+      if (actorRole !== "platform_admin" && actorRole !== "super_admin" && actorRole !== "admin") {
+        throw new Error("Unauthorized to change user account status");
+      }
+      await updateDoc(doc(db, "users", targetUserId), {
+        status: newStatus,
+        updatedAt: new Date().toISOString(),
+      });
+      if (companyId) {
+        const empRef = collection(db, "companies", companyId, "employees");
+        const empQuery = query(empRef, where("userId", "==", targetUserId));
+        const empSnap = await getDocs(empQuery);
+        await Promise.all(
+          empSnap.docs.map((empDoc) =>
+            updateDoc(empDoc.ref, {
+              status: newStatus === "active" ? "active" : newStatus === "suspended" ? "on_leave" : "terminated",
+              updatedAt: new Date().toISOString(),
+            })
+          )
+        );
+      }
+    })());
+  },
+
+  /**
    * Reconciliation write: attach an unassigned profile to a real company.
    * Super-admin only, and the Firestore rule requires the target doc's
    * companyId to currently be empty — so this can only consume an orphan, never
@@ -251,8 +300,8 @@ export const UsersService = {
     companyName: string
   ): Promise<void> {
     return withLogging(SERVICE_NAME, "assignUnassignedAccount", (async () => {
-      if (actorRole !== "super_admin") {
-        throw new Error("Only a super admin can assign unassigned accounts");
+      if (actorRole !== "super_admin" && actorRole !== "platform_admin") {
+        throw new Error("Only an administrator can assign unassigned accounts");
       }
       if (!companyId) {
         throw new Error("A target company is required");

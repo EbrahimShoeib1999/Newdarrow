@@ -23,8 +23,33 @@ export function parseCustomPermissions(raw: unknown): import("@/lib/permissions"
 export function mapFirestoreUser(
   id: string,
   data: Record<string, unknown> | undefined,
-  fallbacks: Partial<User> = {}
+  fallbacks: Partial<User> = {},
+  customClaims?: Record<string, unknown>
 ): User {
+  let role: User["role"] = (data?.role as User["role"]) || fallbacks.role || "employee";
+
+  // Reconcile role with Auth custom claims:
+  // Trusted Auth custom claims are the single source of truth for platform privileges.
+  // A Firestore document cannot unilaterally grant platform_admin without a matching Auth custom claim.
+  if (customClaims) {
+    const claimRole = customClaims.role as User["role"] | undefined;
+    if (claimRole === "platform_admin") {
+      role = "platform_admin";
+    } else if (role === "platform_admin") {
+      console.warn(
+        `[Security Warning] Firestore profile for user ${id} claims role "platform_admin", but Auth custom claims do not corroborate it. Downgrading to "${claimRole || "employee"}".`
+      );
+      role = claimRole || "employee";
+    } else if (claimRole) {
+      role = claimRole;
+    }
+  }
+
+  let companyId = (data?.companyId as string) || fallbacks.companyId || "";
+  if (!companyId && customClaims?.companyId && typeof customClaims.companyId === "string") {
+    companyId = customClaims.companyId;
+  }
+
   return {
     id,
     email: (data?.email as string) || fallbacks.email || "",
@@ -35,16 +60,20 @@ export function mapFirestoreUser(
       "User",
     nameAr: (data?.nameAr as string) || fallbacks.nameAr || "",
     avatar: (data?.avatar as string) || fallbacks.avatar || "",
-    role: (data?.role as User["role"]) || fallbacks.role || "employee",
+    role,
     // No fabricated tenant: when the profile document is missing (or predates
     // `companyId`) the user maps to an EMPTY company with `profileMissing`.
     // Demo mock-user matching used to silently graft a real login onto the
     // seeded "d-arrow" workspace, which made orphan accounts invisible in the
     // Users page instead of surfacing them for reconciliation.
-    companyId: (data?.companyId as string) || fallbacks.companyId || "",
+    companyId,
     companyName:
       (data?.companyName as string) || fallbacks.companyName || "",
     profileMissing: data === undefined,
+    onboardingStatus:
+      data?.onboardingStatus === "pending" || data?.onboardingStatus === "active"
+        ? data.onboardingStatus
+        : undefined,
     portalAccess: parsePortalAccess(data?.portalAccess),
     portalSubRoles: parsePortalSubRoles(data?.portalSubRoles),
     customPermissions: parseCustomPermissions(data?.customPermissions ?? data?.permissions),

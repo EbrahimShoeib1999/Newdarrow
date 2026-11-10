@@ -42,7 +42,7 @@ export function canUserAccessPortal(
 }
 
 export function canManagePortalAccess(actorRole: UserRole | undefined): boolean {
-  return actorRole === "super_admin";
+  return actorRole === "super_admin" || actorRole === "platform_admin";
 }
 
 /** Portals a super admin may assign to a target user (within their role). */

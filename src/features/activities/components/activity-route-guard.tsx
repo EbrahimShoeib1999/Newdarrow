@@ -20,6 +20,7 @@ import { Construction, Home, ShieldAlert } from "lucide-react";
 import { resolveRouteAccess } from "@/lib/activity-routes";
 import { ACTIVITY_REGISTRY, activityLabel } from "../types/activity.types";
 import { useActivityConfig } from "../hooks/use-activity-config";
+import { useAuthStore } from "@/stores/auth.store";
 
 function RouteLoader() {
   return (
@@ -60,7 +61,12 @@ export function ActivityRouteGuard({ children }: { children?: React.ReactNode })
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const config = useActivityConfig();
+  const user = useAuthStore((s) => s.user);
   const lang = i18n.language?.startsWith("ar") ? "ar" : "en";
+
+  if (user?.role === "platform_admin") {
+    return <>{children}</>;
+  }
 
   const decision = resolveRouteAccess(location.pathname, config);
 

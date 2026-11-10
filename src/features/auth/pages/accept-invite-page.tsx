@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button, Input, Spinner } from "@heroui/react";
-import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Users } from "lucide-react";
+import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Users, CheckCircle2 } from "lucide-react";
 import { AuthBrandLayout } from "../components/auth-brand-layout";
 import { AuthService } from "../api/auth.service";
 import { InvitesService } from "@/features/companies/api/invites.service";
@@ -36,9 +36,11 @@ function nameFromEmail(email: string): string {
 
 export function AcceptInvitePage() {
   const { token = "" } = useParams<{ token: string }>();
-  const { t } = useTranslation(["auth", "settings"]);
+  const { t, i18n } = useTranslation(["auth", "settings"]);
+  const isAr = i18n.language === "ar";
   const navigate = useNavigate();
   const setAuthUser = useAuthStore.setState;
+  const currentUser = useAuthStore((s) => s.user);
 
   const [invite, setInvite] = useState<TeamInvite | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,6 +78,37 @@ export function AcceptInvitePage() {
     return "";
   }, [invite, loading, t]);
 
+  const isAlreadyLoggedInAsInvitee = useMemo(() => {
+    return Boolean(
+      currentUser?.email &&
+      invite?.email &&
+      currentUser.email.trim().toLowerCase() === invite.email.trim().toLowerCase()
+    );
+  }, [currentUser, invite]);
+
+  async function onAcceptForCurrentSession() {
+    setError("");
+    setSubmitting(true);
+    try {
+      const response = await AuthService.acceptInviteForCurrentUser(token);
+      setAuthUser({
+        user: response.data.user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+      navigate(PORTAL_PICKER_PATH, { replace: true, state: { choosePortal: true } });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.startsWith("COMPANY_CONFLICT")) {
+        setError(message.replace(/^COMPANY_CONFLICT:\s*/, ""));
+      } else {
+        setError(message || t("invite.error"));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -102,17 +135,19 @@ export function AcceptInvitePage() {
       });
       navigate(PORTAL_PICKER_PATH, { replace: true, state: { choosePortal: true } });
     } catch (err: unknown) {
-      const code =
-        err && typeof err === "object" && "code" in err
-          ? String((err as { code: string }).code)
-          : "";
       const message = err instanceof Error ? err.message : "";
-      if (code === "auth/email-already-in-use") {
-        setError(t("invite.emailInUse"));
+      if (message.startsWith("EXISTING_ACCOUNT_WRONG_PASSWORD")) {
+        setError(
+          isAr
+            ? "لديك حساب بالفعل بهذا البريد الإلكتروني. كلمة المرور المدخلة غير صحيحة، يرجى إدخال كلمة مرور حسابك لتأكيد الانضمام."
+            : "An account already exists with this email. The entered password was incorrect. Please enter your account password."
+        );
+      } else if (message.startsWith("COMPANY_CONFLICT")) {
+        setError(message.replace(/^COMPANY_CONFLICT:\s*/, ""));
       } else if (message.startsWith("INVITE_")) {
         setError(t("invite.invalid"));
       } else {
-        setError(t("invite.error"));
+        setError(message || t("invite.error"));
       }
     } finally {
       setSubmitting(false);
@@ -154,6 +189,39 @@ export function AcceptInvitePage() {
           </div>
           <Button as={Link} to="/login" color="primary" className="w-full">
             {t("invite.goLogin")}
+          </Button>
+        </div>
+      ) : isAlreadyLoggedInAsInvitee ? (
+        <div className="space-y-5">
+          <div className="flex items-start gap-3 rounded-2xl border border-success/20 bg-success/10 p-4 text-sm text-success-800">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+            <div className="space-y-1">
+              <p className="font-bold">
+                {isAr ? "أنت مسجل الدخول حالياً بهذا الحساب" : "You are currently signed in with this account"}
+              </p>
+              <p className="text-xs text-default-600">
+                {isAr
+                  ? `اضغط أدناه لتأكيد الانضمام إلى ${invite?.companyName} بدور ${t(`team.globalRoles.${invite?.role}`, { ns: "settings" })} مباشرةً.`
+                  : `Click below to confirm joining ${invite?.companyName} as ${invite?.role}.`}
+              </p>
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-3 rounded-2xl border border-danger/20 bg-danger/10 p-4 text-sm text-danger">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span className="font-semibold">{error}</span>
+            </div>
+          )}
+
+          <Button
+            color="primary"
+            className="h-12 w-full bg-primary-gradient font-bold"
+            isLoading={submitting}
+            onPress={onAcceptForCurrentSession}
+            endContent={!submitting && <ArrowRight className="h-4 w-4 rtl:rotate-180" />}
+          >
+            {isAr ? "قبول الدعوة والانضمام الآن" : "Accept Invitation & Join Company"}
           </Button>
         </div>
       ) : (

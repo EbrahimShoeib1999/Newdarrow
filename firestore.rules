@@ -15,16 +15,29 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    // Platform Administrator: comprehensive cross-tenant authority across the entire platform.
+    // Privileges are derived strictly from trusted Firebase Auth custom claims, NEVER from Firestore profile fallbacks.
+    function isPlatformAdmin() {
+      return signedIn() && request.auth.token.get('role', '') == 'platform_admin';
+    }
+
     function belongsToCompany(companyId) {
       // `.get()` guard: a users doc missing `companyId` (partial profile)
       // must evaluate to false, not ERROR out every dependent rule and turn
       // a clean denial into an "evaluation error" permission-denied.
-      return signedIn() && hasUserDoc() && userDoc().get('companyId', '') == companyId;
+      return signedIn() && (
+        isPlatformAdmin()
+        || (
+          hasUserDoc()
+          && userDoc().get('companyId', '') == companyId
+          && userDoc().get('onboardingStatus', 'active') != 'pending'
+        )
+      );
     }
 
     function isCompanyAdmin(companyId) {
-      return belongsToCompany(companyId)
-        && userDoc().get('role', '') in ['super_admin', 'admin'];
+      return isPlatformAdmin()
+        || (belongsToCompany(companyId) && userDoc().get('role', '') in ['super_admin', 'admin']);
     }
 
     function isGlobalHrManager(companyId) {
@@ -36,7 +49,10 @@ service cloud.firestore {
     // account-reconciliation list gate below, which is pinned to unassigned
     // (empty-companyId) profiles so it exposes no tenant's roster.
     function isSuperAdmin() {
-      return signedIn() && hasUserDoc() && userDoc().get('role', '') == 'super_admin';
+      return signedIn() && (
+        isPlatformAdmin()
+        || (hasUserDoc() && userDoc().get('role', '') == 'super_admin')
+      );
     }
 
     // Effective People sub-role; empty string means "fall back to the global role".
@@ -145,6 +161,21 @@ service cloud.firestore {
         || collection.matches('^mod_school_management_rec_.*');
     }
 
+    // Secure allowlist for generic tenant subcollections.
+    // Prevents arbitrary collection injection and denies unknown collections by default.
+    function isKnownGenericCollection(collection) {
+      return collection in [
+        'tasks', 'contacts', 'contact_classifications', 'projects',
+        'deals', 'leads', 'customers', 'accounts', 'contracts',
+        'products', 'inventory_items', 'sprints', 'leave_requests',
+        'performance_reviews', 'announcements', 'work_locations', 'assets',
+        'rem_properties', 'fm_assets', 'fm_work_orders',
+        'mkt_campaigns', 'mkt_deliverables', 'mkt_expenses'
+      ]
+      || isDomainCollection(collection)
+      || isModuleRecordCollection(collection);
+    }
+
     // Authoritative tenant activity, read from the company doc on the server.
     // A missing/legacy value normalizes to PROJECTS, which owns none of the
     // reserved prefixes, so every domain collection is denied fail-closed.
@@ -167,16 +198,19 @@ service cloud.firestore {
     // collection, so shared reads pay no extra get() cost (|| short-circuits).
     function domainAccessAllowed(companyId, collection) {
       return belongsToCompany(companyId)
-        && companyAuthoritativeActivity(companyId) == domainOwnerActivity(collection)
-        && (!isSensitiveDomainCollection(collection)
-            || hasSensitiveDomainPrivilege(companyId));
+        && (isPlatformAdmin() || (
+          companyAuthoritativeActivity(companyId) == domainOwnerActivity(collection)
+          && (!isSensitiveDomainCollection(collection)
+              || hasSensitiveDomainPrivilege(companyId))
+        ));
     }
 
     // Mirrors canApproveDocuments() plus the accounting-specific Billing
     // sub-role, so the client review gate is enforced on the server too.
     function canReviewDocuments(companyId) {
       return belongsToCompany(companyId) && (
-        userDoc().get('role', '') in ['super_admin', 'admin', 'manager']
+        isPlatformAdmin()
+        || userDoc().get('role', '') in ['super_admin', 'admin', 'manager']
         || billingSubRole() in ['admin', 'manager', 'accountant']
         || 'billing.review_documents' in customPermissions()
       );
@@ -186,7 +220,8 @@ service cloud.firestore {
     // Everyone can always read their own reports; this covers reading everyone's.
     function canViewAllReports(companyId) {
       return belongsToCompany(companyId) && (
-        userDoc().get('role', '') == 'super_admin'
+        isPlatformAdmin()
+        || userDoc().get('role', '') in ['super_admin', 'platform_admin']
         || isGlobalHrManager(companyId)
         || 'people.view_all_reports' in customPermissions()
         || (
@@ -223,19 +258,120 @@ service cloud.firestore {
         || data.get('customPermissions', []).size() == 0;
     }
 
-    // Invitation-backed provisioning. acceptInvite() stamps the consumed invite's
-    // token onto the new profile; the create is legitimate ONLY when it mirrors a
-    // real, still-pending invite addressed to this exact email/role/company. This
-    // is the sole path that may mint a privileged (admin/manager) profile or
-    // portal sub-roles into an EXISTING tenant.
+    function invitationRoleAllowed(role) {
+      return role in ['employee', 'viewer', 'manager', 'global_hr_manager'];
+    }
+
+    function validPendingInvitationData(invite, token, email, companyId, role) {
+      return invite.get('token', '') == token
+        && invite.get('status', '') == 'pending'
+        && invite.get('email', '') == email
+        && invite.get('companyId', '') == companyId
+        && invite.get('role', '') == role
+        && invitationRoleAllowed(role)
+        && invite.get('expiresAt', null) is timestamp
+        && invite.expiresAt > request.time;
+    }
+
+    function pendingInvitationMatches(token, email, companyId, role) {
+      return signedIn()
+        && token is string
+        && token != ''
+        && request.auth.token.get('email', '') == email
+        && exists(/databases/$(database)/documents/invites/$(token))
+        && validPendingInvitationData(
+          get(/databases/$(database)/documents/invites/$(token)).data,
+          token,
+          email,
+          companyId,
+          role
+        );
+    }
+
+    function invitationDataMatches(invite, userId, token) {
+      return request.resource.data.get('id', userId) == userId
+        && request.resource.data.get('email', '') == request.auth.token.get('email', '')
+        && request.resource.data.get('companyId', '') == invite.get('companyId', '')
+        && request.resource.data.get('companyName', '') == invite.get('companyName', '')
+        && request.resource.data.get('role', '') == invite.get('role', '')
+        && request.resource.data.get('portalAccess', []) == invite.get('portalAccess', [])
+        && request.resource.data.get('portalSubRoles', {}) == invite.get('portalSubRoles', {})
+        && validPendingInvitationData(
+          invite,
+          token,
+          request.resource.data.get('email', ''),
+          request.resource.data.get('companyId', ''),
+          request.resource.data.get('role', '')
+        );
+    }
+
+    function invitationFieldsMatch(userId) {
+      let token = request.resource.data.get('invitationToken', '');
+      return request.auth.uid == userId
+        && token is string
+        && token != ''
+        && exists(/databases/$(database)/documents/invites/$(token))
+        && invitationDataMatches(
+          get(/databases/$(database)/documents/invites/$(token)).data,
+          userId,
+          token
+        );
+    }
+
+    // The first profile write is inert and grants no tenant access. Completion
+    // is only authorized in the same batch that links one employee record and
+    // consumes the pending invitation.
     function provisionedViaValidInvitation() {
-      return 'invitationToken' in request.resource.data
-        && request.resource.data.get('invitationToken', '') != ''
-        && exists(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken))
-        && get(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken)).data.get('status', '') == 'pending'
-        && get(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken)).data.get('email', '') == request.resource.data.get('email', '')
-        && get(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken)).data.get('companyId', '') == request.resource.data.get('companyId', '')
-        && get(/databases/$(database)/documents/invites/$(request.resource.data.invitationToken)).data.get('role', '') == request.resource.data.get('role', '');
+      return request.resource.data.get('onboardingStatus', '') == 'pending'
+        && invitationFieldsMatch(request.auth.uid);
+    }
+
+    function completedInvitationProfile(userId) {
+      let token = request.resource.data.get('invitationToken', '');
+      let invite = get(/databases/$(database)/documents/invites/$(token)).data;
+      let inviteAfter = getAfter(/databases/$(database)/documents/invites/$(token)).data;
+      let employeeId = inviteAfter.get('employeeId', '');
+      let employee = getAfter(
+        /databases/$(database)/documents/companies/$(invite.get('companyId', ''))/employees/$(employeeId)
+      ).data;
+      return request.auth.uid == userId
+        && resource.data.get('onboardingStatus', '') == 'pending'
+        && request.resource.data.get('onboardingStatus', '') == 'active'
+        && request.resource.data.get('invitationToken', '') == resource.data.get('invitationToken', '')
+        && request.resource.data.get('companyId', '') == resource.data.get('companyId', '')
+        && request.resource.data.get('companyName', '') == invite.get('companyName', '')
+        && request.resource.data.get('role', '') == resource.data.get('role', '')
+        && request.resource.data.get('portalAccess', []) == invite.get('portalAccess', [])
+        && request.resource.data.get('portalSubRoles', {}) == invite.get('portalSubRoles', {})
+        && request.resource.data.get('email', '') == request.auth.token.get('email', '')
+        && request.resource.data.get('customPermissions', []) == resource.data.get('customPermissions', [])
+        && validPendingInvitationData(
+          invite,
+          token,
+          request.resource.data.get('email', ''),
+          request.resource.data.get('companyId', ''),
+          request.resource.data.get('role', '')
+        )
+        && inviteAfter.get('status', '') == 'accepted'
+        && inviteAfter.get('acceptedBy', '') == request.auth.uid
+        && inviteAfter.get('employeeId', '') != ''
+        && employee.get('userId', '') == request.auth.uid
+        && employee.get('email', '') == request.auth.token.get('email', '')
+        && employee.get('companyId', '') == invite.get('companyId', '')
+        && employee.get('role', '') == invite.get('role', '');
+    }
+
+    function pendingInviteeForCompany(companyId) {
+      return signedIn()
+        && hasUserDoc()
+        && userDoc().get('onboardingStatus', '') == 'pending'
+        && userDoc().get('companyId', '') == companyId
+        && pendingInvitationMatches(
+          userDoc().get('invitationToken', ''),
+          request.auth.token.get('email', ''),
+          companyId,
+          userDoc().get('role', '')
+        );
     }
 
     // User profiles
@@ -246,7 +382,8 @@ service cloud.firestore {
       // yields a clean FALSE instead of a hard "Property is undefined" rules
       // ERROR, which would otherwise break the whole team-roster listener.
       allow get: if signedIn() && (
-        request.auth.uid == userId
+        isPlatformAdmin()
+        || request.auth.uid == userId
         || (
           hasUserDoc()
           && resource.data.get('companyId', '') != ''
@@ -260,8 +397,10 @@ service cloud.firestore {
       // once login() stopped grafting a fabricated tenant — so they can be
       // reviewed and assigned. Pinned to the empty-tenant docs and the
       // super_admin role, so no tenant roster is newly exposed.
+      // Platform admin can list all user profiles across the entire platform.
       allow list: if signedIn() && (
-        (
+        isPlatformAdmin()
+        || (
           hasUserDoc()
           && resource.data.get('companyId', '') != ''
           && resource.data.get('companyId', '') == userDoc().get('companyId', '')
@@ -270,10 +409,11 @@ service cloud.firestore {
       );
 
       // New account. Only the four real provisioning shapes are allowed, and
-      // never a client-minted super_admin or self-granted customPermissions.
+      // never a client-minted super_admin, platform_admin, or self-granted customPermissions.
       allow create: if signedIn()
         && request.auth.uid == userId
         && request.resource.data.get('role', '') != 'super_admin'
+        && request.resource.data.get('role', '') != 'platform_admin'
         && customPermissionsEmptyOrAbsent(request.resource.data)
         && (
           // (1) Invitation-backed: the only legitimate way to be provisioned
@@ -282,6 +422,7 @@ service cloud.firestore {
           // (2) Ordinary self-provisioning (login() orphan placeholder, plain
           //     member joining): never elevated, never a tenant administrator.
           || (request.resource.data.get('role', '') in ['employee', 'viewer']
+              && request.resource.data.get('companyId', '') == ''
               && !portalSubRolesElevating(request.resource.data))
           // (3) New-tenant onboarding (register / loginWithGoogle): admin of a
           //     company that does NOT exist yet, so a caller can only stand up
@@ -292,70 +433,164 @@ service cloud.firestore {
               && !portalSubRolesElevating(request.resource.data))
         );
 
-      // Self update (without privilege escalation), or company admin updating teammates.
+      // Self update (without privilege escalation), or company admin updating teammates,
+      // or Platform Admin managing any user across any company.
       // Plus reconciliation assignment: a platform super_admin may attach an
       // UNASSIGNED (companyId == '') profile to a real company — the write must
       // set a non-empty companyId, so this branch can only consume orphans, never
       // move an existing tenant's member.
-      allow update: if signedIn() && (
-        // Company-admin teammate management, with privilege-escalation guards:
-        // a tenant admin may never mint or edit a super_admin, and may never
-        // move a member across tenants. A platform super_admin is exempt on the
-        // role clauses (the only legitimate path to grant the super_admin role);
-        // cross-tenant / orphan moves go through the reconciliation branch below.
-        (hasUserDoc() && isCompanyAdmin(resource.data.get('companyId', ''))
-          && (isSuperAdmin() || (
-            resource.data.get('role', '') != 'super_admin'
-            && request.resource.data.get('role', '') != 'super_admin'
-          ))
-          && request.resource.data.get('companyId', '') == resource.data.get('companyId', ''))
-        || (
-          hasUserDoc() && isGlobalHrManager(resource.data.get('companyId', ''))
-          && resource.data.get('role', '') in ['employee', 'viewer']
-          && request.resource.data.get('role', '') in ['employee', 'viewer']
-          && request.resource.data.get('companyId', '') == resource.data.get('companyId', '')
-          && request.resource.data.get('customPermissions', []) == resource.data.get('customPermissions', [])
-          && request.resource.data.get('portalSubRoles', {}) == resource.data.get('portalSubRoles', {})
-          && request.resource.data.get('portalAccess', []) == resource.data.get('portalAccess', [])
-          && request.resource.data.get('countryScope', []) == resource.data.get('countryScope', [])
-          && request.resource.data.get('status', 'active') == resource.data.get('status', 'active')
-        )
-        || (
-          isSuperAdmin()
-          && resource.data.get('companyId', '') == ''
-          && request.resource.data.get('companyId', '') != ''
-        )
-        || (
+      allow update: if resource != null && signedIn() && (
+        (
           request.auth.uid == userId
-          && request.resource.data.get('role', '') == resource.data.get('role', '')
-          && request.resource.data.get('companyId', '') == resource.data.get('companyId', '')
-          && request.resource.data.get('customPermissions', []) == resource.data.get('customPermissions', [])
-          && request.resource.data.get('portalSubRoles', {}) == resource.data.get('portalSubRoles', {})
+          && (
+            // Platform admins retain their existing self-profile restrictions.
+            (isPlatformAdmin()
+              && request.resource.data.get('role', '') == resource.data.get('role', '')
+              && (resource.data.get('role', '') != 'super_admin'
+                || request.resource.data.get('role', '') == 'super_admin'))
+            || (
+              resource.data.get('role', '') != 'platform_admin'
+              && request.resource.data.get('role', '') == resource.data.get('role', '')
+              && request.resource.data.get('companyId', '') == resource.data.get('companyId', '')
+              && request.resource.data.get('customPermissions', []) == resource.data.get('customPermissions', [])
+              && request.resource.data.get('portalSubRoles', {}) == resource.data.get('portalSubRoles', {})
+              && request.resource.data.get('portalAccess', []) == resource.data.get('portalAccess', [])
+              && request.resource.data.get('countryScope', []) == resource.data.get('countryScope', [])
+              && request.resource.data.get('onboardingStatus', '') == resource.data.get('onboardingStatus', '')
+            )
+            // Invitation-backed self-update: existing user accepting a valid pending invitation.
+            || (
+              request.resource.data.get('onboardingStatus', '') == 'pending'
+              && request.resource.data.get('invitationToken', '') is string
+              && request.resource.data.get('invitationToken', '') != ''
+              && provisionedViaValidInvitation()
+              && (resource.data.get('companyId', '') == ''
+                || resource.data.get('companyId', '') == request.resource.data.get('companyId', ''))
+              && request.resource.data.get('customPermissions', []) == resource.data.get('customPermissions', [])
+            )
+            || (
+              resource.data.get('onboardingStatus', '') == 'pending'
+              && request.resource.data.get('onboardingStatus', '') == 'active'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasAll(['onboardingStatus', 'updatedAt'])
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['onboardingStatus', 'updatedAt'])
+              && completedInvitationProfile(userId)
+            )
+            || (
+              isSuperAdmin()
+              && resource.data.get('companyId', '') == ''
+              && request.resource.data.get('companyId', '') != ''
+            )
+          )
+        )
+        || (
+          request.auth.uid != userId
+          && (
+            // Platform Administrator: comprehensive management across all companies and users.
+            (isPlatformAdmin()
+              && (request.resource.data.get('role', '') == resource.data.get('role', ''))
+              && (resource.data.get('role', '') != 'super_admin'
+                || request.resource.data.get('role', '') == 'super_admin'))
+            // Company-admin teammate management with privilege-escalation guards.
+            || (hasUserDoc() && isCompanyAdmin(resource.data.get('companyId', ''))
+              && resource.data.get('role', '') != 'platform_admin'
+              && request.resource.data.get('role', '') != 'platform_admin'
+              && (isSuperAdmin() || (
+                resource.data.get('role', '') != 'super_admin'
+                && request.resource.data.get('role', '') != 'super_admin'
+              ))
+              && request.resource.data.get('companyId', '') == resource.data.get('companyId', ''))
+            || (
+              hasUserDoc() && isGlobalHrManager(resource.data.get('companyId', ''))
+              && resource.data.get('role', '') in ['employee', 'viewer']
+              && request.resource.data.get('role', '') in ['employee', 'viewer']
+              && request.resource.data.get('companyId', '') == resource.data.get('companyId', '')
+              && request.resource.data.get('customPermissions', []) == resource.data.get('customPermissions', [])
+              && request.resource.data.get('portalSubRoles', {}) == resource.data.get('portalSubRoles', {})
+              && request.resource.data.get('portalAccess', []) == resource.data.get('portalAccess', [])
+              && request.resource.data.get('countryScope', []) == resource.data.get('countryScope', [])
+              && request.resource.data.get('status', 'active') == resource.data.get('status', 'active')
+            )
+          )
         )
       );
 
-      allow delete: if hasUserDoc() && isCompanyAdmin(resource.data.get('companyId', ''));
+      // User account deletion guards:
+      // - Platform Admin CANNOT delete own user identity (prevents accidental lockout)
+      // - Platform Admin CANNOT delete super_admin identity (governance separation)
+      // - Company Admin CANNOT delete own user identity, platform_admin, or super_admin
+      allow delete: if (
+        isPlatformAdmin()
+        && request.auth.uid != userId
+        && resource.data.get('role', '') != 'super_admin'
+      )
+      || (
+        hasUserDoc() && isCompanyAdmin(resource.data.get('companyId', ''))
+        && request.auth.uid != userId
+        && resource.data.get('role', '') != 'platform_admin'
+        && resource.data.get('role', '') != 'super_admin'
+      );
     }
 
     // Team invitations (token = document id)
     match /invites/{token} {
+      function acceptedByInvitee() {
+        let invite = resource.data;
+        let profile = getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        let employeeId = request.resource.data.get('employeeId', '');
+        let employee = getAfter(
+          /databases/$(database)/documents/companies/$(invite.get('companyId', ''))/employees/$(employeeId)
+        ).data;
+        return signedIn()
+          && invite.get('token', '') == token
+          && invite.get('status', '') == 'pending'
+          && invite.get('email', '') == request.auth.token.get('email', '')
+          && invite.get('expiresAt', null) is timestamp
+          && invite.expiresAt > request.time
+          && request.resource.data.get('status', '') == 'accepted'
+          && request.resource.data.get('acceptedBy', '') == request.auth.uid
+          && request.resource.data.get('acceptedAt', null) is timestamp
+          && employeeId is string
+          && employeeId != ''
+          && (!('employeeId' in invite) || invite.employeeId == employeeId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'acceptedAt', 'acceptedBy', 'employeeId'])
+          && profile.get('id', '') == request.auth.uid
+          && profile.get('email', '') == request.auth.token.get('email', '')
+          && profile.get('companyId', '') == invite.get('companyId', '')
+          && profile.get('role', '') == invite.get('role', '')
+          && profile.get('invitationToken', '') == token
+          && profile.get('onboardingStatus', '') == 'active'
+          && employee.get('userId', '') == request.auth.uid
+          && employee.get('email', '') == invite.get('email', '')
+          && employee.get('companyId', '') == invite.get('companyId', '')
+          && employee.get('role', '') == invite.get('role', '');
+      }
+
       // Accept page loads a single pending invite by token (pre-auth).
-      // `.get('status','')` so an invite doc missing the field is a clean false
-      // (denied) rather than a rules evaluation ERROR.
-      allow get: if resource.data.get('status', '') == 'pending'
-        || (signedIn() && (isCompanyAdmin(resource.data.get('companyId', '')) || isGlobalHrManager(resource.data.get('companyId', ''))));
+      allow get: if (
+        resource.data.get('status', '') == 'pending'
+        && resource.data.get('token', '') == token
+        && resource.data.get('expiresAt', null) is timestamp
+        && resource.data.expiresAt > request.time
+      )
+        || (signedIn() && (isPlatformAdmin() || isCompanyAdmin(resource.data.get('companyId', '')) || isGlobalHrManager(resource.data.get('companyId', ''))));
 
       // Admins and Global HR Managers list pending invites for their company (query must filter companyId).
       // The LIST gate reads each candidate doc, so the per-doc companyId is taken
       // through `.get()` to avoid an evaluation error on a malformed invite.
-      allow list: if signedIn() && (isCompanyAdmin(resource.data.get('companyId', '')) || isGlobalHrManager(resource.data.get('companyId', '')));
+      allow list: if signedIn() && (isPlatformAdmin() || isCompanyAdmin(resource.data.get('companyId', '')) || isGlobalHrManager(resource.data.get('companyId', '')));
 
       allow create: if signedIn()
-        && (isCompanyAdmin(request.resource.data.get('companyId', '')) || isGlobalHrManager(request.resource.data.get('companyId', '')))
+        && (isPlatformAdmin() || isCompanyAdmin(request.resource.data.get('companyId', '')) || isGlobalHrManager(request.resource.data.get('companyId', '')))
         && request.resource.data.get('status', '') == 'pending'
         && request.resource.data.get('email', 0) is string
         && request.resource.data.get('token', '') == token
-        && (isCompanyAdmin(request.resource.data.get('companyId', '')) || (
+        && request.resource.data.get('expiresAt', null) is timestamp
+        && request.resource.data.expiresAt > request.time
+        && invitationRoleAllowed(request.resource.data.get('role', ''))
+        && (isPlatformAdmin() || isCompanyAdmin(request.resource.data.get('companyId', '')) || (
           request.resource.data.get('role', '') in ['employee', 'viewer']
           && !portalSubRolesElevating(request.resource.data)
           && customPermissionsEmptyOrAbsent(request.resource.data)
@@ -373,9 +608,7 @@ service cloud.firestore {
           && customPermissionsEmptyOrAbsent(request.resource.data)
         )
         || (
-          resource.data.get('status', '') == 'pending'
-          && request.resource.data.get('status', '') == 'accepted'
-          && request.auth.uid == request.resource.data.get('acceptedBy', '')
+          acceptedByInvitee()
         )
       );
 
@@ -419,8 +652,19 @@ service cloud.firestore {
         && belongsToCompany(resource.data.companyId);
     }
 
+    // Platform Audit Logs: Append-only, immutable audit trail for platform-wide events.
+    // Enforces actor authenticity (actorUid must match request.auth.uid) to prevent client-side forgery.
+    match /audit_logs/{logId} {
+      allow read: if signedIn() && (isPlatformAdmin() || isSuperAdmin());
+      allow create: if signedIn()
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.action is string;
+      allow update, delete: if false;
+    }
+
     match /companies/{companyId} {
-      allow read: if belongsToCompany(companyId);
+      allow get: if belongsToCompany(companyId);
+      allow list: if isPlatformAdmin();
       // Company profile updates stay open to company members EXCEPT for the
       // primaryActivity field, which only a company admin may change and only
       // to a registry-known stable id. The browser's selected activity is
@@ -430,6 +674,16 @@ service cloud.firestore {
         && (isCompanyAdmin(companyId) || primaryActivityUnchanged());
       allow delete: if belongsToCompany(companyId) && isCompanyAdmin(companyId);
       allow create: if signedIn() && validPrimaryActivity(request.resource.data);
+
+      // Tenant Audit Logs: Append-only, immutable audit trail for tenant actions.
+      // Enforces actor authenticity to prevent client-side impersonation.
+      match /audit_logs/{logId} {
+        allow read: if belongsToCompany(companyId) && (isCompanyAdmin(companyId) || isPlatformAdmin());
+        allow create: if belongsToCompany(companyId)
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.action is string;
+        allow update, delete: if false;
+      }
 
       // Allow public unauthenticated single GET for client reports (direct share link)
       match /client_reports/{reportId} {
@@ -513,7 +767,7 @@ service cloud.firestore {
         allow create: if belongsToCompany(companyId)
           && !isGlobalHrManager(companyId)
           && request.resource.data.totalDebit == request.resource.data.totalCredit
-          && request.resource.data.totalDebit >= 0;
+          && request.resource.data.totalDebit > 0;
         allow update, delete: if false;
       }
 
@@ -522,24 +776,131 @@ service cloud.firestore {
         allow read: if belongsToCompany(companyId);
         allow create, update: if belongsToCompany(companyId)
           && !isGlobalHrManager(companyId)
+          && request.resource.data.amount is number
           && request.resource.data.amount > 0;
         allow delete: if false;
       }
 
-      // Vouchers: Payment & Receipt vouchers (strictly isolated from HR operations)
+      // Vouchers: Payment & Receipt vouchers (strictly isolated from HR operations).
+      // Only Company Admins and Platform Admins can issue vouchers. Amount must be positive.
       match /vouchers/{voucherId} {
         allow read: if belongsToCompany(companyId);
-        allow create, update: if belongsToCompany(companyId)
-          && !isGlobalHrManager(companyId);
-        allow delete: if isCompanyAdmin(companyId);
+        allow create, update: if (isCompanyAdmin(companyId) || isPlatformAdmin())
+          && !isGlobalHrManager(companyId)
+          && (
+            (request.resource.data.get('amount', 0) is number && request.resource.data.get('amount', 0) > 0)
+            || (request.resource.data.get('totalAmount', 0) is number && request.resource.data.get('totalAmount', 0) > 0)
+          );
+        allow delete: if false;
       }
 
-      // Payroll payments/disbursements (execution isolated from HR)
+      // Payroll payments/disbursements (execution isolated from HR).
+      // Only Company Admins and Platform Admins can execute payroll disbursements. Amount must be positive.
       match /payroll_payments/{paymentId} {
         allow read: if belongsToCompany(companyId);
-        allow create, update: if belongsToCompany(companyId)
-          && !isGlobalHrManager(companyId);
-        allow delete: if isCompanyAdmin(companyId);
+        allow create, update: if (isCompanyAdmin(companyId) || isPlatformAdmin())
+          && !isGlobalHrManager(companyId)
+          && (
+            (request.resource.data.get('amount', 0) is number && request.resource.data.get('amount', 0) > 0)
+            || (request.resource.data.get('totalDisbursement', 0) is number && request.resource.data.get('totalDisbursement', 0) > 0)
+          );
+        allow delete: if false;
+      }
+
+      // Employees: Sensitive HR personnel records.
+      // Global HR and Company Admins can manage; deletion is restricted to Company Admins and Platform Admins.
+      match /employees/{employeeId} {
+        function acceptedInvitationEmployeeLink() {
+          let profile = getAfter(
+            /databases/$(database)/documents/users/$(request.auth.uid)
+          ).data;
+          let token = profile.get('invitationToken', '');
+          let invite = get(/databases/$(database)/documents/invites/$(token)).data;
+          let inviteAfter = getAfter(
+            /databases/$(database)/documents/invites/$(token)
+          ).data;
+          return signedIn()
+            && profile.get('id', '') == request.auth.uid
+            && profile.get('email', '') == request.auth.token.get('email', '')
+            && profile.get('companyId', '') == companyId
+            && profile.get('role', '') == invite.get('role', '')
+            && profile.get('onboardingStatus', '') == 'active'
+            && validPendingInvitationData(
+              invite,
+              token,
+              request.auth.token.get('email', ''),
+              companyId,
+              profile.get('role', '')
+            )
+            && inviteAfter.get('status', '') == 'accepted'
+            && inviteAfter.get('acceptedBy', '') == request.auth.uid
+            && inviteAfter.get('employeeId', '') == employeeId
+            && request.resource.data.get('userId', '') == request.auth.uid
+            && request.resource.data.get('email', '') == invite.get('email', '')
+            && request.resource.data.get('companyId', '') == companyId
+            && request.resource.data.get('role', '') == invite.get('role', '');
+        }
+
+        allow get: if belongsToCompany(companyId)
+          || isGlobalHrManager(companyId)
+          || (
+            pendingInviteeForCompany(companyId)
+            && resource.data.get('email', '') == request.auth.token.get('email', '')
+          );
+        allow list: if belongsToCompany(companyId)
+          || isGlobalHrManager(companyId)
+          || (
+            pendingInviteeForCompany(companyId)
+            && resource.data.get('email', '') == request.auth.token.get('email', '')
+          );
+        allow create: if isCompanyAdmin(companyId)
+          || isPlatformAdmin()
+          || isGlobalHrManager(companyId)
+          || (
+            acceptedInvitationEmployeeLink()
+            && request.resource.data.keys().hasOnly([
+              'id', 'userId', 'companyId', 'email', 'name',
+              'firstName', 'lastName', 'role', 'status', 'workMode',
+              'createdAt', 'updatedAt'
+            ])
+            && request.resource.data.get('workMode', 'remote') == 'remote'
+          );
+        allow update: if isCompanyAdmin(companyId)
+          || isPlatformAdmin()
+          || isGlobalHrManager(companyId)
+          || (
+            resource.data.get('userId', '') in ['', request.auth.uid]
+            &&
+            acceptedInvitationEmployeeLink()
+            && resource.data.get('email', '') == request.auth.token.get('email', '')
+            && resource.data.get('companyId', '') == companyId
+            && resource.data.get('role', '') == request.resource.data.get('role', '')
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['userId', 'updatedAt'])
+          );
+        // Self-service attendance status: the account linked to an employee
+        // record may flip ONLY its own shiftStatus (working/on-break/off-duty)
+        // plus the updatedAt stamp when punching in/out or taking a break.
+        // Ownership is proven by the record's userId matching the caller and
+        // tenant isolation by belongsToCompany; the diff whitelist keeps every
+        // identity, role, tenant and compensation field immutable. This restores
+        // the punch capability the employees catch-all exclusion removed, without
+        // reopening cross-employee or cross-company writes.
+        allow update: if belongsToCompany(companyId)
+          && resource != null
+          && resource.data.get('userId', '') == request.auth.uid
+          && request.resource.data.get('shiftStatus', '') in ['working', 'on-break', 'off-duty']
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['shiftStatus', 'updatedAt']);
+        allow delete: if isCompanyAdmin(companyId) || isPlatformAdmin();
+      }
+
+      // Invoices: Company client billing and receivables.
+      // Modifications and deletions are strictly restricted to Company Admins and Platform Admins.
+      match /invoices/{invoiceId} {
+        allow read: if belongsToCompany(companyId) || isPlatformAdmin();
+        allow create, update: if isCompanyAdmin(companyId) || isPlatformAdmin();
+        allow delete: if isCompanyAdmin(companyId) || isPlatformAdmin();
       }
 
       // Vendor bills are the canonical expense records. Any company member may
@@ -979,14 +1340,14 @@ service cloud.firestore {
           && collection != 'hr_schedule_assignments'
           && collection != 'hr_lateness_policies'
           && collection != 'hr_deduction_cases'
+          && collection != 'audit_logs'
+          && collection != 'employees'
+          && collection != 'invoices'
+          && isKnownGenericCollection(collection)
           && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection));
 
-        // Engine records: ordinary members get activity-scoped CRUD, but
-        // permanent deletion is a separate `delete` operation (the `operation`
-        // variable is null inside create/update evaluation, so it must live
-        // on its own allow clause) and stays an admin action — mirrors
-        // canDelete in the hooks, which additionally requires the per-module
-        // opt-in flag.
+        // Generic collection deletion: strictly restricted to Company Admins and Platform Admins.
+        // Prevents unauthorized deletion of any tenant records by regular employees.
         allow delete: if belongsToCompany(companyId)
           && collection != 'daily_reports'
           && collection != 'conversations'
@@ -1007,8 +1368,12 @@ service cloud.firestore {
           && collection != 'hr_schedule_assignments'
           && collection != 'hr_lateness_policies'
           && collection != 'hr_deduction_cases'
+          && collection != 'audit_logs'
+          && collection != 'employees'
+          && collection != 'invoices'
+          && isKnownGenericCollection(collection)
           && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection))
-          && (!isModuleRecordCollection(collection) || isCompanyAdmin(companyId));
+          && (isCompanyAdmin(companyId) || isPlatformAdmin());
 
         // Nested data such as tasks/{id}/comments
         match /{nested=**} {
@@ -1032,6 +1397,10 @@ service cloud.firestore {
             && collection != 'hr_schedule_assignments'
             && collection != 'hr_lateness_policies'
             && collection != 'hr_deduction_cases'
+            && collection != 'audit_logs'
+            && collection != 'employees'
+            && collection != 'invoices'
+            && isKnownGenericCollection(collection)
             && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection));
 
           allow delete: if belongsToCompany(companyId)
@@ -1054,8 +1423,12 @@ service cloud.firestore {
             && collection != 'hr_schedule_assignments'
             && collection != 'hr_lateness_policies'
             && collection != 'hr_deduction_cases'
+            && collection != 'audit_logs'
+            && collection != 'employees'
+            && collection != 'invoices'
+            && isKnownGenericCollection(collection)
             && (!isDomainCollection(collection) || domainAccessAllowed(companyId, collection))
-            && (!isModuleRecordCollection(collection) || isCompanyAdmin(companyId));
+            && (isCompanyAdmin(companyId) || isPlatformAdmin());
         }
       }
     }

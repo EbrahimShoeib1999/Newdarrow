@@ -112,9 +112,16 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
     : "This email is already registered to another employee";
 
   const onSubmit = async (data: HireFormData) => {
-    if (!companyId) return;
+    if (!companyId || !companyId.trim()) {
+      toast.error(
+        isAr
+          ? "يجب ربط الحساب بشركة صالحة قبل تعيين موظف جديد"
+          : "A valid company must be resolved before hiring an employee"
+      );
+      return;
+    }
     try {
-      await PeopleService.createEmployee(companyId, {
+      const employeeResponse = await PeopleService.createEmployee(companyId, {
         ...data,
         workType: "remote",
         attendanceCheckMode: "flexible",
@@ -153,7 +160,11 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
       // provisioning path — a hand-built query URL without a backing invite record
       // would leave the new hire unable to reach their company (empty dashboard,
       // permission-denied timer) after sign-up.
-      const { inviteUrl, token, emailMode } = await resolveInviteUrl(email, data.role as UserRole);
+      const { inviteUrl, token, emailMode } = await resolveInviteUrl(
+        email,
+        data.role as UserRole,
+        employeeResponse.data.id
+      );
 
       // Report the truth about delivery: the invitation record always exists, but
       // only say the email went out when the provider actually accepted it.
@@ -196,7 +207,8 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
    */
   const resolveInviteUrl = async (
     email: string,
-    role: UserRole
+    role: UserRole,
+    employeeId: string
   ): Promise<{ inviteUrl: string; token: string; emailMode: "sent" | "logged" }> => {
     if (!user) throw new Error("NO_ACTOR");
     try {
@@ -207,6 +219,7 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
         companyName: user.companyName || companyId!,
         invitedBy: user.id,
         invitedByName: user.name,
+        employeeId,
       });
       return { inviteUrl, token: invite.token, emailMode };
     } catch (err) {
@@ -487,8 +500,7 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
                   >
                     <SelectItem key="employee">{isAr ? "موظف عادي (Employee)" : "Employee"}</SelectItem>
                     <SelectItem key="manager">{isAr ? "مدير قسم (Manager)" : "Manager"}</SelectItem>
-                    <SelectItem key="admin">{isAr ? "مدير نظام (Admin)" : "Admin"}</SelectItem>
-                    <SelectItem key="super_admin">{isAr ? "مسؤول أعلى (Super Admin)" : "Super Admin"}</SelectItem>
+                    <SelectItem key="viewer">{isAr ? "مشاهد (Viewer)" : "Viewer"}</SelectItem>
                   </Select>
                   <Select 
                     {...selectFieldProps()}

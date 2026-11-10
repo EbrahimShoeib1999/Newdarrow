@@ -1,8 +1,11 @@
 import {
   doc,
   getDoc,
+  getDocs,
+  collection,
   setDoc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -49,8 +52,8 @@ function mapCompanyDoc(
 }
 
 export const CompanyService = {
-  async getProfile(companyId: string): Promise<ApiResponse<CompanyProfile | null>> {
-    return withLogging(SERVICE_NAME, "getProfile", (async () => {
+  async getCompany(companyId: string): Promise<ApiResponse<CompanyProfile | null>> {
+    return withLogging(SERVICE_NAME, "getCompany", (async () => {
       const snap = await getDoc(doc(db, "companies", companyId));
       if (!snap.exists()) {
         return { data: null, message: "No profile" };
@@ -60,6 +63,10 @@ export const CompanyService = {
         message: "Success",
       };
     })());
+  },
+
+  async getProfile(companyId: string): Promise<ApiResponse<CompanyProfile | null>> {
+    return CompanyService.getCompany(companyId);
   },
 
   async createProfile(
@@ -108,6 +115,31 @@ export const CompanyService = {
       return {
         data: mapCompanyDoc(companyId, updated.data() as Record<string, unknown>),
         message: "Updated successfully",
+      };
+    })());
+  },
+
+  async listAllCompanies(): Promise<ApiResponse<CompanyProfile[]>> {
+    return withLogging(SERVICE_NAME, "listAllCompanies", (async () => {
+      // Firestore rules intentionally permit this collection-wide query only
+      // for platform administrators. Tenant bootstrapping must use getCompany.
+      const snap = await getDocs(collection(db, "companies"));
+      const companies = snap.docs.map((d) =>
+        mapCompanyDoc(d.id, d.data() as Record<string, unknown>)
+      );
+      return {
+        data: companies,
+        message: "Success",
+      };
+    })());
+  },
+
+  async deleteCompany(companyId: string): Promise<ApiResponse<void>> {
+    return withLogging(SERVICE_NAME, "deleteCompany", (async () => {
+      await deleteDoc(doc(db, "companies", companyId));
+      return {
+        data: undefined,
+        message: "Company deleted",
       };
     })());
   },

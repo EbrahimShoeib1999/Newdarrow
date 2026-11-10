@@ -21,8 +21,8 @@ export function hasEffectivePermission(
   const { role, portalSubRoles, customPermissions } = ctx;
   if (!role) return false;
 
-  if (role === "super_admin") {
-    return ROLE_PERMISSIONS.super_admin.includes(permission);
+  if (role === "platform_admin" || role === "super_admin") {
+    return ROLE_PERMISSIONS[role].includes(permission);
   }
 
   // Explicit custom permission override granted to individual user

@@ -174,16 +174,13 @@ function encodeValue(val) {
   return { stringValue: String(val) };
 }
 function encodeFields(obj) { const f = {}; for (const k in obj) f[k] = encodeValue(obj[k]); return f; }
-// The emulator REST v1 API ENFORCES the same security rules as the client SDK.
-// Seeding/verification therefore runs as a legitimately authorized admin of the
-// test company (signedIn() true, matching companyId, admin role) — rules are
-// never bypassed, never weakened, and never over-read.
-let adminIdToken = "";
-function authHdr(token) {
-  const h = { "Content-Type": "application/json" };
-  const t = token ?? adminIdToken;
-  if (t) h.Authorization = `Bearer ${t}`;
-  return h;
+// Emulator owner credentials are used only to seed and inspect deterministic
+// fixtures. Every browser action under test uses the app SDK and real rules.
+function authHdr() {
+  return {
+    "Content-Type": "application/json",
+    Authorization: "Bearer owner",
+  };
 }
 async function fsGet(docPath, token) {
   const res = await fetch(`${FS_BASE}/${docPath}`, { headers: authHdr(token) });
@@ -220,6 +217,17 @@ async function createAuthUser(email, password) {
     body: JSON.stringify({ email, password, returnSecureToken: true }),
   })).json();
   return { uid: r.localId, idToken: s.idToken || r.idToken };
+}
+
+// Fresh sign-in for an EXISTING account, yielding a current idToken so a
+// rules-enforced REST request authenticates as that real user (not "owner").
+async function signInIdToken(email, password) {
+  const s = await (await fetch(`${AUTH_BASE}/accounts:signInWithPassword?key=fake-key`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
+  })).json();
+  if (!s.idToken) throw new Error(`signIn ${email} failed: ${JSON.stringify(s).slice(0, 200)}`);
+  return s.idToken;
 }
 
 async function waitUntil(fn, timeoutMs, label) {
@@ -287,6 +295,7 @@ log(`Starting test Vite on port ${VITE_PORT} (project ${PROJECT_ID})...`);
 const viteProc = spawn(process.execPath, ["node_modules/vite/bin/vite.js", "--port", String(VITE_PORT), "--strictPort"], {
   env: {
     ...process.env,
+    VITE_USE_FIREBASE_EMULATORS: "true",
     VITE_USE_FIREBASE_EMULATOR: "true",
     VITE_FIREBASE_EMULATOR_HOST: "127.0.0.1",
     VITE_FIREBASE_PROJECT_ID: PROJECT_ID,
@@ -328,12 +337,32 @@ const pending = new Map();
 const consoleBuf = [];
 const netLog = [];       // every http request url the page made
 const wsLog = [];        // every websocket url the page opened
+// ------------------------- DEEP FIRESTORE OPLOG ----------------------------
+const firestoreOps = [];   // structured log of every Firestore/Auth REST call from browser
+let currentScenario = "";
+let currentLanguage = "en";
+let currentStep = "";
+const setCurrentContext = (scenario, lang = "en", step = "") => {
+  currentScenario = scenario;
+  currentLanguage = lang;
+  currentStep = step;
+};
+const pendingResponses = new Map(); // requestId -> response metadata
 ws.onmessage = (evt) => {
   const data = JSON.parse(evt.data);
   if (data.id && pending.has(data.id)) { pending.get(data.id)(data); pending.delete(data.id); return; }
   switch (data.method) {
     case "Runtime.consoleAPICalled": {
-      const txt = (data.params?.args || []).map((a) => a.value ?? a.description ?? "").join(" ");
+      const txt = (data.params?.args || []).map((a) => {
+        if (a.value !== undefined) return String(a.value);
+        if (a.description) return a.description;
+        if (a.type === "object" && a.preview) {
+          // Serialize object preview
+          const props = a.preview.properties || [];
+          return `{${props.map((p) => `${p.name}:${p.value}`).join(", ")}}`;
+        }
+        return a.type || "";
+      }).join(" ");
       consoleBuf.push(`[${data.params?.type}] ${txt}`);
       break;
     }
@@ -344,10 +373,98 @@ ws.onmessage = (evt) => {
     }
     case "Network.requestWillBeSent":
       netLog.push(data.params?.request?.url || "");
+      // Extract Firestore/Auth operations with deeper context
+      {
+        const url = data.params?.request?.url || "";
+        const method = data.params?.request?.method || "GET";
+        if (url.includes(":8080") || url.includes(":9099")) {
+          const opType = method === "POST" ? "WRITE" : method === "GET" ? "READ" : method;
+          const path = (() => { try { return new URL(url).pathname; } catch { return ""; } })();
+          firestoreOps.push({
+            timestamp: Date.now(),
+            scenario: currentScenario,
+            language: currentLanguage,
+            step: currentStep,
+            method,
+            url,
+            path,
+            opType,
+            requestId: data.params?.requestId,
+          });
+        }
+      }
       break;
+    case "Network.responseReceived": {
+      const url = data.params?.response?.url || "";
+      const status = data.params?.response?.status || 0;
+      const requestId = data.params?.requestId;
+      if (url.includes(":8080") || url.includes(":9099")) {
+        pendingResponses.set(requestId, { url, status, mimeType: data.params?.response?.mimeType });
+        // Match to request log and enrich with response status
+        const op = firestoreOps.find((o) => o.requestId === requestId);
+        if (op) {
+          op.responseStatus = status;
+          op.responseTimestamp = Date.now();
+        }
+      }
+      break;
+    }
+    case "Network.loadingFinished": {
+      const requestId = data.params?.requestId;
+      if (pendingResponses.has(requestId)) {
+        const meta = pendingResponses.get(requestId);
+        pendingResponses.delete(requestId);
+        // Attempt to get response body for error responses (403, 404, 400, 500)
+        if (meta.status >= 400) {
+          void send("Network.getResponseBody", { requestId }).then((bodyRes) => {
+            const op = firestoreOps.find((o) => o.requestId === requestId);
+            if (op && bodyRes?.result?.body) {
+              const bodyText = bodyRes.result.body.slice(0, 1200);
+              op.responseBody = bodyText;
+              // Parse Firebase error structure
+              try {
+                const parsed = JSON.parse(bodyText);
+                if (parsed.error) {
+                  op.errorCode = parsed.error.code || parsed.error.status;
+                  op.errorMessage = parsed.error.message;
+                }
+              } catch {}
+            }
+          }).catch(() => {});
+        }
+      }
+      break;
+    }
     case "Network.webSocketCreated":
       wsLog.push(data.params?.url || "");
+      if (
+        PRODUCTION_PATTERNS.some((re) => re.test(data.params?.url || "")) &&
+        !/^wss?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(data.params?.url || "")
+      ) {
+        safetyAbort(`blocked non-local Firebase websocket: ${data.params.url}`);
+      }
       break;
+    case "Fetch.requestPaused": {
+      const requestUrl = data.params?.request?.url || "";
+      const url = new URL(requestUrl);
+      const isLocal =
+        (url.hostname === "localhost" && url.port === String(VITE_PORT)) ||
+        (url.hostname === "127.0.0.1" && ["8080", "9099", "9199"].includes(url.port));
+      const isFirebaseEndpoint =
+        PRODUCTION_PATTERNS.some((re) => re.test(requestUrl)) &&
+        !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(requestUrl);
+      const shouldBlock = isFirebaseEndpoint && !isLocal;
+      if (shouldBlock) {
+        void send("Fetch.failRequest", {
+          requestId: data.params.requestId,
+          errorReason: "BlockedByClient",
+        });
+        safetyAbort(`blocked non-local Firebase request: ${url.origin}${url.pathname}`);
+      } else {
+        void send("Fetch.continueRequest", { requestId: data.params.requestId });
+      }
+      break;
+    }
   }
 };
 function send(method, params = {}) {
@@ -362,6 +479,41 @@ await send("Runtime.enable");
 await send("Page.enable");
 await send("Network.enable");
 await send("Storage.enable");
+await send("Fetch.enable", { patterns: [{ urlPattern: "http*://*/*", requestStage: "Request" }] });
+
+// Observability-only in-page console serializer. CDP reports plain objects as
+// "Object", hiding the actual error code the store logs ({ code }). This hook
+// JSON-stringifies object/Error args into window.__attConsole so the timeout
+// diagnostic can read the EXACT code. It calls the original console untouched,
+// so the app's behavior and the CDP console stream are unchanged.
+await send("Page.addScriptToEvaluateOnNewDocument", { source: `
+  (function () {
+    if (window.__attConsoleHook) return;
+    window.__attConsoleHook = true;
+    window.__attConsole = [];
+    var ser = function (a) {
+      try {
+        if (a instanceof Error) return a.name + ': ' + a.message;
+        if (typeof a === 'object' && a !== null) return JSON.stringify(a);
+        return String(a);
+      } catch (e) { return String(a); }
+    };
+    ['log', 'info', 'warn', 'error', 'debug'].forEach(function (m) {
+      var orig = console[m] ? console[m].bind(console) : function () {};
+      console[m] = function () {
+        try {
+          var args = Array.prototype.slice.call(arguments);
+          window.__attConsole.push('[' + m + '] ' + args.map(ser).join(' '));
+          if (window.__attConsole.length > 4000) window.__attConsole.shift();
+        } catch (e) {}
+        orig.apply(null, arguments);
+      };
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      try { window.__attConsole.push('[unhandledrejection] ' + ser(e.reason)); } catch (err) {}
+    });
+  })();
+` });
 
 async function shot(name) {
   const scr = await send("Page.captureScreenshot", { format: "png" });
@@ -391,11 +543,148 @@ function setFieldExpr(selector, value, cls = "HTMLInputElement", prop = "value")
 const clickButtonWithIcon = (icon) => `(() => { const b = Array.from(document.querySelectorAll('button')).find(x => x.querySelector('svg.lucide-${icon}') && x.offsetParent !== null); if (b) { b.click(); return true; } return false; })()`;
 
 const results = [];
+
+// Optional scenario filter so the smallest failing scenario can be run in
+// isolation (Phase 4). ATT_ONLY="A" or "A,B" runs only matching scenarios;
+// unset runs the full matrix. Seeding still runs so fixtures are complete.
+const ATT_ONLY = (process.env.ATT_ONLY || "").split(",").map((s) => s.trim()).filter(Boolean);
+const scenarioSelected = (name) =>
+  !ATT_ONLY.length || ATT_ONLY.some((p) => name === p || name.startsWith(`${p}.`) || name.startsWith(`${p}-`) || name.startsWith(`${p} `));
+
+// ------------------------- STRICT TIMEOUT DIAGNOSTIC -----------------------
+async function dumpTimeoutDiagnostic(scenario, step, contextData = {}) {
+  log("\n" + "=".repeat(80));
+  log("ATTENDANCE FAILURE");
+  log("=".repeat(80));
+  log(`scenario: ${scenario}`);
+  log(`step: ${step}`);
+  log(`language: ${currentLanguage}`);
+  log(`timestamp: ${new Date().toISOString()}`);
+  
+  // Application state
+  const appState = await evalJs(`(() => {
+    try {
+      const auth = window.__darrowAuth;
+      const authUser = auth?.currentUser;
+      return {
+        authUid: authUser?.uid || null,
+        authEmail: authUser?.email || null,
+        localStorage: Object.keys(localStorage).reduce((acc, k) => {
+          if (k.includes('lang') || k.includes('company') || k.includes('user')) {
+            acc[k] = localStorage.getItem(k)?.slice(0, 200);
+          }
+          return acc;
+        }, {}),
+      };
+    } catch (e) { return { error: e.message }; }
+  })()`).catch(() => ({ error: "eval failed" }));
+  
+  // Try to read error details from recent console logs (serialized in-page so
+  // object args like { code } are visible, not collapsed to "Object").
+  const serializedConsole = await evalJs(`(() => { try { return (window.__attConsole || []).slice(-400); } catch (e) { return []; } })()`).catch(() => []);
+  const syncFailures = (Array.isArray(serializedConsole) ? serializedConsole : []).filter((line) => /AttendanceStore.*Sync failed/i.test(line));
+  const lastSyncError = syncFailures[syncFailures.length - 1] || consoleBuf.filter((l) => /AttendanceStore.*Sync failed/i.test(l)).slice(-1)[0] || "(none)";
+  
+  log(`\nAPPLICATION STATE:`);
+  log(`  auth.uid: ${appState.authUid || "(not authenticated)"}`);
+  log(`  auth.email: ${appState.authEmail || "(none)"}`);
+  log(`  last sync error: ${lastSyncError}`);
+  if (contextData.uid) log(`  expected uid: ${contextData.uid}`);
+  if (contextData.companyId) log(`  expected companyId: ${contextData.companyId}`);
+  if (contextData.employeeId) log(`  expected employeeId: ${contextData.employeeId}`);
+  
+  // Pending Firestore requests
+  const pending = firestoreOps.filter((op) => !op.responseStatus);
+  log(`\nPENDING FIRESTORE REQUESTS (${pending.length}):`);
+  for (const op of pending.slice(-5)) {
+    log(`  ${op.method} ${op.path}`);
+    log(`    scenario=${op.scenario} step=${op.step} lang=${op.language}`);
+    log(`    timestamp=${new Date(op.timestamp).toISOString()}`);
+  }
+  
+  // Last successful requests
+  const successful = firestoreOps.filter((op) => op.responseStatus && op.responseStatus < 400);
+  log(`\nLAST SUCCESSFUL FIRESTORE REQUEST (${successful.length} total):`);
+  const lastSuccess = successful[successful.length - 1];
+  if (lastSuccess) {
+    log(`  ${lastSuccess.method} ${lastSuccess.path}`);
+    log(`    status=${lastSuccess.responseStatus} timestamp=${new Date(lastSuccess.responseTimestamp).toISOString()}`);
+  } else {
+    log(`  (none)`);
+  }
+  
+  // Last error responses
+  const errors = firestoreOps.filter((op) => op.responseStatus >= 400);
+  log(`\nFIRESTORE ERROR RESPONSES (${errors.length} total):`);
+  for (const op of errors.slice(-5)) {
+    log(`  ${op.method} ${op.path}`);
+    log(`    HTTP status: ${op.responseStatus}`);
+    log(`    error.code: ${op.errorCode || "(not parsed)"}`);
+    log(`    error.message: ${op.errorMessage || "(not parsed)"}`);
+    log(`    scenario=${op.scenario} step=${op.step} lang=${op.language}`);
+    log(`    timestamp=${new Date(op.responseTimestamp).toISOString()}`);
+    if (op.responseBody) log(`    body preview: ${op.responseBody.slice(0, 300)}`);
+  }
+  
+  // Browser console tail
+  log(`\nBROWSER CONSOLE (last 30 lines):`);
+  const tail = consoleBuf.slice(-30);
+  for (const line of tail) {
+    log(`  ${line.slice(0, 240)}`);
+  }
+  // Serialized sync-failure lines carry the EXACT application error code.
+  const serializedSyncTail = (Array.isArray(serializedConsole) ? serializedConsole : []).filter((l) => /Sync failed|Check-in error|EMPLOYEE_PROFILE|permission-denied|Sync Error/i.test(l)).slice(-6);
+  if (serializedSyncTail.length) {
+    log(`\nSERIALIZED APPLICATION ERRORS (exact codes):`);
+    for (const line of serializedSyncTail) log(`  ${line.slice(0, 300)}`);
+  }
+  
+  // Network summary
+  const all = [...netLog, ...wsLog];
+  const localAuth = all.filter((u) => /127\.0\.0\.1:9099|localhost:9099/.test(u)).length;
+  const localFs = all.filter((u) => /127\.0\.0.1:8080|localhost:8080/.test(u)).length;
+  log(`\nNETWORK ACTIVITY:`);
+  log(`  total requests: ${all.length}`);
+  log(`  local auth (9099): ${localAuth}`);
+  log(`  local firestore (8080): ${localFs}`);
+  log(`  firestore ops logged: ${firestoreOps.length}`);
+  
+  log("=".repeat(80) + "\n");
+  
+  // Write structured diagnostic to file
+  try {
+    const diagnostic = {
+      scenario,
+      step,
+      language: currentLanguage,
+      timestamp: new Date().toISOString(),
+      appState,
+      lastSyncError,
+      serializedSyncTail,
+      contextData,
+      pendingRequests: pending.slice(-10),
+      lastSuccessful: lastSuccess || null,
+      errors: errors.slice(-10),
+      consoleTail: tail,
+      networkSummary: { total: all.length, localAuth, localFs, firestoreOps: firestoreOps.length },
+    };
+    writeFileSync(path.join(OUT_DIR, `${scenario}-TIMEOUT-DIAGNOSTIC.json`), JSON.stringify(diagnostic, null, 2));
+  } catch {}
+}
+
 async function scenario(name, fn) {
+  if (!scenarioSelected(name)) { log(`\n⏭️  ${name} — skipped (ATT_ONLY=${ATT_ONLY.join(",")})`); return; }
+  setCurrentContext(name, "en", "start");
   try { const detail = await fn(); log(`\n✅ ${name} — ${detail}`); results.push({ name, ok: true, detail }); }
   catch (e) {
     const msg = e?.message || String(e);
     log(`\n❌ ${name} — ${msg}`);
+    
+    // Strict timeout diagnostic for attendance failures
+    if (/timed out|timeout/i.test(msg)) {
+      await dumpTimeoutDiagnostic(name, currentStep, {});
+    }
+    
     // Evidence dump on failure: the console tail is what separates UI timing,
     // permissions, provisioning, authorization and business logic.
     const tail = consoleBuf.slice(-25);
@@ -426,6 +715,7 @@ async function dismissLateAlertIfPresent() {
 }
 
 async function login(email, pass, lang = "en") {
+  setCurrentContext(currentScenario, lang, "login");
   await goto(`${ORIGIN}/login`);
   // Language must be pinned BEFORE the app boots i18n (detector order: localStorage,navigator).
   await evalJs(`localStorage.setItem('d-arrow-lang', ${JSON.stringify(lang)}); true`);
@@ -433,6 +723,7 @@ async function login(email, pass, lang = "en") {
   await waitUntil(() => evalJs(`!!document.querySelector('input[name="email"]')`), 150000, "login form");
   await evalJs(setFieldExpr('input[name="email"]', email));
   await evalJs(setFieldExpr('input[type="password"]', pass));
+  setCurrentContext(currentScenario, lang, "submit-login");
   await evalJs(`document.querySelector('button[type="submit"]').click()`);
   await waitUntil(async () => !(await currentUrl()).includes("/login"), 60000, "post-login redirect");
   const dir = await evalJs(`document.documentElement.dir || getComputedStyle(document.body).direction || 'ltr'`);
@@ -445,6 +736,7 @@ async function login(email, pass, lang = "en") {
 // the negative signal is a retryable role="alert" chip which we click as a real
 // user would (cold-LIST retry) and then re-await.
 async function waitForTrackerReady(mark) {
+  setCurrentContext(currentScenario, currentLanguage, "wait-tracker-ready");
   const completed = () => consoleSince(mark, /PeopleService:getAttendance.*Completed/i).length > 0;
   const errored = () => consoleSince(mark, /AttendanceStore\] Sync Error/i).length > 0;
   await waitUntil(async () => {
@@ -544,7 +836,6 @@ try {
   log("GATE 1d firestore emulator configured non-persistent (fresh in-memory database, no export/import).");
 
   const admin = await createAuthUser(ADMIN.email, ADMIN.pass);
-  adminIdToken = admin.idToken;
   // The admin writes its OWN profile first (self-write, as signup does); without
   // it belongsToCompany() cannot be evaluated and every company-scoped op 403s.
   await seedDoc(`users/${admin.uid}`, {
@@ -574,17 +865,17 @@ try {
 
   // Employee business records — each carries its OWN attendance configuration.
   await seedDoc(`companies/${COMPANY_ID}/employees/e-office`, {
-    userId: uidOffice, firstName: "Omar", lastName: "Office", name: "Omar Office", email: EMP.office.email,
+    companyId: COMPANY_ID, userId: uidOffice, firstName: "Omar", lastName: "Office", name: "Omar Office", email: EMP.office.email,
     jobTitle: "Engineer", shiftStatus: "off-duty", workType: "onsite", allowRemoteTimer: false,
     attendanceCheckMode: "geofence", attendanceLocationIds: ["hq"], department: "Engineering",
   });
   await seedDoc(`companies/${COMPANY_ID}/employees/e-remote`, {
-    userId: uidRemote, firstName: "Rana", lastName: "Remote", name: "Rana Remote", email: EMP.remote.email,
+    companyId: COMPANY_ID, userId: uidRemote, firstName: "Rana", lastName: "Remote", name: "Rana Remote", email: EMP.remote.email,
     jobTitle: "Designer", shiftStatus: "off-duty", workType: "remote", allowRemoteTimer: true,
     attendanceCheckMode: "flexible", attendanceLocationIds: [], department: "Design",
   });
   await seedDoc(`companies/${COMPANY_ID}/employees/e-noassign`, {
-    userId: uidNoAssign, firstName: "Nada", lastName: "NoAssign", name: "Nada NoAssign", email: EMP.noassign.email,
+    companyId: COMPANY_ID, userId: uidNoAssign, firstName: "Nada", lastName: "NoAssign", name: "Nada NoAssign", email: EMP.noassign.email,
     jobTitle: "Analyst", shiftStatus: "off-duty", workType: "onsite", allowRemoteTimer: false,
     attendanceCheckMode: "geofence", attendanceLocationIds: [], department: "Finance",
   });
@@ -605,19 +896,19 @@ try {
     id: "annex", name: "Closed Annex", isActive: false, lat: LOC.lat, lng: LOC.lng, radiusMeters: LOC.radiusMeters, companyId: COMPANY_ID,
   });
   await seedDoc(`companies/${COMPANY_ID}/employees/e-office-2`, {
-    userId: office2.uid, firstName: "Oma", lastName: "Office2", name: "Oma Office2", email: EMP.officeTwo.email,
+    companyId: COMPANY_ID, userId: office2.uid, firstName: "Oma", lastName: "Office2", name: "Oma Office2", email: EMP.officeTwo.email,
     jobTitle: "Accountant", shiftStatus: "off-duty", status: "active", workType: "onsite", allowRemoteTimer: false,
     attendanceCheckMode: "geofence", attendanceLocationIds: ["hq"], department: "Finance",
     joiningDate: new Date().toISOString(),
   });
   await seedDoc(`companies/${COMPANY_ID}/employees/e-terminated`, {
-    userId: term.uid, firstName: "Ter", lastName: "Inated", name: "Ter Inated", email: EMP.terminated.email,
+    companyId: COMPANY_ID, userId: term.uid, firstName: "Ter", lastName: "Inated", name: "Ter Inated", email: EMP.terminated.email,
     jobTitle: "Clerk", shiftStatus: "off-duty", status: "terminated", workType: "onsite", allowRemoteTimer: false,
     attendanceCheckMode: "geofence", attendanceLocationIds: ["hq"], department: "Operations",
     joiningDate: new Date().toISOString(),
   });
   await seedDoc(`companies/${COMPANY_ID}/employees/e-ghost-loc`, {
-    userId: ghost.uid, firstName: "Gho", lastName: "Stloc", name: "Gho Stloc", email: EMP.ghostLoc.email,
+    companyId: COMPANY_ID, userId: ghost.uid, firstName: "Gho", lastName: "Stloc", name: "Gho Stloc", email: EMP.ghostLoc.email,
     jobTitle: "Analyst", shiftStatus: "off-duty", status: "active", workType: "onsite", allowRemoteTimer: false,
     attendanceCheckMode: "geofence", attendanceLocationIds: ["annex"], department: "Facilities",
     joiningDate: new Date().toISOString(),
@@ -633,7 +924,7 @@ try {
     const { uid, idToken } = await createAuthUser(e.email, e.pass);
     await seedDoc(`users/${uid}`, { id: uid, email: e.email, name: e.empId, role: "employee", companyId: COMPANY_ID, portalAccess: ["people", "tasks"], portalSubRoles: {} }, idToken);
     await seedDoc(`companies/${COMPANY_ID}/employees/${e.empId}`, {
-      userId: uid, firstName: e.empId, lastName: "Shift", name: `${e.empId} Shift`, email: e.email,
+      companyId: COMPANY_ID, userId: uid, firstName: e.empId, lastName: "Shift", name: `${e.empId} Shift`, email: e.email,
       jobTitle: "Engineer", shiftStatus: "off-duty", workType: "remote", allowRemoteTimer: true,
       attendanceCheckMode: "flexible", attendanceLocationIds: [], department: "Operations",
       joiningDate: new Date().toISOString(),
@@ -681,10 +972,12 @@ try {
 
   // ---------------------------------------------------------------------------
   await scenario("A. Office geofence check-in → refresh → restore → check-out", async () => {
+    setCurrentContext("A", "en", "init");
     await setGeo({ grant: true, coords: LOC }); // inside the geofence
     await signOutBrowser();
     const { dir } = await login(EMP.office.email, EMP.office.pass, "en");
     const mark = consoleBuf.length;
+    setCurrentContext("A", "en", "navigate-tasks");
     await goto(`${ORIGIN}/tasks`);
     await waitForTrackerReady(mark);
 
@@ -696,6 +989,7 @@ try {
     await shot("A-01-before");
 
     // Real UI check-in: click the play (lucide-play) control.
+    setCurrentContext("A", "en", "check-in");
     const clicked = await waitUntil(() => evalJs(clickButtonWithIcon("play")), 30000, "office check-in (play) button");
     if (!clicked) throw new Error("play/check-in button never clickable");
 
@@ -718,6 +1012,7 @@ try {
     await dismissLateAlertIfPresent();
 
     // Refresh → the active session must be RESTORED from Firestore.
+    setCurrentContext("A", "en", "refresh");
     await send("Page.reload");
     await waitUntil(async () => !(await currentUrl()).includes("/login"), 30000, "session after reload");
     const mark2 = consoleBuf.length;
@@ -730,6 +1025,7 @@ try {
     await shot("A-03-resumed");
 
     // Real UI check-out: stop → daily-report modal → summary → send.
+    setCurrentContext("A", "en", "check-out");
     await evalJs(clickButtonWithIcon("square"));
     await waitUntil(() => evalJs(`!!document.querySelector('textarea')`), 20000, "daily report modal");
     await evalJs(setFieldExpr("textarea", "Office shift completed for E2E verification.", "HTMLTextAreaElement"));
@@ -1152,6 +1448,59 @@ try {
     if (after.length !== before.length) throw new Error(`location-inactive employee managed to open an attendance record`);
     await shot("F3-location-inactive");
     return `banner=location_inactive recordsBefore=${before.length} recordsAfter=${after.length}`;
+  });
+
+  // ---------- Phase 8: explicit cross-company tenant-isolation negative -----
+  // A legitimate Company A user must be DENIED reading/writing Company B's
+  // attendance by Firestore rules, and Company B's data must remain unchanged.
+  // The probe authenticates with the employee's REAL idToken (not "owner"), so
+  // the emulator evaluates firestore.rules exactly as production would.
+  await scenario("G. Cross-company attendance access is denied by Firestore rules (tenant isolation)", async () => {
+    setCurrentContext("G", "en", "seed-other-company");
+    const OTHER = "other-co";
+    await seedDoc(`companies/${OTHER}`, { id: OTHER, name: "Other Co", defaultCurrency: "USD" });
+    await seedDoc(`companies/${OTHER}/attendance/other-att-1`, {
+      employeeId: "other-emp", userId: "other-user", companyId: OTHER,
+      date: "2026-01-01", checkIn: new Date().toISOString(), status: "present",
+    });
+    const token = await signInIdToken(EMP.office.email, EMP.office.pass);
+    const hdr = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+    // Positive control: the SAME token CAN list its own company's attendance,
+    // proving the token is valid and the denial below is tenant isolation.
+    const own = await fetch(`${FS_BASE}/companies/${COMPANY_ID}/attendance?pageSize=5`, { headers: hdr });
+    if (own.status !== 200) throw new Error(`positive control failed: own-company attendance list returned ${own.status} (token may be invalid)`);
+
+    // Negative read: Company A user → Company B attendance document.
+    const readPath = `companies/${OTHER}/attendance/other-att-1`;
+    const denied = await fetch(`${FS_BASE}/${readPath}`, { headers: hdr });
+    const deniedBody = await denied.json().catch(() => ({}));
+    const deniedCode = deniedBody?.error?.status || deniedBody?.error?.code;
+    if (denied.status !== 403 || String(deniedCode) !== "PERMISSION_DENIED") {
+      throw new Error(`cross-company read NOT denied: HTTP ${denied.status} code=${deniedCode} body=${JSON.stringify(deniedBody).slice(0, 200)}`);
+    }
+    log(`   [tenant] READ DENIED path=${readPath} HTTP=${denied.status} code=${deniedCode}`);
+
+    // Negative write: Company A user attempts to create a row in Company B.
+    const writePath = `companies/${OTHER}/attendance/intruder-row`;
+    const deniedWrite = await fetch(`${FS_BASE}/${writePath}`, {
+      method: "PATCH", headers: hdr,
+      body: JSON.stringify({ fields: encodeFields({ employeeId: "e-office", userId: uidOffice, companyId: OTHER, date: "2026-01-01", status: "present" }) }),
+    });
+    const writeBody = await deniedWrite.json().catch(() => ({}));
+    const writeCode = writeBody?.error?.status || writeBody?.error?.code;
+    if (deniedWrite.status !== 403 || String(writeCode) !== "PERMISSION_DENIED") {
+      throw new Error(`cross-company write NOT denied: HTTP ${deniedWrite.status} code=${writeCode}`);
+    }
+    log(`   [tenant] WRITE DENIED path=${writePath} HTTP=${deniedWrite.status} code=${writeCode}`);
+
+    // Company B data must remain unchanged; no intruder row may exist.
+    const intact = await fsGet(`companies/${OTHER}/attendance/other-att-1`);
+    if (!intact || intact.employeeId !== "other-emp" || intact.status !== "present") throw new Error("Company B attendance row was modified");
+    const intruder = await fsGet(`companies/${OTHER}/attendance/intruder-row`);
+    if (intruder) throw new Error("cross-company write created an intruder row in Company B");
+    assertLocalOnlyOnly("G: tenant-isolation probe");
+    return `own-company list=200; cross-company READ denied (path=${readPath} HTTP=403 code=${deniedCode}); WRITE denied (path=${writePath} HTTP=403 code=${writeCode}); Company B row intact, no intruder row`;
   });
 } finally {
   log("\n================ attendance-lifecycle evidence ================");

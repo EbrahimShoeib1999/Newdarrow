@@ -18,6 +18,7 @@ export interface TeamInvite {
   expiresAt: string;
   acceptedAt?: string | null;
   acceptedBy?: string | null;
+  employeeId?: string;
   portalAccess?: PortalId[] | null;
   portalSubRoles?: PortalSubRoles | null;
 }
@@ -29,6 +30,7 @@ export interface CreateInviteInput {
   companyName: string;
   invitedBy: string;
   invitedByName: string;
+  employeeId?: string;
   portalAccess?: PortalId[] | null;
   portalSubRoles?: PortalSubRoles | null;
 }

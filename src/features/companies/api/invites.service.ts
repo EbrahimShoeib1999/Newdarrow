@@ -8,7 +8,6 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  updateDoc,
   where,
   Timestamp,
   writeBatch,
@@ -47,6 +46,7 @@ function mapInvite(id: string, data: Record<string, unknown>): TeamInvite {
     expiresAt: toIso(data.expiresAt),
     acceptedAt: data.acceptedAt ? toIso(data.acceptedAt) : null,
     acceptedBy: data.acceptedBy ? String(data.acceptedBy) : null,
+    employeeId: typeof data.employeeId === "string" ? data.employeeId : undefined,
     portalAccess: (data.portalAccess as TeamInvite["portalAccess"]) ?? null,
     portalSubRoles: (data.portalSubRoles as TeamInvite["portalSubRoles"]) ?? null,
   };
@@ -86,7 +86,9 @@ async function sendInviteEmail(params: {
   ].join("\n");
 
   if (!serviceId || !templateId || !publicKey) {
-    console.warn(`[INVITE DEV] Link for ${params.email}: ${params.inviteUrl}`);
+    console.warn(
+      "[INVITE DEV] Email delivery is not configured; the invitation link remains available in the interface."
+    );
     return "logged";
   }
 
@@ -132,10 +134,13 @@ async function sendInviteEmail(params: {
     );
     return "sent";
   } catch (err) {
-    console.warn(
-      `[INVITE] Email delivery failed for ${params.email}; invite link remains valid:`,
-      err
-    );
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String(err.code)
+        : "unknown";
+    console.warn("[INVITE] Email delivery failed; invite link remains valid.", {
+      code,
+    });
     return "logged";
   }
 }
@@ -152,6 +157,9 @@ export const InvitesService = {
       }
       if (!canAssignRole(actorRole, input.role)) {
         throw new Error("You cannot assign this role");
+      }
+      if (!["employee", "viewer", "manager", "global_hr_manager"].includes(input.role)) {
+        throw new Error("INVITE_ROLE_NOT_ALLOWED");
       }
 
       const existingUsers = await getDocs(
@@ -183,7 +191,7 @@ export const InvitesService = {
           ? crypto.randomUUID().replace(/-/g, "")
           : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-      const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
+      const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
       const ref = doc(db, "invites", token);
       const payload = {
         token,
@@ -193,13 +201,14 @@ export const InvitesService = {
         companyName: input.companyName,
         invitedBy: input.invitedBy,
         invitedByName: input.invitedByName,
+        ...(input.employeeId ? { employeeId: input.employeeId } : {}),
         status: "pending" as const,
         createdAt: serverTimestamp(),
-        expiresAt,
+        expiresAt: Timestamp.fromDate(expiresAt),
         acceptedAt: null,
         acceptedBy: null,
-        portalAccess: input.portalAccess ?? null,
-        portalSubRoles: input.portalSubRoles ?? null,
+        portalAccess: input.portalAccess ?? [],
+        portalSubRoles: input.portalSubRoles ?? {},
       };
 
       await setDoc(ref, payload);
@@ -242,8 +251,16 @@ export const InvitesService = {
   },
 
   async getByToken(token: string): Promise<TeamInvite | null> {
-    return withLogging(SERVICE_NAME, "getByToken", (async () => {
+    console.info("[InvitesService:getByToken] Firestore operation started", {
+      operation: "get",
+      path: "invites/{token}",
+    });
+    try {
       const snap = await getDoc(doc(db, "invites", token));
+      console.info("[InvitesService:getByToken] Firestore operation succeeded", {
+        operation: "get",
+        path: "invites/{token}",
+      });
       if (!snap.exists()) return null;
       const invite = mapInvite(snap.id, snap.data() as Record<string, unknown>);
       if (invite.status !== "pending") return invite;
@@ -251,7 +268,18 @@ export const InvitesService = {
         return { ...invite, status: "expired" };
       }
       return invite;
-    })());
+    } catch (err) {
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String(err.code)
+          : "unknown";
+      console.error("[InvitesService:getByToken] Firestore operation failed", {
+        operation: "get",
+        path: "invites/{token}",
+        code,
+      });
+      throw err;
+    }
   },
 
   /**
@@ -316,13 +344,4 @@ export const InvitesService = {
     })());
   },
 
-  async markAccepted(token: string, userId: string): Promise<void> {
-    return withLogging(SERVICE_NAME, "markAccepted", (async () => {
-      await updateDoc(doc(db, "invites", token), {
-        status: "accepted",
-        acceptedAt: new Date().toISOString(),
-        acceptedBy: userId,
-      });
-    })());
-  },
 };

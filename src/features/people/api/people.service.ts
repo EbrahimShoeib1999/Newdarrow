@@ -110,11 +110,28 @@ async function lookupEmployeeEmail(
   };
 }
 
-function canonicalCountryKey(value: string): string {
+export function canonicalCountryKey(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return "";
-  if (normalized === "eg" || normalized.includes("egypt")) return "eg";
-  if (normalized === "sa" || normalized.includes("saudi") || normalized.includes("ksa")) return "sa";
+  if (
+    normalized === "eg" ||
+    normalized.includes("egypt") ||
+    normalized.includes("cairo") ||
+    normalized.includes("alexandria") ||
+    normalized.includes("giza")
+  ) {
+    return "eg";
+  }
+  if (
+    normalized === "sa" ||
+    normalized.includes("saudi") ||
+    normalized.includes("ksa") ||
+    normalized.includes("riyadh") ||
+    normalized.includes("jeddah") ||
+    normalized.includes("dammam")
+  ) {
+    return "sa";
+  }
   return normalized.replace(/\s+/g, " ");
 }
 
@@ -144,7 +161,7 @@ export function filterEmployeesByScope(
 ): Employee[] {
   if (!scope) return employees;
 
-  if (scope.role === "super_admin" || scope.role === "admin") {
+  if (scope.role === "platform_admin" || scope.role === "super_admin" || scope.role === "admin") {
     return employees;
   }
 
@@ -575,6 +592,7 @@ export const PeopleService = {
             hasCompanyWideAccess: callerScope.hasCompanyWideAccess !== undefined
               ? callerScope.hasCompanyWideAccess
               : Boolean(
+                  (callerScope as any).role === "platform_admin" ||
                   (callerScope as any).role === "admin" ||
                   (callerScope as any).role === "super_admin" ||
                   (callerScope as any).role === "global_hr_manager" ||
@@ -586,9 +604,10 @@ export const PeopleService = {
           if (!scope && typeof window !== "undefined") {
             try {
               const authUser = useAuthStore.getState().user;
-              if (authUser && authUser.companyId === companyId) {
+              if (authUser && (authUser.role === "platform_admin" || authUser.role === "super_admin" || authUser.companyId === companyId)) {
                 const role = authUser.role;
                 const canViewAll =
+                  role === "platform_admin" ||
                   role === "admin" ||
                   role === "super_admin" ||
                   role === "global_hr_manager" ||
@@ -1205,6 +1224,9 @@ export const PeopleService = {
 
   async createEmployee(companyId: string, employeeData: Omit<Employee, 'id'>): Promise<ApiResponse<Employee>> {
     return withLogging(SERVICE_NAME, "createEmployee", (async () => {
+      if (!companyId || !companyId.trim()) {
+        throw new Error("companyId is required: employee must belong to a company");
+      }
       const email = normalizeEmail(employeeData.email);
       if (!email) throw new Error(EMPLOYEE_EMAIL_REQUIRED);
 
@@ -1214,6 +1236,7 @@ export const PeopleService = {
       const employeesRef = collection(db, "companies", companyId, "employees");
       const docRef = await addDoc(employeesRef, {
         ...employeeData,
+        companyId: companyId.trim(),
         email,
         userId: linkedUserId || employeeData.userId || "",
         createdAt: serverTimestamp(),

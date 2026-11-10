@@ -14,24 +14,28 @@ interface CompanyContextValue {
 const CompanyContext = createContext<CompanyContextValue | null>(null);
 
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (isAuthenticated && user?.companyId) {
-      setCompanyId(user.companyId);
-    } else if (!isAuthenticated) {
-      setCompanyId(null);
+    if (authLoading) {
+      setIsLoading(true);
+      return;
     }
+    const resolvedCompanyId =
+      isAuthenticated && user?.companyId?.trim()
+        ? user.companyId.trim()
+        : null;
+    setCompanyId(resolvedCompanyId);
     setIsLoading(false);
-  }, [user, isAuthenticated]);
+  }, [authLoading, isAuthenticated, user?.companyId]);
 
   // Shares its cache with useCompanyProfile() (same query key) — this doesn't
   // add an extra fetch beyond whatever the settings page already triggers.
   const { data: profileRes } = useQuery({
     queryKey: QUERY_KEYS.company.profile(companyId ?? ""),
-    queryFn: () => CompanyService.getProfile(companyId!),
+    queryFn: () => CompanyService.getCompany(companyId!),
     enabled: !!companyId,
   });
 

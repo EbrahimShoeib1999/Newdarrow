@@ -25,17 +25,17 @@ export const PORTAL_PATHS: Record<PortalId, string> = {
 
 /** @deprecated Use ROLE_PERMISSIONS from @/lib/permissions */
 export const PORTAL_ACCESS: Record<PortalId, readonly UserRole[]> = {
-  tasks: ["super_admin", "admin", "manager", "employee"],
-  crm: ["super_admin", "admin", "manager", "employee", "viewer"],
-  people: ["super_admin", "admin", "manager", "global_hr_manager", "employee"],
-  billing: ["super_admin", "admin", "manager"],
-  chat: ["super_admin", "admin", "manager", "employee", "viewer"],
-  projects: ["super_admin", "admin", "manager", "employee"],
-  facilities: ["super_admin", "admin", "manager", "employee"],
-  agency: ["super_admin", "admin", "manager", "employee"],
-  real_estate: ["super_admin", "admin", "manager", "employee"],
-  school: ["super_admin", "admin", "manager"],
-  custom_modules: ["super_admin", "admin", "manager", "employee"],
+  tasks: ["platform_admin", "super_admin", "admin", "manager", "employee"],
+  crm: ["platform_admin", "super_admin", "admin", "manager", "employee", "viewer"],
+  people: ["platform_admin", "super_admin", "admin", "manager", "global_hr_manager", "employee"],
+  billing: ["platform_admin", "super_admin", "admin", "manager"],
+  chat: ["platform_admin", "super_admin", "admin", "manager", "employee", "viewer"],
+  projects: ["platform_admin", "super_admin", "admin", "manager", "employee"],
+  facilities: ["platform_admin", "super_admin", "admin", "manager", "employee"],
+  agency: ["platform_admin", "super_admin", "admin", "manager", "employee"],
+  real_estate: ["platform_admin", "super_admin", "admin", "manager", "employee"],
+  school: ["platform_admin", "super_admin", "admin", "manager"],
+  custom_modules: ["platform_admin", "super_admin", "admin", "manager", "employee"],
 };
 
 export function canAccessPortal(

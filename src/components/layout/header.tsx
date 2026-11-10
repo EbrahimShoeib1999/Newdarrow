@@ -20,7 +20,7 @@ import {
   PopoverContent,
   Tooltip,
 } from "@heroui/react";
-import { Menu, Moon, Sun, LogOut, User, Clock, Settings, LayoutGrid } from "lucide-react";
+import { Menu, Moon, Sun, LogOut, User, Clock, Settings, LayoutGrid, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { initialsFromName, localizedName } from "@/lib/localized-name";
 import { avatarSrc } from "@/lib/image-utils";
@@ -160,6 +160,19 @@ export function Header({
         <div className="shrink-0"><LanguageSwitcher compact className="sm:hidden" /></div>
         <div className="shrink-0"><LanguageSwitcher className="hidden sm:flex" /></div>
 
+        {user?.role === "platform_admin" && (
+          <Button
+            size="sm"
+            color="primary"
+            variant="flat"
+            className="hidden sm:inline-flex font-semibold text-xs"
+            startContent={<ShieldCheck className="w-3.5 h-3.5" />}
+            onPress={() => navigate("/platform")}
+          >
+            Platform Hub
+          </Button>
+        )}
+
         <Button
           isIconOnly
           variant="flat"
@@ -190,29 +203,42 @@ export function Header({
             </div>
           </DropdownTrigger>
           <DropdownMenu aria-label="User Actions" variant="flat">
-            <DropdownItem
-              key="profile"
-              startContent={<User className="h-4 w-4" />}
-              onPress={() => navigate("/profile")}
-            >
-              {t("user.profile")}
-            </DropdownItem>
-            <DropdownItem
-              key="settings"
-              startContent={<Settings className="h-4 w-4" />}
-              onPress={() => navigate("/settings/company")}
-            >
-              {t("user.settings")}
-            </DropdownItem>
-            <DropdownItem
-              key="logout"
-              className="text-danger"
-              color="danger"
-              onPress={logout}
-              startContent={<LogOut className="h-4 w-4" />}
-            >
-              {t("user.logout")}
-            </DropdownItem>
+            {[
+              ...(user?.role === "platform_admin"
+                ? [
+                    <DropdownItem
+                      key="platform"
+                      startContent={<ShieldCheck className="h-4 w-4 text-primary" />}
+                      onPress={() => navigate("/platform")}
+                    >
+                      Platform Admin Hub
+                    </DropdownItem>,
+                  ]
+                : []),
+              <DropdownItem
+                key="profile"
+                startContent={<User className="h-4 w-4" />}
+                onPress={() => navigate("/profile")}
+              >
+                {t("user.profile")}
+              </DropdownItem>,
+              <DropdownItem
+                key="settings"
+                startContent={<Settings className="h-4 w-4" />}
+                onPress={() => navigate("/settings/company")}
+              >
+                {t("user.settings")}
+              </DropdownItem>,
+              <DropdownItem
+                key="logout"
+                className="text-danger"
+                color="danger"
+                onPress={logout}
+                startContent={<LogOut className="h-4 w-4" />}
+              >
+                {t("user.logout")}
+              </DropdownItem>,
+            ]}
           </DropdownMenu>
         </Dropdown>
       </div>

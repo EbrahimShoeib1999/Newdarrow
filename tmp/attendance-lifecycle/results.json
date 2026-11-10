@@ -4,62 +4,62 @@
     {
       "name": "A. Office geofence check-in → refresh → restore → check-out",
       "ok": true,
-      "detail": "uid=A33n1iYK… langDir=ltr before=0 record=lwLtqngoi82fqqeWJVXe coords=24.7136,46.6753 locId=hq distance=0m successToast=\"Shift started!\" restoredAfterRefresh=yes(lwLtqngoi82fqqeWJVXe) checkOut=2026-11-02T10:18:10.917Z totalHours=0.002946666666666667 offDuty=present uiOffDuty=true"
+      "detail": "uid=JMyOToiH… langDir=ltr before=0 record=V8YZd6fHWpsh7E8VpbUW coords=24.7136,46.6753 locId=hq distance=0m successToast=\"Work started!\" restoredAfterRefresh=yes(V8YZd6fHWpsh7E8VpbUW) checkOut=2026-11-10T16:39:14.579Z totalHours=0.004798611111111111 offDuty=late uiOffDuty=true"
     },
     {
       "name": "B. Remote/flexible check-in with GPS DENIED",
       "ok": true,
-      "detail": "uid=SdqDtN3T… DERIVED: remote no-GPS check-in ALLOWED; record=l3XYJHWC2uKgmDreKBCf hasCoords=false restoredAfterRefresh=yes checkOut=persisted(totalHours=0.0024102777777777777)"
+      "detail": "uid=LqH0oPbX… DERIVED: remote no-GPS check-in ALLOWED; record=yJxrDZDIg7FFTPLYkRG7 hasCoords=false restoredAfterRefresh=yes checkOut=persisted(totalHours=0.004741111111111111)"
     },
     {
       "name": "C-EN. Geofence WITHOUT assigned location → localized error, no record",
-      "ok": true,
-      "detail": "lang=en dir=ltr no record created (before=0 after=0); toast=\"Shift start is blocked: no work location is assigned for the office check-in yet — ask HR to assign one. | No attendance\"; usable=true"
+      "ok": false,
+      "error": "REGRESSION: a no-location geofence check-in created an attendance record (1 new)"
     },
     {
       "name": "C-AR. Geofence WITHOUT assigned location → localized error, no record",
-      "ok": true,
-      "detail": "lang=ar dir=rtl no record created (before=0 after=0); toast=\"بدء الوردية محجوب: لم يُعيَّن لك موقع حضور لتسجيل الدخول المكتبي بعد — اطلب من الموارد البشرية تعيينه. | لم يُعيَّن لك م\"; usable=true"
+      "ok": false,
+      "error": "no exact ar toast (\"لم يُعيَّن لك موقع حضور. اطلب من مديرك تحديد المكان.\") — saw toasts=\"\" console="
     },
     {
       "name": "D. Ordinary employee cannot read another tenant / privileged data",
       "ok": true,
-      "detail": "12 employees isolated in acme-co; no cross-project documents; shiftStatus={\"e-office\":\"off-duty\",\"e-remote\":\"off-duty\",\"e-noassign\":\"off-duty\"}"
+      "detail": "12 employees isolated in acme-co; no cross-project documents; shiftStatus={\"e-office\":\"off-duty\",\"e-remote\":\"off-duty\",\"e-noassign\":\"working\"}"
     },
     {
       "name": "E1. Valid assigned shift, punch before scheduled start ⇒ on time, no late modal",
       "ok": true,
-      "detail": "record=5UySSz4DSXLqxkLaPZ40 status=present lateMinutes=0 schedule={\"scheduleAssignmentId\":\"asg-ontime\",\"scheduledStart\":\"10:45\",\"scheduleTimezone\":\"UTC\",\"graceMinutes\":0,\"rawLateMinutes\":0,\"excusedLateMinutes\":0,\"countableLateMinutes\":0,\"workMode\":\"office\"} modal=open:false titleHits:0"
+      "detail": "record=6bObyQIBMVgpV1nAiZhu status=present lateMinutes=0 schedule={\"scheduleAssignmentId\":\"asg-ontime\",\"scheduledStart\":\"17:06\",\"scheduleTimezone\":\"UTC\",\"graceMinutes\":0,\"rawLateMinutes\":0,\"excusedLateMinutes\":0,\"countableLateMinutes\":0,\"workMode\":\"office\"} modal=open:false titleHits:0"
     },
     {
       "name": "E2. Valid assigned shift, punch AFTER the configured grace ⇒ late on the schedule's own minutes + alert",
       "ok": true,
-      "detail": "record=YLCjorxVUlpCltMtKv0W scheduleRaw=49m grace=15 status=late lateMinutes=49 alert=49m (== row) dismissed=yes"
+      "detail": "record=ChsV9huZT11GKDb7u2OB scheduleRaw=52m grace=15 status=late lateMinutes=52 alert=52m (== row) dismissed=yes"
     },
     {
       "name": "E3. No schedule configured ⇒ NOT classified late by itself",
       "ok": true,
-      "detail": "record=qrShO3dCXGIRvyKQ2F5N schedule=absent status=present lateMinutes=0 modal=open:false → missing schedule is NOT classified late"
+      "detail": "record=ERfHpIDYwZqb2g7drtLC schedule=absent status=present lateMinutes=0 modal=open:false → missing schedule is NOT classified late"
     },
     {
       "name": "E4. Schedule-late alert: modal appears once, blocks nothing extra, dismiss + refresh keep the session",
-      "ok": true,
-      "detail": "lateMinutes=50 (== schedule countable=50) status=late scheduleRaw=50m cutoff=23:59(legacy on-time) modal once(titleHits=1,blocking=true) ack=\"Got it\" copy=\"Late check-in You checked in 50 min late. Got it…\" dismiss→session MatVJTjYbybCHCJ1kA0u preserved; refresh→no re-alert, classification identical ({\"status\":\"late\",\"lateMinutes\":50}); checkOut=2026-11-02T10:21:00.993Z"
+      "ok": false,
+      "error": "Timed out (150000ms) waiting for login form"
     },
     {
       "name": "E5. Late beyond the monthly threshold ⇒ deducted copy of the alert",
       "ok": true,
-      "detail": "record=ec25WsYRyDB5n3KULyrZ lateMinutes=621 deductionMinutes=621 copy=\"Late check-in You checked in 621 min late — this occurrence will be de…\" dismissed=yes"
+      "detail": "record=0pzlhJob898JYgkqN3Yj lateMinutes=1006 deductionMinutes=1006 copy=\"Late check-in You checked in 1006 min late — this occurrence will be d…\" dismissed=yes"
     },
     {
       "name": "E6. Cutoff EARLIER than the assigned shift ⇒ schedule wins: punctual, silent, not late",
       "ok": true,
-      "detail": "record=LPqGe1mbeeLLy3iCAP8O cutoff=00:00(aggressive) shift=10:45 status=present lateMinutes=0 deduction=0 modal=open:false → cutoff cannot override an assigned shift"
+      "detail": "record=CurQDDdfwn8Kggm1tEvo cutoff=00:00(aggressive) shift=17:06 status=present lateMinutes=0 deduction=0 modal=open:false → cutoff cannot override an assigned shift"
     },
     {
       "name": "F1. Second eligible Saudi office employee starts the timer successfully",
       "ok": true,
-      "detail": "uid=e-office-2 record=zj7ckeHLB6ltXvLuJtbC coords=24.7136,46.6753 locId=hq"
+      "detail": "uid=e-office-2 record=8YHfUrrn6gr4iNjRhdIi coords=24.7136,46.6753 locId=hq"
     },
     {
       "name": "F2. Terminated employee is blocked with an explicit employment_inactive reason (no silent hide)",
@@ -68,8 +68,13 @@
     },
     {
       "name": "F3. Geofence employee with a deactivated assigned location sees location_inactive (not the misleading not_assigned)",
+      "ok": false,
+      "error": "Timed out (150000ms) waiting for login form"
+    },
+    {
+      "name": "G. Cross-company attendance access is denied by Firestore rules (tenant isolation)",
       "ok": true,
-      "detail": "banner=location_inactive recordsBefore=0 recordsAfter=0"
+      "detail": "own-company list=200; cross-company READ denied (path=companies/other-co/attendance/other-att-1 HTTP=403 code=PERMISSION_DENIED); WRITE denied (path=companies/other-co/attendance/intruder-row HTTP=403 code=PERMISSION_DENIED); Company B row intact, no intruder row"
     }
   ]
 }

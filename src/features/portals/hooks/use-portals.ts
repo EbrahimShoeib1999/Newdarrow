@@ -32,6 +32,9 @@ export function setLastPortal(portal: PortalId): void {
 export function useAccessiblePortals() {
   const user = useAuthStore((s) => s.user);
   const config = useActivityConfig();
+  if (user?.role === "platform_admin") {
+    return getAccessiblePortals(user?.role, user?.portalAccess);
+  }
   return getAccessiblePortals(user?.role, user?.portalAccess).filter((portal) =>
     portalAllowedForActivity(portal, config),
   );
@@ -40,6 +43,9 @@ export function useAccessiblePortals() {
 export function useCanAccessPortal(portal: PortalId) {
   const user = useAuthStore((s) => s.user);
   const config = useActivityConfig();
+  if (user?.role === "platform_admin") {
+    return true;
+  }
   return (
     canAccessPortal(user?.role, portal, user?.portalAccess) &&
     portalAllowedForActivity(portal, config)

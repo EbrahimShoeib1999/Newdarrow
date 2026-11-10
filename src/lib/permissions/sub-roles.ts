@@ -123,6 +123,7 @@ export const PORTAL_SUB_ROLE_OPTIONS: Record<PortalId, readonly PortalSubRole[]>
 const DEFAULT_SUB_ROLES_BY_GLOBAL: Partial<
   Record<import("@/features/auth/types/auth.types").UserRole, PortalSubRoles>
 > = {
+  platform_admin: { tasks: "admin", crm: "admin", people: "admin", billing: "admin" },
   super_admin: { tasks: "admin", crm: "admin", people: "admin", billing: "admin" },
   admin: { tasks: "admin", crm: "admin", people: "admin", billing: "admin" },
   manager: { tasks: "manager", crm: "manager", people: "manager", billing: "manager" },

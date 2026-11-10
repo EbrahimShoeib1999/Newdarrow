@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import * as z from "zod";
 import { cn, containsControlCharacters } from "@/lib/utils";
+import { isReservedCompanyName } from "@/lib/company-defaults";
 import { AuthService } from "../api/auth.service";
 import { resolvePostLoginTarget } from "../utils/post-login";
 import { GoogleSignInButton } from "./google-sign-in-button";
@@ -48,7 +49,14 @@ export function RegisterForm() {
         companyName: z
           .string()
           .min(2)
-          .refine((v) => !containsControlCharacters(v), t("register.companyNameError")),
+          .refine((v) => !containsControlCharacters(v), t("register.companyNameError"))
+          .refine(
+            (v) => !isReservedCompanyName(v),
+            t(
+              "register.companyReserved",
+              "هذه الشركة مسجلة بالفعل في النظام. إذا كنت موظفاً، يُرجى طلب رابط دعوة من مسؤول الشركة أو تسجيل الدخول."
+            )
+          ),
         commercialRegister: z
           .string()
           .min(5, t("register.commercialRegisterError"))

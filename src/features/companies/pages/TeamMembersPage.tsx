@@ -50,6 +50,7 @@ import { canManagePortalAccess } from "@/lib/permissions/portal-access";
 import type { UserRole, User as UserType } from "@/features/auth/types/auth.types";
 
 const ROLE_COLORS: Record<UserRole, "primary" | "secondary" | "success" | "warning" | "default"> = {
+  platform_admin: "primary",
   super_admin: "primary",
   admin: "secondary",
   manager: "success",
@@ -78,7 +79,7 @@ export function TeamMembersPage() {
   const [emailToDeleteInput, setEmailToDeleteInput] = useState("");
 
   const roleLabel = (role: UserRole) => t(`team.globalRoles.${role}`);
-  const isSuperOrAdmin = actorRole === "super_admin" || actorRole === "admin";
+  const isSuperOrAdmin = actorRole === "platform_admin" || actorRole === "super_admin" || actorRole === "admin";
 
   return (
     <PermissionGuard permission="users.manage_roles">

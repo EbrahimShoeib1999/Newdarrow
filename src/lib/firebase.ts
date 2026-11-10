@@ -21,15 +21,21 @@ const env: Record<string, string | undefined> =
     ? (globalThis as unknown as GlobalWithProcessEnv).process?.env || {}
     : {};
 
-const isEmulator = env.VITE_USE_FIREBASE_EMULATOR === "true";
+// Explicit opt-in variable for emulator: VITE_USE_FIREBASE_EMULATORS=true
+// Must be strictly "true". Any other value ("false", undefined, empty) disables emulators completely.
+// Also supports legacy VITE_USE_FIREBASE_EMULATOR=true for backwards compatibility with test harnesses,
+// provided VITE_USE_FIREBASE_EMULATORS is not explicitly set to "false".
+const isEmulator =
+  env.VITE_USE_FIREBASE_EMULATORS === "true" ||
+  (env.VITE_USE_FIREBASE_EMULATOR === "true" && env.VITE_USE_FIREBASE_EMULATORS !== "false");
 
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || (isEmulator ? "demo-api-key" : "mock-api-key"),
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || (isEmulator ? "127.0.0.1" : "mock-project.firebaseapp.com"),
+  apiKey: env.VITE_FIREBASE_API_KEY || (isEmulator ? "demo-api-key" : ""),
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || (isEmulator ? "127.0.0.1" : "d-arrow-buisiness.firebaseapp.com"),
   projectId: env.VITE_FIREBASE_PROJECT_ID || (isEmulator ? "demo-darrow-local" : "d-arrow-buisiness"),
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || (isEmulator ? "demo-darrow-local.appspot.com" : "mock-project.appspot.com"),
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1234567890",
-  appId: env.VITE_FIREBASE_APP_ID || "1:1234567890:web:abcdef",
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || (isEmulator ? "demo-darrow-local.appspot.com" : "d-arrow-buisiness.firebasestorage.app"),
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "533873596396",
+  appId: env.VITE_FIREBASE_APP_ID || "1:533873596396:web:0e5f17b153928e70e652c9",
   measurementId: env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
@@ -66,6 +72,10 @@ if (isEmulator) {
     console.info(`[Firebase] Connected to local test emulators at ${host}`);
   } catch (err) {
     console.warn("[Firebase] Emulator connection warning:", err);
+  }
+} else {
+  if (typeof window !== "undefined" && import.meta.env?.DEV) {
+    console.info(`[Firebase] Connected to Production Project: ${firebaseConfig.projectId}`);
   }
 }
 

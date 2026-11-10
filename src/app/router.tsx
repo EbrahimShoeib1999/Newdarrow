@@ -42,6 +42,7 @@ import { CustomerOperationsDashboard } from "@/features/crm/pages/CustomerOperat
 import { ContractPage } from "@/features/crm/pages/ContractPage";
 import { PeopleLayout } from "@/features/people/components/PeopleLayout";
 import { SeedPage } from "@/features/admin/pages/SeedPage";
+import { PlatformAdminDashboardPage } from "@/features/admin/pages/PlatformAdminDashboardPage";
 import PeopleDashboardPage from "@/features/people/pages/PeopleDashboardPage";
 import LeaveTrackerPage from "@/features/people/pages/LeaveTrackerPage";
 import EmployeeProfilePage from "@/features/people/pages/EmployeeProfilePage";
@@ -499,6 +500,10 @@ export const router = createBrowserRouter([
             // the portal guards.
             path: "meetings",
             element: <MeetingsPage />,
+          },
+          {
+            path: "platform",
+            element: <PlatformAdminDashboardPage />,
           },
           {
             path: "seed",

@@ -11,7 +11,7 @@ const ALL_ROLES: UserRole[] = [
 
 /** Roles the actor may assign to another user. */
 export function getAssignableRoles(actorRole: UserRole | undefined): UserRole[] {
-  if (actorRole === "super_admin") return ALL_ROLES;
+  if (actorRole === "platform_admin" || actorRole === "super_admin") return ALL_ROLES;
   if (actorRole === "admin") {
     return ALL_ROLES.filter((r) => r !== "super_admin");
   }
@@ -34,7 +34,7 @@ export function canManageUserRole(
   targetUserId: string
 ): boolean {
   if (!getAssignableRoles(actorRole).length) return false;
-  // Super admin can change anyone; others cannot change their own role here
-  if (actorRole === "super_admin") return true;
+  // Platform admin and super admin can change anyone; others cannot change their own role here
+  if (actorRole === "platform_admin" || actorRole === "super_admin") return true;
   return actorId !== targetUserId;
 }

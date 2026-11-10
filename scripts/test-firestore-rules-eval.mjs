@@ -20,6 +20,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   collection,
   getDocs,
   query,
@@ -194,6 +195,114 @@ await check("anonymous LIST attendance -> clean deny", async () => {
   try {
     await getDocs(collection(anonDb, "companies", COMPANY, "attendance"));
     throw new Error("expected permission-denied, read succeeded");
+  } catch (err) {
+    if (/expected permission-denied/.test(err.message)) throw err;
+    if (!evalClean(err)) throw new Error(`evaluation error leaked: ${err.message}`);
+  }
+});
+
+// ---- 5. Employee self-service shiftStatus (attendance punch regression) ----
+// The invitation-security tightening added an explicit /employees block and
+// excluded employees from the company-member catch-all. That removed the
+// self-service shiftStatus write check-in/check-out/break depend on
+// (PeopleService writes { shiftStatus, updatedAt } to the caller's own employee
+// doc). The fix restores ONLY that narrow capability. These cases prove:
+//   authorized own-record shiftStatus update => ALLOWED
+//   cross-company, cross-employee, and identity-field writes => DENIED
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, "users", "empSelf"), { companyId: COMPANY, role: "employee" });
+  await setDoc(doc(db, "users", "empPeer"), { companyId: COMPANY, role: "employee" });
+  await setDoc(doc(db, "users", "outsider"), { companyId: "other-co", role: "employee" });
+  await setDoc(doc(db, "companies", "other-co"), { name: "Other Co" });
+  await setDoc(doc(db, "companies", COMPANY, "employees", "empSelf"), {
+    companyId: COMPANY, userId: "empSelf", email: "self@acme.test",
+    role: "employee", name: "Self", shiftStatus: "off-duty",
+  });
+  await setDoc(doc(db, "companies", COMPANY, "employees", "empPeer"), {
+    companyId: COMPANY, userId: "empPeer", email: "peer@acme.test",
+    role: "employee", name: "Peer", shiftStatus: "off-duty",
+  });
+  await setDoc(doc(db, "companies", "other-co", "employees", "outsiderEmp"), {
+    companyId: "other-co", userId: "outsider", email: "out@other.test",
+    role: "employee", name: "Out", shiftStatus: "off-duty",
+  });
+});
+
+const selfDb = testEnv.authenticatedContext("empSelf").firestore();
+const peerDb = testEnv.authenticatedContext("empPeer").firestore();
+const outsiderDb = testEnv.authenticatedContext("outsider").firestore();
+
+await check("employee updates OWN shiftStatus (off-duty->working) -> succeeds", async () => {
+  await updateDoc(doc(selfDb, "companies", COMPANY, "employees", "empSelf"), {
+    shiftStatus: "working",
+    updatedAt: new Date(),
+  });
+  const snap = await getDoc(doc(selfDb, "companies", COMPANY, "employees", "empSelf"));
+  if (snap.data()?.shiftStatus !== "working") throw new Error("shiftStatus did not persist");
+});
+
+await check("employee cycles OWN shiftStatus working->on-break->off-duty -> succeeds", async () => {
+  for (const next of ["on-break", "off-duty"]) {
+    await updateDoc(doc(selfDb, "companies", COMPANY, "employees", "empSelf"), {
+      shiftStatus: next,
+      updatedAt: new Date(),
+    });
+  }
+});
+
+await check("employee updates OWN shiftStatus + identity field (role) -> denied", async () => {
+  try {
+    await updateDoc(doc(selfDb, "companies", COMPANY, "employees", "empSelf"), {
+      shiftStatus: "working",
+      role: "admin",
+    });
+    throw new Error("expected permission-denied, identity escalation succeeded");
+  } catch (err) {
+    if (/expected permission-denied/.test(err.message)) throw err;
+    if (!evalClean(err)) throw new Error(`evaluation error leaked: ${err.message}`);
+  }
+});
+
+await check("employee updates a PEER's shiftStatus (same company) -> denied", async () => {
+  try {
+    await updateDoc(doc(selfDb, "companies", COMPANY, "employees", "empPeer"), {
+      shiftStatus: "working",
+      updatedAt: new Date(),
+    });
+    throw new Error("expected permission-denied, cross-employee write succeeded");
+  } catch (err) {
+    if (/expected permission-denied/.test(err.message)) throw err;
+    if (!evalClean(err)) throw new Error(`evaluation error leaked: ${err.message}`);
+  }
+});
+
+await check("cross-company member updates another tenant's employee shiftStatus -> denied", async () => {
+  try {
+    await updateDoc(doc(outsiderDb, "companies", COMPANY, "employees", "empSelf"), {
+      shiftStatus: "working",
+      updatedAt: new Date(),
+    });
+    throw new Error("expected permission-denied, cross-company write succeeded");
+  } catch (err) {
+    if (/expected permission-denied/.test(err.message)) throw err;
+    if (!evalClean(err)) throw new Error(`evaluation error leaked: ${err.message}`);
+  }
+});
+
+await check("cross-company member updates OWN tenant employee shiftStatus -> succeeds (per-tenant control)", async () => {
+  await updateDoc(doc(outsiderDb, "companies", "other-co", "employees", "outsiderEmp"), {
+    shiftStatus: "working",
+    updatedAt: new Date(),
+  });
+});
+
+await check("anonymous updates employee shiftStatus -> clean deny", async () => {
+  try {
+    await updateDoc(doc(anonDb, "companies", COMPANY, "employees", "empSelf"), {
+      shiftStatus: "working",
+    });
+    throw new Error("expected permission-denied, anonymous write succeeded");
   } catch (err) {
     if (/expected permission-denied/.test(err.message)) throw err;
     if (!evalClean(err)) throw new Error(`evaluation error leaked: ${err.message}`);

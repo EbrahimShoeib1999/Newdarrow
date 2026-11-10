@@ -86,7 +86,8 @@ export type Permission =
   | "custom_modules.manage_config";
 
 export const ROLE_LABELS: Record<UserRole, { en: string; ar: string }> = {
-  super_admin: { en: "Super Admin", ar: "مدير عام" },
+  platform_admin: { en: "General Manager", ar: "مدير عام" },
+  super_admin: { en: "Super Admin", ar: "مدير عام مساعد" },
   admin: { en: "Admin", ar: "مسؤول" },
   manager: { en: "Manager", ar: "مدير" },
   global_hr_manager: { en: "Global HR Manager", ar: "مدير الموارد البشرية العالمي" },
@@ -168,6 +169,7 @@ const ALL_PERMISSIONS: Permission[] = [
 ];
 
 export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
+  platform_admin: ALL_PERMISSIONS,
   super_admin: ALL_PERMISSIONS,
   admin: ALL_PERMISSIONS.filter(
     (p) => p !== "company.identity"
@@ -309,7 +311,11 @@ export function hasAnyPermission(
 }
 
 export function isAdminRole(role: UserRole | undefined): boolean {
-  return role === "super_admin" || role === "admin";
+  return role === "platform_admin" || role === "super_admin" || role === "admin";
+}
+
+export function isPlatformAdminRole(role: UserRole | undefined): boolean {
+  return role === "platform_admin";
 }
 
 export function isManagerRole(role: UserRole | undefined): boolean {

@@ -2,6 +2,7 @@ import type { PortalId } from "@/lib/portal-permissions";
 import type { PortalSubRoles } from "@/lib/permissions/sub-roles";
 
 export type UserRole =
+  | "platform_admin"
   | "super_admin"
   | "admin"
   | "manager"
@@ -20,6 +21,8 @@ export interface User {
   companyName: string;
   /** True when the authenticated uid has no `users/{uid}` profile document yet. */
   profileMissing?: boolean;
+  /** Invitation provisioning is incomplete while this is `pending`. */
+  onboardingStatus?: "pending" | "active";
   /** Custom portal subset assigned by super admin; falls back to role defaults when empty. */
   portalAccess?: PortalId[];
   /** Per-portal sub-roles (Tasks / CRM / People). */
