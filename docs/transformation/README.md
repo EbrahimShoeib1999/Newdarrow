@@ -14,8 +14,8 @@ Controlled transformation of the D-Arrow Business Platform into a unified, exten
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Repository safety and baseline | **Complete — awaiting approval to close** |
-| 1 | Final architecture and migration design | Not started |
+| 0 | Repository safety and baseline | **Closed — owner-approved 2026-11-11** |
+| 1 | Final architecture and migration design | **In progress — started 2026-11-11** |
 | 2 | NestJS, PostgreSQL, Prisma foundation | Not started |
 | 3 | Authentication, RBAC, multi-tenancy | Not started |
 | 4 | Data migration and reconciliation | Not started |
