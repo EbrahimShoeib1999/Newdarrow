@@ -22,7 +22,10 @@ import type { EmployeeStatus } from "../types/people.types";
 import { useCompany } from "@/features/companies/context/company-context";
 import { useAuth } from "@/features/auth/context/auth-context";
 import { InvitesService } from "@/features/companies/api/invites.service";
-import type { UserRole } from "@/features/auth/types/auth.types";
+import {
+  INVITABLE_ROLES,
+  type InvitableRole,
+} from "@/lib/permissions/role-assignment";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/constants";
@@ -38,7 +41,7 @@ const hireSchema = z.object({
     .email("البريد الإلكتروني غير صحيح / Invalid email"),
   jobTitle: z.string().min(2, "المسمى الوظيفي مطلوب / Job title is required"),
   department: z.string().min(2, "القسم مطلوب / Department is required"),
-  role: z.string().min(1, "الدور الصلاحية مطلوب / Role is required"),
+  role: z.enum(INVITABLE_ROLES),
   permissions: z.any().optional(),
   status: z.string().optional(),
   joiningDate: z.string().optional(),
@@ -162,7 +165,7 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
       // permission-denied timer) after sign-up.
       const { inviteUrl, token, emailMode } = await resolveInviteUrl(
         email,
-        data.role as UserRole,
+        data.role,
         employeeResponse.data.id
       );
 
@@ -207,7 +210,7 @@ export function HireEmployeeModal({ isOpen, onOpenChange }: HireEmployeeModalPro
    */
   const resolveInviteUrl = async (
     email: string,
-    role: UserRole,
+    role: InvitableRole,
     employeeId: string
   ): Promise<{ inviteUrl: string; token: string; emailMode: "sent" | "logged" }> => {
     if (!user) throw new Error("NO_ACTOR");

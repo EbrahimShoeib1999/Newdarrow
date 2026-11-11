@@ -14,7 +14,11 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { withLogging } from "@/lib/service-utils";
-import { canAssignRole } from "@/lib/permissions/role-assignment";
+import {
+  canInviteRole,
+  canManageInviteRole,
+  isInvitableRole,
+} from "@/lib/permissions/role-assignment";
 import {
   resendBlockedErrorCode,
   resendBlockedReason,
@@ -155,11 +159,11 @@ export const InvitesService = {
       if (!email || !email.includes("@")) {
         throw new Error("Invalid email");
       }
-      if (!canAssignRole(actorRole, input.role)) {
-        throw new Error("You cannot assign this role");
-      }
-      if (!["employee", "viewer", "manager", "global_hr_manager"].includes(input.role)) {
+      if (!isInvitableRole(input.role)) {
         throw new Error("INVITE_ROLE_NOT_ALLOWED");
+      }
+      if (!canInviteRole(actorRole, input.role)) {
+        throw new Error("INVITE_ROLE_NOT_ASSIGNABLE");
       }
 
       const existingUsers = await getDocs(
@@ -324,14 +328,23 @@ export const InvitesService = {
   },
 
   /** Hard-delete every invite for a company (pending / revoked / expired). */
-  async deleteAllForCompany(companyId: string): Promise<number> {
+  async deleteAllForCompany(
+    companyId: string,
+    actorRole: UserRole
+  ): Promise<number> {
     return withLogging(SERVICE_NAME, "deleteAllForCompany", (async () => {
       const snapshot = await getDocs(
         query(collection(db, "invites"), where("companyId", "==", companyId))
       );
-      if (snapshot.empty) return 0;
+      const docs = snapshot.docs.filter((snap) => {
+        const role = snap.data().role;
+        return (
+          typeof role === "string" &&
+          canManageInviteRole(actorRole, role)
+        );
+      });
+      if (docs.length === 0) return 0;
 
-      const docs = snapshot.docs;
       const chunkSize = 400;
       for (let i = 0; i < docs.length; i += chunkSize) {
         const batch = writeBatch(db);

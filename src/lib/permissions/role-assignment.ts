@@ -9,6 +9,22 @@ const ALL_ROLES: UserRole[] = [
   "viewer",
 ];
 
+export const INVITABLE_ROLES = [
+  "employee",
+  "viewer",
+  "manager",
+  "global_hr_manager",
+] as const satisfies readonly UserRole[];
+
+export type InvitableRole = (typeof INVITABLE_ROLES)[number];
+
+export function isInvitableRole(role: unknown): role is InvitableRole {
+  return (
+    typeof role === "string" &&
+    (INVITABLE_ROLES as readonly string[]).includes(role)
+  );
+}
+
 /** Roles the actor may assign to another user. */
 export function getAssignableRoles(actorRole: UserRole | undefined): UserRole[] {
   if (actorRole === "platform_admin" || actorRole === "super_admin") return ALL_ROLES;
@@ -19,6 +35,39 @@ export function getAssignableRoles(actorRole: UserRole | undefined): UserRole[] 
     return ["employee", "viewer"];
   }
   return [];
+}
+
+/** Roles the actor may invite, limited to roles accepted by Firestore rules. */
+export function getAssignableInviteRoles(
+  actorRole: UserRole | undefined
+): InvitableRole[] {
+  const assignable = new Set(getAssignableRoles(actorRole));
+  return INVITABLE_ROLES.filter((role) => assignable.has(role));
+}
+
+export function canInviteRole(
+  actorRole: UserRole | undefined,
+  role: unknown
+): role is InvitableRole {
+  return isInvitableRole(role) && canAssignRole(actorRole, role);
+}
+
+/** Mirrors the invite delete branch in firestore.rules. */
+export function canManageInviteRole(
+  actorRole: UserRole | undefined,
+  inviteRole: unknown
+): boolean {
+  if (
+    actorRole === "platform_admin" ||
+    actorRole === "super_admin" ||
+    actorRole === "admin"
+  ) {
+    return true;
+  }
+  return (
+    actorRole === "global_hr_manager" &&
+    (inviteRole === "employee" || inviteRole === "viewer")
+  );
 }
 
 export function canAssignRole(

@@ -125,6 +125,8 @@
       "sent": "Invitation email sent. The member will set a password from the link.",
       "createdWithLink": "Invitation created, but email may not have been delivered. Share the link below.",
       "sendError": "Failed to create invitation",
+      "roleNotAllowed": "This role cannot be invited. Choose a permitted role.",
+      "roleNotAssignable": "You do not have permission to invite this role.",
       "userExists": "This email is already a member of your company",
       "alreadyPending": "A pending invitation already exists for this email",
       "shareLink": "Invitation link",

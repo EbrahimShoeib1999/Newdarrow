@@ -1,4 +1,5 @@
 import type { UserRole } from "@/features/auth/types/auth.types";
+import type { InvitableRole } from "@/lib/permissions/role-assignment";
 import type { PortalId } from "@/lib/portal-permissions";
 import type { PortalSubRoles } from "@/lib/permissions/sub-roles";
 
@@ -25,7 +26,7 @@ export interface TeamInvite {
 
 export interface CreateInviteInput {
   email: string;
-  role: UserRole;
+  role: InvitableRole;
   companyId: string;
   companyName: string;
   invitedBy: string;

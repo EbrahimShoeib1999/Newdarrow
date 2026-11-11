@@ -43,6 +43,8 @@ import { selectFieldProps } from "@/components/shared/select-field";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import {
   getAssignableRoles,
+  getAssignableInviteRoles,
+  canManageInviteRole,
   canManageUserRole,
 } from "@/lib/permissions/role-assignment";
 import { PortalAccessEditor } from "../components/PortalAccessEditor";
@@ -69,6 +71,7 @@ export function TeamMembersPage() {
   const { role: actorRole } = useAppPermissions();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const assignableRoles = getAssignableRoles(actorRole);
+  const assignableInviteRoles = getAssignableInviteRoles(actorRole);
   const canEditPortals = canManagePortalAccess(actorRole);
   const deleteUserMutation = useDeleteUserMutation();
   const deleteUserByEmailMutation = useDeleteUserByEmailMutation();
@@ -103,7 +106,7 @@ export function TeamMembersPage() {
                 {t("team.deleteByEmail", "حذف بالبريد 🗑️")}
               </Button>
             )}
-            {assignableRoles.length > 0 && (
+            {assignableInviteRoles.length > 0 && (
               <Button
                 color="primary"
                 startContent={<MailPlus className="h-4 w-4" />}
@@ -264,7 +267,7 @@ export function TeamMembersPage() {
                   {t("team.invite.pendingSubtitle")}
                 </p>
               </div>
-              {invites.length > 0 && (
+              {invites.some((invite) => canManageInviteRole(actorRole, invite.role)) && (
                 <Button
                   size="sm"
                   color="danger"
@@ -308,20 +311,22 @@ export function TeamMembersPage() {
                         {new Date(invite.expiresAt).toLocaleDateString(i18n.language)}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="light"
-                          color="danger"
-                          isIconOnly
-                          aria-label={t("team.invite.delete")}
-                          isLoading={
-                            revokeInvite.isPending &&
-                            revokeInvite.variables === invite.token
-                          }
-                          onPress={() => revokeInvite.mutate(invite.token)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canManageInviteRole(actorRole, invite.role) && (
+                          <Button
+                            size="sm"
+                            variant="light"
+                            color="danger"
+                            isIconOnly
+                            aria-label={t("team.invite.delete")}
+                            isLoading={
+                              revokeInvite.isPending &&
+                              revokeInvite.variables === invite.token
+                            }
+                            onPress={() => revokeInvite.mutate(invite.token)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

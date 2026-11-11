@@ -15,11 +15,11 @@ import { Copy, MailPlus } from "lucide-react";
 import { toast } from "sonner";
 import { selectFieldProps } from "@/components/shared/select-field";
 import {
-  getAssignableRoles,
+  getAssignableInviteRoles,
+  type InvitableRole,
 } from "@/lib/permissions/role-assignment";
 import { useAppPermissions } from "../hooks/use-app-permissions";
 import { useCreateInviteMutation } from "../hooks/use-invites";
-import type { UserRole } from "@/features/auth/types/auth.types";
 
 interface InviteUserModalProps {
   isOpen: boolean;
@@ -30,10 +30,10 @@ export function InviteUserModal({ isOpen, onOpenChange }: InviteUserModalProps) 
   const { t } = useTranslation("settings");
   const { role: actorRole } = useAppPermissions();
   const createInvite = useCreateInviteMutation();
-  const roles = useMemo(() => getAssignableRoles(actorRole), [actorRole]);
+  const roles = useMemo(() => getAssignableInviteRoles(actorRole), [actorRole]);
 
   const [email, setEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<UserRole>(
+  const [inviteRole, setInviteRole] = useState<InvitableRole>(
     roles.includes("employee") ? "employee" : roles[0] || "employee"
   );
   const [lastLink, setLastLink] = useState<string | null>(null);
@@ -97,7 +97,7 @@ export function InviteUserModal({ isOpen, onOpenChange }: InviteUserModalProps) 
                 labelPlacement="outside"
                 selectedKeys={new Set([inviteRole])}
                 onSelectionChange={(keys) => {
-                  const selected = Array.from(keys)[0] as UserRole;
+                  const selected = Array.from(keys)[0] as InvitableRole;
                   if (selected) setInviteRole(selected);
                 }}
                 variant="bordered"

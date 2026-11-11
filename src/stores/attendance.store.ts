@@ -455,7 +455,16 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
           : error instanceof Error
             ? error.message
             : "unknown";
-      console.error("[AttendanceStore] Sync failed", { code });
+      const message =
+        error instanceof Error ? error.message : String(error);
+      console.error("[AttendanceStore] Sync failed", {
+        operation: "syncWithDb",
+        companyId,
+        userId,
+        userRole: useAuthStore.getState().user?.role ?? null,
+        code,
+        message,
+      });
       set({
         isInitialized: true,
         syncError: isPermissionDenied ? "permission-denied" : "sync-failed",
