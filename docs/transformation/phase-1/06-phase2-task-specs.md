@@ -24,7 +24,7 @@
 - **Dependencies:** T2.1.
 - **Risks:** schema drift vs doc 02 (reviewed line-by-line against the design); secret leakage (compose has no credentials beyond local dev defaults; real creds stay in gitignored `.env`).
 - **Expected behavior:** `docker compose -f docker-compose.dev.yml up -d && npx prisma migrate dev && npm run seed` yields a schema-conformant DB; migrations are committed, never re-generated ad hoc.
-- **Acceptance criteria:** `prisma migrate dev` clean from scratch; `prisma migrate deploy` idempotent; seed creates 7 roles, N permission atoms matching the manifest checksum assertion (must equal the frontend manifest count — 181 atoms per Phase One evidence; the task asserts the exact number at seed time).
+- **Acceptance criteria:** `prisma migrate dev` clean from scratch; `prisma migrate deploy` idempotent; seed creates 7 roles, N permission atoms matching the manifest checksum assertion (must equal the frontend manifest count — **70 atoms**, verified by direct count at Phase 2 start, 2026-11-11, correcting the "181" figure inherited from Phase One merger evidence; the task asserts the exact number at seed time).
 - **Tests:** integration: migrate-up from empty DB, seed idempotency, unique constraints (`userId+companyId`), tenant-scoped composite indexes exist.
 
 ## T2.3 — Test harness & scripts wiring

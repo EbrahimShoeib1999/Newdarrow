@@ -15,8 +15,8 @@ Controlled transformation of the D-Arrow Business Platform into a unified, exten
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Repository safety and baseline | **Closed — owner-approved 2026-11-11** |
-| 1 | Final architecture and migration design | **Complete — awaiting approval to close** |
-| 2 | NestJS, PostgreSQL, Prisma foundation | Not started |
+| 1 | Final architecture and migration design | **Closed — owner-approved 2026-11-11** |
+| 2 | NestJS, PostgreSQL, Prisma foundation | **In progress — started 2026-11-11** |
 | 3 | Authentication, RBAC, multi-tenancy | Not started |
 | 4 | Data migration and reconciliation | Not started |
 | 5 | Existing standard business module migration | Not started |
@@ -28,7 +28,7 @@ Controlled transformation of the D-Arrow Business Platform into a unified, exten
 ## Documentation layout
 
 - `reports/` — one numbered report per phase, following the 12-section reporting requirements of the directive.
-- `phase-1/` — Phase 1 design set (awaiting owner approval): `01-target-architecture.md` (NestJS modular monolith), `02-database-schema.md` (PostgreSQL/Prisma design), `03-rbac-and-tenancy.md` (DB-backed RBAC & tenant isolation), `04-custom-module-platform.md` (nine separated concerns on D-Arrow's engine), `05-migration-plan.md` (per-domain Firebase→NestJS sequencing + auth bridge), `06-phase2-task-specs.md` (Phase 2 task specifications).
+- `phase-1/` — Phase 1 design set (owner-approved 2026-11-11): `01-target-architecture.md` (NestJS modular monolith), `02-database-schema.md` (PostgreSQL/Prisma design), `03-rbac-and-tenancy.md` (DB-backed RBAC & tenant isolation), `04-custom-module-platform.md` (nine separated concerns on D-Arrow's engine), `05-migration-plan.md` (per-domain Firebase→NestJS sequencing + auth bridge), `06-phase2-task-specs.md` (Phase 2 task specifications).
 - `../merger/` — Phase One discovery evidence (project inventories, workflows, domain mapping, integration decisions, ADRs). **Note:** the merger docs' *target-architecture* proposals (Firebase-forever end state) are superseded by the Master Directive's NestJS/PostgreSQL target; their *discovery evidence and classification rationale* remain valid inputs.
 
 ## Safety artifacts (outside the repos)

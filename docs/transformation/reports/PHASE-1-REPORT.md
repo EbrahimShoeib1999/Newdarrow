@@ -1,6 +1,6 @@
 # PHASE 1 REPORT — Final Architecture and Migration Design
 
-> **Phase:** 1 of 9 · **Status:** COMPLETE — awaiting owner approval to close. **Nothing in Phase 2 starts before this report and the design set are approved.**
+> **Phase:** 1 of 9 · **Status:** APPROVED & CLOSED 2026-11-11 — owner gate decisions: approve design set + report; confirm D1 (`backend/` same-repo), D5 (JSONB module records), and the auth bridge + separately-approved cutover; start Phase 2
 > **Directive:** Master Platform Transformation & Integration Directive (2026-11-11)
 > **Date:** 2026-11-11 · **Executor:** Transformation agent
 > Facts below are marked **[VERIFIED]** (directly observed in this session) or **[ASSESSMENT]** (judgment/recommendation).
@@ -29,7 +29,7 @@ All analysis was performed on the **post-pull, post-WIP-landing tree** — `main
 | Activities | 8 in the registry: `PROJECTS` (core, ungated) + 7 activity-owned verticals — `REAL_ESTATE_MANAGEMENT`, `REAL_ESTATE_BROKERAGE`, `FACILITIES_MANAGEMENT`, `REAL_ESTATE_DEVELOPMENT`, `MARKETING_AGENCY`, `MEDICAL_CLINIC`, `SCHOOL_MANAGEMENT` |
 | Custom Module Engine | `src/features/custom-modules/lib/module-engine.ts` (+ `module-templates.ts`, `module-ui-helpers.ts`) — verified export contract: module-key grammar, definition validation/sanitization, per-type field coercion, record payload contract (**mass-assignment rejection** via `splitRecordInput`), lifecycle transitions (`canMoveStage`/`isTerminalStage`), access resolution (`canPerformModuleAction` = permission atom **AND** role grant), list query (search/status/archived/sort/pagination), and activity-encoding collection naming (`mod_<activity>_rec_<key>`) |
 | Auth (client) | Firebase SDK in `src/features/auth/api/auth.service.ts` / `otp.service.ts`: email/password, Google popup, `getIdToken`, custom claims, OTP resets (`otpResets` collection) |
-| RBAC model | 7 roles (`UserRole`); permission atoms in `src/lib/permissions/index.ts` (181 atoms per Phase One evidence); portal sub-roles (Tasks/CRM/People/Billing) in `sub-roles.ts`; effective resolution (role → sub-role → per-user `customPermissions`) in `effective-permissions.ts`; `portalAccess` subset logic in `portal-access.ts`; `INVITABLE_ROLES` invite policy in `role-assignment.ts` (landed this session, `6b38c3b`) |
+| RBAC model | 7 roles (`UserRole`); permission atoms in `src/lib/permissions/index.ts` (70 atoms — corrected at Phase 2 start, 2026-11-11, by direct count; this report originally recorded "181 per Phase One evidence", an overcount); portal sub-roles (Tasks/CRM/People/Billing) in `sub-roles.ts`; effective resolution (role → sub-role → per-user `customPermissions`) in `effective-permissions.ts`; `portalAccess` subset logic in `portal-access.ts`; `INVITABLE_ROLES` invite policy in `role-assignment.ts` (landed this session, `6b38c3b`) |
 | User document shape | `onboardingStatus`, `portalAccess`, `portalSubRoles`, `customPermissions`, `branchId`, `workLocationId`, `countryScope`, `companyId`/`companyName` (`auth.types.ts`) |
 | Integration seam | `src/lib/api-client.ts` with `baseURL = API_BASE_URL`; `src/lib/constants.ts`: `API_BASE_URL = VITE_API_BASE_URL || "/api"`; `ApiResponse` envelope in `src/types/api.types.ts` — **a REST seam already exists** for the frontend integration phase |
 
@@ -142,7 +142,7 @@ None. No deletion was authorized or performed. **[VERIFIED]**
 | R1-3 | Auth bridge/cutover complexity; Firebase passwords are not exportable | High | Bridge is additive and only the bridge endpoint accepts Firebase tokens; cutover is separately approved (Phase 9) with a forced password-set flow; no password is ever guessed or defaulted |
 | R1-4 | Five local commits unpushed (incl. the owner's invite/HR work) — single-machine loss risk | Medium | Cold backups exist outside the repo; a normal push is now possible post-merge (§8.3) — owner decision |
 | R1-5 | `CompanyMembership` (D7) is ahead of current single-company behavior | Low | Migration creates exactly one membership row per user; behavior unchanged; avoids a second identity migration later |
-| R1-6 | Design→implementation drift in Phase 2 | Medium | T2.2 is reviewed line-by-line against doc 02; the permission-atom seed asserts the manifest count/checksum (181 atoms) |
+| R1-6 | Design→implementation drift in Phase 2 | Medium | T2.2 is reviewed line-by-line against doc 02; the permission-atom seed asserts the manifest count/checksum (70 atoms — corrected count; see §1 RBAC row) |
 
 ## 10. Rollback / Recovery Strategy
 

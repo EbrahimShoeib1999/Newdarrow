@@ -7,7 +7,7 @@
 | Element | Current implementation |
 |---|---|
 | Roles (7) | `platform_admin, super_admin, admin, manager, global_hr_manager, employee, viewer` — `auth.types.UserRole` |
-| Permission atoms | Dot-namespaced strings (`tasks.view`, `crm.manage_leads`, `people.approve_leave`) declared in `src/lib/permissions/index.ts` (`ROLE_PERMISSIONS`, `hasPermission`) — 181 atoms per Phase One evidence |
+| Permission atoms | Dot-namespaced strings (`tasks.view`, `crm.manage_leads`, `people.approve_leave`) declared in `src/lib/permissions/index.ts` (`ROLE_PERMISSIONS`, `hasPermission`) — **70 atoms** (verified by direct count at Phase 2 start, 2026-11-11; corrects the "181" figure inherited from Phase One merger evidence) |
 | Portal sub-roles | Per-portal overrides: Tasks (admin/manager/member/viewer), CRM (admin/manager/sales/viewer), People (admin/manager/hr/employee), Billing (admin/manager/accountant) — `sub-roles.ts` |
 | Effective permissions | role → portal sub-role restriction → per-user `customPermissions` override → `hasEffectivePermission` |
 | Portal access | `user.portalAccess` subset (super-admin-assigned, restricted to role defaults) — `portal-access.ts` |
