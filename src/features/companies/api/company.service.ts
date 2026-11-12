@@ -1,68 +1,13 @@
-import {
-  doc,
-  getDoc,
-  getDocs,
-  collection,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import apiClient from "@/lib/api-client";
 import type { ApiResponse } from "@/types/api.types";
-import { withLogging } from "@/lib/service-utils";
-import { stripUndefined } from "@/features/crm/utils/firestore-mappers";
-import { resolveStoredActivity } from "@/features/activities/types/activity.types";
 import type { CompanyProfile, UpdateCompanyProfileDTO } from "../types/company.types";
-
-const SERVICE_NAME = "CompanyService";
-
-/** App currency is always Saudi Riyal. */
-function resolveDefaultCurrency(_code?: string | null): string {
-  return "SAR";
-}
-
-function mapCompanyDoc(
-  companyId: string,
-  data: Record<string, unknown>
-): CompanyProfile {
-  return {
-    id: companyId,
-    name: (data.name as string) ?? "",
-    nameAr: data.nameAr as string | undefined,
-    commercialRegister: (data.commercialRegister as string) ?? "",
-    taxNumber: data.taxNumber as string | undefined,
-    legalName: data.legalName as string | undefined,
-    email: data.email as string | undefined,
-    phone: data.phone as string | undefined,
-    whatsappSupportPhone: data.whatsappSupportPhone as string | undefined,
-    address: data.address as string | undefined,
-    city: data.city as string | undefined,
-    country: data.country as string | undefined,
-    defaultCurrency: resolveDefaultCurrency(data.defaultCurrency as string | undefined),
-    logoUrl: data.logoUrl as string | undefined,
-    brandColor: data.brandColor as string | undefined,
-    brandSecondaryColor: data.brandSecondaryColor as string | undefined,
-    // Normalize through the registry: a stored garbage/legacy value resolves to
-    // the default instead of unlocking an unknown route namespace.
-    primaryActivity: resolveStoredActivity(data.primaryActivity),
-    createdAt: (data.createdAt as string) ?? new Date().toISOString(),
-    updatedAt: (data.updatedAt as string) ?? new Date().toISOString(),
-  };
-}
 
 export const CompanyService = {
   async getCompany(companyId: string): Promise<ApiResponse<CompanyProfile | null>> {
-    return withLogging(SERVICE_NAME, "getCompany", (async () => {
-      const snap = await getDoc(doc(db, "companies", companyId));
-      if (!snap.exists()) {
-        return { data: null, message: "No profile" };
-      }
-      return {
-        data: mapCompanyDoc(companyId, snap.data() as Record<string, unknown>),
-        message: "Success",
-      };
-    })());
+    const response = await apiClient.get<ApiResponse<CompanyProfile | null>>(
+      `/companies/${companyId}`
+    );
+    return response.data;
   },
 
   async getProfile(companyId: string): Promise<ApiResponse<CompanyProfile | null>> {
@@ -73,74 +18,33 @@ export const CompanyService = {
     companyId: string,
     data: UpdateCompanyProfileDTO & { name: string; commercialRegister: string }
   ): Promise<ApiResponse<CompanyProfile>> {
-    return withLogging(SERVICE_NAME, "createProfile", (async () => {
-      const ref = doc(db, "companies", companyId);
-      const payload = stripUndefined({
-        ...data,
-        defaultCurrency: data.defaultCurrency ?? "SAR",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      } as Record<string, unknown>);
-      await setDoc(ref, payload);
-      const snap = await getDoc(ref);
-      return {
-        data: mapCompanyDoc(companyId, snap.data() as Record<string, unknown>),
-        message: "Created successfully",
-      };
-    })());
+    const response = await apiClient.post<ApiResponse<CompanyProfile>>(
+      "/companies",
+      { ...data, id: companyId }
+    );
+    return response.data;
   },
 
   async updateProfile(
     companyId: string,
     data: UpdateCompanyProfileDTO
   ): Promise<ApiResponse<CompanyProfile>> {
-    return withLogging(SERVICE_NAME, "updateProfile", (async () => {
-      const ref = doc(db, "companies", companyId);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) {
-        return CompanyService.createProfile(companyId, {
-          name: data.name ?? companyId,
-          commercialRegister: data.commercialRegister ?? "",
-          ...data,
-        });
-      }
-      await updateDoc(
-        ref,
-        stripUndefined({
-          ...data,
-          updatedAt: serverTimestamp(),
-        } as Record<string, unknown>)
-      );
-      const updated = await getDoc(ref);
-      return {
-        data: mapCompanyDoc(companyId, updated.data() as Record<string, unknown>),
-        message: "Updated successfully",
-      };
-    })());
+    const response = await apiClient.put<ApiResponse<CompanyProfile>>(
+      `/companies/${companyId}`,
+      data
+    );
+    return response.data;
   },
 
   async listAllCompanies(): Promise<ApiResponse<CompanyProfile[]>> {
-    return withLogging(SERVICE_NAME, "listAllCompanies", (async () => {
-      // Firestore rules intentionally permit this collection-wide query only
-      // for platform administrators. Tenant bootstrapping must use getCompany.
-      const snap = await getDocs(collection(db, "companies"));
-      const companies = snap.docs.map((d) =>
-        mapCompanyDoc(d.id, d.data() as Record<string, unknown>)
-      );
-      return {
-        data: companies,
-        message: "Success",
-      };
-    })());
+    const response = await apiClient.get<ApiResponse<CompanyProfile[]>>("/companies");
+    return response.data;
   },
 
   async deleteCompany(companyId: string): Promise<ApiResponse<void>> {
-    return withLogging(SERVICE_NAME, "deleteCompany", (async () => {
-      await deleteDoc(doc(db, "companies", companyId));
-      return {
-        data: undefined,
-        message: "Company deleted",
-      };
-    })());
+    const response = await apiClient.delete<ApiResponse<void>>(
+      `/companies/${companyId}`
+    );
+    return response.data;
   },
 };

@@ -2,7 +2,14 @@ import { EnvValidationError, parseEnv } from "./env";
 
 describe("parseEnv (T2.1 — config validation)", () => {
   it("applies documented defaults when nothing is set", () => {
-    expect(parseEnv({})).toEqual({ NODE_ENV: "development", PORT: 3001 });
+    expect(parseEnv({})).toEqual({
+      NODE_ENV: "development",
+      PORT: 3001,
+      JWT_SECRET: "dev-secret-change-in-production",
+      JWT_REFRESH_SECRET: "dev-refresh-secret-change-in-production",
+      JWT_ACCESS_TTL_SECONDS: 900,
+      JWT_REFRESH_TTL_SECONDS: 604800,
+    });
   });
 
   it("coerces PORT from a numeric string", () => {

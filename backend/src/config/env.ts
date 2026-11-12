@@ -18,6 +18,30 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   /** Required from Phase 2 task T2.2 onward; intentionally optional in T2.1 (the scaffold boots without a database). */
   DATABASE_URL: z.string().min(1).optional(),
+
+  /** JWT access token secret (required from Phase 3 / auth bridge). */
+  JWT_SECRET: z.string().min(1).default("dev-secret-change-in-production"),
+
+  /** JWT refresh token secret (required from Phase 3 / auth bridge). */
+  JWT_REFRESH_SECRET: z.string().min(1).default("dev-refresh-secret-change-in-production"),
+
+  /** Access token TTL in seconds (default 15 minutes). */
+  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+
+  /** Refresh token TTL in seconds (default 7 days). */
+  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(604800),
+
+  /** Rate limiting: max requests per window for auth endpoints. */
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+
+  /** Rate limiting: window duration in seconds. */
+  RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+
+  /** Allowed CORS origins (comma-separated). Empty = no CORS (same-origin only). */
+  CORS_ALLOWED_ORIGINS: z.string().default(""),
+
+  /** Whether CORS credentials are allowed. */
+  CORS_CREDENTIALS: z.coerce.boolean().default(true),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

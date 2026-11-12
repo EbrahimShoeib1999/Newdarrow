@@ -12,8 +12,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   updateUser: (partial: Partial<User>) => void;
 }
 
@@ -25,16 +24,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated,
     isLoading,
     login,
-    loginWithGoogle,
     logout,
-    initialize,
     updateUser,
   } = useAuthStore();
 
   useEffect(() => {
-    const unsubscribe = initialize();
-    return () => unsubscribe();
-  }, [initialize]);
+    // Check for existing session on mount
+    const storedToken = localStorage.getItem("d-arrow-refresh-token");
+    if (storedToken && !isAuthenticated) {
+      useAuthStore.getState().checkAuth();
+    }
+  }, [isAuthenticated]);
 
   return (
     <AuthContext.Provider
@@ -43,7 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated,
         isLoading,
         login,
-        loginWithGoogle,
         logout,
         updateUser,
       }}

@@ -10,9 +10,13 @@ The target backend of the D-Arrow platform transformation — a NestJS modular m
 | `npm run dev` | Run the API locally with watch reload (`tsx watch`) |
 | `npm run build` | Compile with strict TypeScript to `dist/` |
 | `npm run start` | Run the compiled build |
-| `npm run typecheck` | Type-check without emitting |
+| `npm run typecheck` | Type-check without emitting (includes `prisma/seed.ts`) |
 | `npm run test` | Unit tests (`src/**/*.spec.ts`) |
 | `npm run test:e2e` | End-to-end tests (`test/**/*.e2e-spec.ts`) |
+| `npm run db:generate` | Generate the Prisma client from `prisma/schema.prisma` |
+| `npm run db:migrate` | Create/apply a dev migration (`prisma migrate dev`) |
+| `npm run db:deploy` | Apply committed migrations (`prisma migrate deploy`) |
+| `npm run db:seed` | Sync the RBAC manifest into the DB (`prisma/seed.ts`) |
 
 ### Platform notes (verified on Node 24)
 
@@ -28,7 +32,19 @@ All configuration is validated by Zod at boot (`src/config/env.ts`) — invalid 
 |---|---|---|
 | `NODE_ENV` | `development` | `development` \| `test` \| `production` |
 | `PORT` | `3001` | API listen port |
-| `DATABASE_URL` | — | PostgreSQL connection string; optional in T2.1, required from T2.2 onward |
+| `DATABASE_URL` | — | PostgreSQL connection string; required from T2.2 onward (see below) |
+
+## Local database (owner decision, revised 2026-11-11)
+
+Development and testing use the owner's **existing local PostgreSQL 18 service** (`postgresql-x64-18`, `localhost:5432`; `psql` lives at `C:\Program Files\PostgreSQL\18\bin`, not on `PATH`). An earlier isolated-Docker design was superseded before any container was ever started — no Docker, Neon, or any other external database is used anywhere in this repo.
+
+- a dedicated `darrow` role: login, **non-superuser**, with `CREATEDB` (used only by Prisma `migrate dev` for its ephemeral shadow database)
+- two databases owned by `darrow`: `darrow_dev` (app + migrations) and `darrow_test` (test harness)
+- the test harness (T2.3) hard-asserts before connecting that the test URL points at `darrow_test` on `localhost:5432` — anything else aborts all tests
+
+Credentials live **only** in `backend/.env` (gitignored — verified via `git check-ignore`): `DATABASE_URL` (→ `darrow_dev`) and `DATABASE_TEST_URL` (→ `darrow_test`). No committed file ever contains a credential, and credentials are never printed.
+
+**Standing rule:** this server also hosts the owner's unrelated `dearrow` database. D-Arrow tooling must never connect to, modify, or drop `dearrow` (or `postgres`); migrations and seeds run only against `darrow_dev` / `darrow_test`. A full local reset means dropping and recreating the two `darrow_*` databases (owner-invoked only).
 
 ## Wire contract
 
@@ -43,15 +59,20 @@ The API matches the frontend's existing contract in `../src/types/api.types.ts` 
 ## Layout
 
 ```
+prisma/
+  schema.prisma     DB schema (identity, tenancy, RBAC, invitations, audit) — versioned migrations
+  seed.ts           RBAC manifest sync (D8) — rebuilds Permission/RolePermission, records checksum
 src/
   main.ts            boot entry — exported bootstrap(), require.main guard, fail-fast env
   app-setup.ts       single place defining runtime conventions (used by prod AND tests)
   app.module.ts      root module
   config/            Zod env validation + global ENV provider (ENV_TOKEN)
+  permissions/       manifest.ts — verbatim port of the frontend permission manifest (70 atoms, 320 grants)
   common/
     decorators/      @ResponseMessage() — sets the ApiResponse message
     filters/         HttpExceptionFilter → ApiError envelope
     interceptors/    request logging (x-request-id) + ApiResponse envelope
+    request-id.ts    shared x-request-id resolution (interceptor + filter)
   health/            GET /api/v1/health (liveness)
 test/
   app.e2e-spec.ts    e2e: health envelope, 404 envelope, boot-fail on poisoned env

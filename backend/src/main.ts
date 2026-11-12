@@ -3,6 +3,10 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { configureApp } from "./app-setup";
 import { loadEnv } from "./config/env";
+import { config as dotenvConfig } from "dotenv";
+
+// Load .env file into process.env before anything else reads it
+dotenvConfig();
 
 /**
  * Exported so tests can assert boot failures (an invalid environment rejects before the

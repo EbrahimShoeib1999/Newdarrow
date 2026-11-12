@@ -1,0 +1,545 @@
+// D-Arrow backend — Prisma schema (Phase 2 / T2.2: core identity, tenancy, RBAC, invitations, audit).
+// Design source: docs/transformation/phase-1/02-database-schema.md (owner-approved 2026-11-11).
+//
+// Conventions (doc 02 §1):
+// - Text PKs; migrated rows keep their Firestore document ids (D2). New rows use cuid().
+// - Tenant-owned tables carry companyId with composite indexes; uniques are company-scoped.
+// - createdAt/updatedAt on all tables; soft delete (deletedAt) on business records.
+// - FKs: Cascade only parent → owned child rows (Company → branches/departments/
+//   memberships/invitations, User → memberships, Permission → role grants — all
+//   explicit below); Department.branch is SetNull so a department survives branch
+//   deletion. Everything else keeps the Prisma default (Restrict for required).
+// - Money as integer minor units; JSONB only for engine definitions / company config.
+//
+// Phase-scoped omissions (deliberate, added by their owning phases):
+// - SubscriptionPlan / PlanEntitlement / CompanySubscription (§6) and the module-platform
+//   tables (§7) → Phase 7.
+// - MigrationRun (§8, Phase 4 reconciliation bookkeeping) → Phase 4.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — exactly the 7 current roles [V: auth.types.UserRole]
+// ---------------------------------------------------------------------------
+
+enum RoleSlug {
+  PLATFORM_ADMIN
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  GLOBAL_HR_MANAGER
+  EMPLOYEE
+  VIEWER
+}
+
+// Mirrors INVITABLE_ROLES [V: role-assignment.ts] — the service layer and the
+// enum together enforce the invite role policy landed in 6b38c3b.
+enum InvitableRole {
+  EMPLOYEE
+  VIEWER
+  MANAGER
+  GLOBAL_HR_MANAGER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+// ---------------------------------------------------------------------------
+// Identity & tenancy (doc 02 §2)
+// ---------------------------------------------------------------------------
+
+model User {
+  id               String              @id // = Firebase uid for migrated users [D2]
+  email            String              @unique
+  passwordHash     String? // null while the Firebase bridge is active [D6]
+  firebaseUid      String?             @unique // bridge mapping; dropped at final cutover
+  name             String
+  nameAr           String              @default("")
+  avatar           String              @default("")
+  locale           String              @default("en")
+  isPlatformAdmin  Boolean             @default(false) // platform_admin role [V]
+  onboardingStatus String              @default("pending") // pending | active [V: user doc field]
+  country          String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  deletedAt        DateTime?
+  memberships      CompanyMembership[]
+  refreshTokens    RefreshToken[]
+  employee         Employee?
+  leaveApprovals   LeaveRequest[] @relation("LeaveApprover")
+  customers        Customer[]
+  leads            Lead[]
+  deals            Deal[]
+
+  @@index([deletedAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Company {
+  id              String              @id
+  name            String
+  primaryActivity String? // stored activity id [V: companies/{id}.primaryActivity]
+  defaultCurrency String              @default("SAR") // [V]
+  settings        Json? // company-scoped settings doc [V: settings collection]
+  ownerId         String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  deletedAt       DateTime?
+  memberships     CompanyMembership[]
+  branches        Branch[]
+  departments     Department[]
+  invitations     Invitation[]
+  employees       Employee[]
+  customers       Customer[]
+  leads           Lead[]
+  deals           Deal[]
+  invoices        Invoice[]
+
+  @@index([primaryActivity])
+}
+
+// Multi-membership-ready [D7]: today a user belongs to one company [V: user.companyId];
+// migration creates exactly one membership row per user. Behavior is unchanged;
+// the table permits the SaaS multi-company future without a second migration.
+model CompanyMembership {
+  id                String           @id @default(cuid())
+  userId            String
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role              RoleSlug
+  branchId          String? // employment context [V: user doc fields branchId/workLocationId]
+  workLocationId    String?
+  portalAccess      Json? // PortalId[] subset [V: user.portalAccess]
+  portalSubRoles    Json? // { tasks, crm, people, billing } [V: user.portalSubRoles]
+  customPermissions String[]         @default([]) // per-user atom grants [V: user.customPermissions]
+  invitedByUserId   String?
+  joinedAt          DateTime         @default(now())
+  status            MembershipStatus @default(ACTIVE)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@unique([userId, companyId])
+  @@index([companyId, role])
+}
+
+model Branch {
+  id          String       @id
+  companyId   String
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  departments Department[]
+  name        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+  employees   Employee[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model Department {
+  id        String    @id
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId  String?
+  branch    Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  employees Employee[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// ---------------------------------------------------------------------------
+// RBAC (doc 02 §3 — Directive §2)
+// ---------------------------------------------------------------------------
+
+// Atom vocabulary: one row per permission atom, synced from the code-defined
+// manifest (D8) by prisma/seed.ts. Grants referencing an atom cascade away if
+// the atom is ever removed from the manifest (parent → owned child rows).
+model Permission {
+  atom            String           @id // e.g. "tasks.view", "crm.manage_leads" [V: atom grammar]
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  role       RoleSlug
+  atom       String
+  permission Permission @relation(fields: [atom], references: [atom], onDelete: Cascade)
+
+  @@id([role, atom])
+}
+
+// ---------------------------------------------------------------------------
+// Invitations (doc 02 §4 — first migrated domain, wave W0)
+// ---------------------------------------------------------------------------
+
+model Invitation {
+  id               String        @id // = invite token [V: invites/{token}]
+  companyId        String
+  company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  email            String
+  role             InvitableRole // INVITABLE_ROLES enforced by service + enum [V]
+  status           InviteStatus  @default(PENDING)
+  companyName      String // denormalized for emails [V: invites doc carries companyName]
+  invitedByUserId  String
+  invitedByName    String
+  portalAccess     Json? // pre-assigned portal subset [V: invites doc fields]
+  portalSubRoles   Json?
+  expiresAt        DateTime
+  acceptedByUserId String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([companyId, status])
+  @@index([email, status])
+}
+
+// ---------------------------------------------------------------------------
+// Audit (doc 02 §8 — needed by T2.4's audit interceptor; no FKs by design:
+// audit rows must survive referential changes)
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  companyId    String?
+  actorUserId  String?
+  action       String
+  resourceType String
+  resourceId   String?
+  before       Json?
+  after        Json?
+  ip           String?
+  createdAt    DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// HR: Employees, Attendance, Leave Requests (doc 02 §2, §5)
+// ---------------------------------------------------------------------------
+
+enum EmploymentStatus {
+  ACTIVE
+  ONBOARDING
+  SUSPENDED
+  TERMINATED
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  EMERGENCY
+  UNPAID
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model Employee {
+  id              String           @id @default(cuid())
+  userId          String           @unique
+  companyId       String
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId        String?
+  branch          Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  departmentId    String?
+  department      Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  employeeNumber  String           @unique
+  jobTitle        String
+  jobTitleAr      String           @default("")
+  employmentStatus EmploymentStatus @default(ACTIVE)
+  joiningDate     DateTime
+  salary          Int? // minor units
+  currency        String           @default("SAR")
+  phone           String?
+  phoneAr         String?
+  address         String?
+  addressAr       String?
+  emergencyContactName   String?
+  emergencyContactPhone  String?
+  workLocationId  String?
+  requireGps      Boolean          @default(false)
+  mandatoryGps    Boolean          @default(false)
+  geofenceEnabled Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attendance      Attendance[]
+  leaveRequests   LeaveRequest[]
+
+  @@index([companyId])
+  @@index([companyId, employmentStatus])
+  @@index([branchId])
+  @@index([departmentId])
+  @@index([deletedAt])
+}
+
+model Attendance {
+  id              String   @id @default(cuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  companyId       String
+  date            DateTime
+  checkIn         DateTime?
+  checkOut        DateTime?
+  status          String   @default("present") // present, absent, late, half_day
+  totalHours      Float?
+  lateMinutes     Int      @default(0)
+  deductionMinutes Int     @default(0)
+  location        String?
+  notes           String?
+  hasDailyReport  Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([employeeId, date])
+  @@index([companyId, date])
+  @@index([date])
+}
+
+model LeaveRequest {
+  id              String   @id @default(cuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  companyId       String
+  type            LeaveType
+  startDate       DateTime
+  endDate         DateTime
+  reason          String
+  status          LeaveStatus @default(PENDING)
+  approvedById    String?
+  approvedBy      User?    @relation("LeaveApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([employeeId, status])
+  @@index([companyId, status])
+  @@index([approvedById])
+}
+
+// ---------------------------------------------------------------------------
+// CRM: Customers, Leads, Deals (doc 02 §2)
+// ---------------------------------------------------------------------------
+
+enum CustomerType {
+  INDIVIDUAL
+  COMPANY
+  ESTABLISHMENT
+  GOVERNMENT
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum DealStage {
+  PROSPECTING
+  QUALIFICATION
+  NEEDS_ANALYSIS
+  VALUE_PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+model Customer {
+  id            String          @id @default(cuid())
+  companyId     String
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type          CustomerType    @default(INDIVIDUAL)
+  firstName     String?
+  lastName      String?
+  accountName   String?
+  legalName     String?
+  email         String?
+  phone         String?
+  whatsappPhone String?
+  website       String?
+  commercialRegister String?
+  taxNumber     String?
+  city          String?
+  country       String?
+  status        String          @default("active")
+  assignedToId  String?
+  assignedTo    User?           @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deletedAt     DateTime?
+  leads         Lead[]
+  deals         Deal[]
+  invoices      Invoice[]
+
+  @@index([companyId])
+  @@index([email])
+  @@index([deletedAt])
+}
+
+model Lead {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  companyName  String?
+  email        String?
+  phone        String?
+  status       LeadStatus @default(NEW)
+  source       String?
+  priority     String   @default("medium")
+  assignedToId String?
+  assignedTo   User?    @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  contactId    String?
+  contact      Customer? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  deals        Deal[]
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  @@index([companyId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Deal {
+  id             String   @id @default(cuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title          String
+  amount         Int // minor units
+  currency       String @default("SAR")
+  stage          DealStage @default(PROSPECTING)
+  probability    Int    @default(0)
+  expectedCloseDate DateTime?
+  contactId      String?
+  contact        Customer? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  leadId         String?
+  lead           Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  assignedToId   String?
+  assignedTo     User?    @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  @@index([companyId])
+  @@index([stage])
+  @@index([deletedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Finance: Invoices (doc 02 §2)
+// ---------------------------------------------------------------------------
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model Invoice {
+  id               String   @id @default(cuid())
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoiceNumber    String   @unique
+  status           InvoiceStatus @default(DRAFT)
+  customerId       String?
+  customer         Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName     String?
+  issueDate        DateTime
+  dueDate          DateTime
+  subTotal         Int // minor units
+  totalTax         Int   @default(0)
+  totalDiscount    Int   @default(0)
+  grandTotal       Int
+  amountPaid       Int   @default(0)
+  currency         String @default("SAR")
+  notes            String?
+  termsAndConditions String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  items            InvoiceItem[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([customerId])
+  @@index([deletedAt])
+}
+
+model InvoiceItem {
+  id             String   @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description    String
+  quantity       Int
+  unitPrice      Int // minor units
+  taxRate        Int    @default(0)
+  discount       Int    @default(0)
+  total          Int
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// D8 sync state — single row (id "current") recording which manifest checksum
+// the Permission/RolePermission tables were last synced from. A startup
+// assertion (Phase 3) compares it against the code manifest to detect drift.
+// ---------------------------------------------------------------------------
+
+model PermissionSyncState {
+  id               String   @id @default("current")
+  manifestChecksum String
+  atomCount        Int
+  grantCount       Int
+  syncedAt         DateTime @default(now())
+}
