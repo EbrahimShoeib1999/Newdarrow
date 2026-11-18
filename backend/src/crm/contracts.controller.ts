@@ -10,7 +10,7 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { IsString, IsOptional, IsBoolean } from "class-validator";
+import { IsString, IsOptional, IsBoolean, IsDefined, Allow, IsArray } from "class-validator";
 import { ContractsService } from "./contracts.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -26,6 +26,8 @@ export class CreateContractBody {
   @IsString()
   status?: string;
 
+  @IsDefined()
+  @Allow()
   form!: any;
 
   @IsOptional()
@@ -45,6 +47,7 @@ export class CreateContractBody {
   convertedToTasks?: boolean;
 
   @IsOptional()
+  @IsArray()
   createdTaskIds?: string[];
 }
 
@@ -58,6 +61,7 @@ export class UpdateContractBody {
   status?: string;
 
   @IsOptional()
+  @Allow()
   form?: any;
 
   @IsOptional()
@@ -77,66 +81,75 @@ export class UpdateContractBody {
   convertedToTasks?: boolean;
 
   @IsOptional()
+  @IsArray()
   createdTaskIds?: string[];
 }
 
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("crm/contracts")
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ContractsController {
   constructor(private readonly contractsService: ContractsService) {}
 
   @Get()
-  @ResponseMessage("Contracts retrieved")
+  @ResponseMessage("Contracts fetched successfully")
   async findAll(
+    @CurrentUser() user: { companyId: string },
     @Query("contactId") contactId?: string,
     @Query("dealId") dealId?: string,
-    @Query("status") status?: string,
-    @CurrentUser() user?: any
+    @Query("status") status?: string
   ) {
-    return this.contractsService.findAll(user.companyId, { contactId, dealId, status });
+    return this.contractsService.findAll(user.companyId, {
+      contactId,
+      dealId,
+      status,
+    });
   }
 
   @Get(":id")
-  @ResponseMessage("Contract retrieved")
-  async findOne(@Param("id") id: string, @CurrentUser() user: any) {
+  @ResponseMessage("Contract fetched successfully")
+  async findOne(
+    @CurrentUser() user: { companyId: string },
+    @Param("id") id: string
+  ) {
     return this.contractsService.findOne(id, user.companyId);
   }
 
   @Post()
-  @ResponseMessage("Contract created")
-  async create(@Body() body: CreateContractBody, @CurrentUser() user: any) {
-    return this.contractsService.create(body, user.companyId, user.userId || user.id);
+  @ResponseMessage("Contract created successfully")
+  async create(
+    @CurrentUser() user: { companyId: string; sub?: string; id?: string },
+    @Body() body: CreateContractBody
+  ) {
+    const userId = user.id || user.sub || "system";
+    return this.contractsService.create(body, user.companyId, userId);
   }
 
   @Put(":id")
-  @ResponseMessage("Contract updated")
+  @ResponseMessage("Contract updated successfully")
   async update(
+    @CurrentUser() user: { companyId: string },
     @Param("id") id: string,
-    @Body() body: UpdateContractBody,
-    @CurrentUser() user: any
+    @Body() body: UpdateContractBody
   ) {
     return this.contractsService.update(id, body, user.companyId);
   }
 
   @Patch(":id")
-  @ResponseMessage("Contract updated")
+  @ResponseMessage("Contract updated successfully")
   async patch(
+    @CurrentUser() user: { companyId: string },
     @Param("id") id: string,
-    @Body() body: UpdateContractBody,
-    @CurrentUser() user: any
+    @Body() body: UpdateContractBody
   ) {
     return this.contractsService.update(id, body, user.companyId);
   }
 
-  @Post(":id/approve")
-  @ResponseMessage("Contract approved")
-  async approve(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.contractsService.approve(id, user.companyId, user.userId || user.id);
-  }
-
   @Delete(":id")
-  @ResponseMessage("Contract deleted")
-  async remove(@Param("id") id: string, @CurrentUser() user: any) {
+  @ResponseMessage("Contract deleted successfully")
+  async remove(
+    @CurrentUser() user: { companyId: string },
+    @Param("id") id: string
+  ) {
     return this.contractsService.remove(id, user.companyId);
   }
 }

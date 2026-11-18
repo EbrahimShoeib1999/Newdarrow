@@ -10,7 +10,7 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { IsString, IsOptional, IsNumber } from "class-validator";
+import { IsString, IsOptional, IsNumber, IsDefined, Allow } from "class-validator";
 import { QuotationsService } from "./quotations.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -26,6 +26,8 @@ export class CreateQuotationBody {
   @IsString()
   status?: string;
 
+  @IsDefined()
+  @Allow()
   form!: any;
 
   @IsOptional()
@@ -59,6 +61,7 @@ export class UpdateQuotationBody {
   status?: string;
 
   @IsOptional()
+  @Allow()
   form?: any;
 
   @IsOptional()
@@ -82,63 +85,71 @@ export class UpdateQuotationBody {
   approvalStatus?: string;
 }
 
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("crm/quotations")
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class QuotationsController {
   constructor(private readonly quotationsService: QuotationsService) {}
 
   @Get()
-  @ResponseMessage("Quotations retrieved")
+  @ResponseMessage("Quotations fetched successfully")
   async findAll(
+    @CurrentUser() user: { companyId: string },
     @Query("contactId") contactId?: string,
     @Query("dealId") dealId?: string,
-    @Query("status") status?: string,
-    @CurrentUser() user?: any
+    @Query("status") status?: string
   ) {
-    return this.quotationsService.findAll(user.companyId, { contactId, dealId, status });
+    return this.quotationsService.findAll(user.companyId, {
+      contactId,
+      dealId,
+      status,
+    });
   }
 
   @Get(":id")
-  @ResponseMessage("Quotation retrieved")
-  async findOne(@Param("id") id: string, @CurrentUser() user: any) {
+  @ResponseMessage("Quotation fetched successfully")
+  async findOne(
+    @CurrentUser() user: { companyId: string },
+    @Param("id") id: string
+  ) {
     return this.quotationsService.findOne(id, user.companyId);
   }
 
   @Post()
-  @ResponseMessage("Quotation created")
-  async create(@Body() body: CreateQuotationBody, @CurrentUser() user: any) {
-    return this.quotationsService.create(body, user.companyId, user.userId || user.id);
+  @ResponseMessage("Quotation created successfully")
+  async create(
+    @CurrentUser() user: { companyId: string; sub?: string; id?: string },
+    @Body() body: CreateQuotationBody
+  ) {
+    const userId = user.id || user.sub || "system";
+    return this.quotationsService.create(body, user.companyId, userId);
   }
 
   @Put(":id")
-  @ResponseMessage("Quotation updated")
+  @ResponseMessage("Quotation updated successfully")
   async update(
+    @CurrentUser() user: { companyId: string },
     @Param("id") id: string,
-    @Body() body: UpdateQuotationBody,
-    @CurrentUser() user: any
+    @Body() body: UpdateQuotationBody
   ) {
     return this.quotationsService.update(id, body, user.companyId);
   }
 
   @Patch(":id")
-  @ResponseMessage("Quotation updated")
+  @ResponseMessage("Quotation updated successfully")
   async patch(
+    @CurrentUser() user: { companyId: string },
     @Param("id") id: string,
-    @Body() body: UpdateQuotationBody,
-    @CurrentUser() user: any
+    @Body() body: UpdateQuotationBody
   ) {
     return this.quotationsService.update(id, body, user.companyId);
   }
 
-  @Post(":id/approve")
-  @ResponseMessage("Quotation approved")
-  async approve(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.quotationsService.approve(id, user.companyId, user.userId || user.id);
-  }
-
   @Delete(":id")
-  @ResponseMessage("Quotation deleted")
-  async remove(@Param("id") id: string, @CurrentUser() user: any) {
+  @ResponseMessage("Quotation deleted successfully")
+  async remove(
+    @CurrentUser() user: { companyId: string },
+    @Param("id") id: string
+  ) {
     return this.quotationsService.remove(id, user.companyId);
   }
 }
