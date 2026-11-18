@@ -11,5 +11,9 @@ coverage/
 # Local PostgreSQL data directory (T2.2 dev/test instances)
 .pgdata/
 
+# Local persistent binary storage
+/storage/
+!/storage/.gitkeep
+
 # Logs
 *.log

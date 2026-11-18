@@ -593,7 +593,7 @@ export function ContactFormModal({ isOpen, onOpenChange, contact, onSuccess }: C
                       size="sm"
                       label={t("contacts.form.assignedTo")}
                       startContent={<UserCheck className="h-4 w-4 text-primary" />}
-                      selectedKeys={field.value ? [field.value] : []}
+                      selectedKeys={field.value && (users ?? []).some((u) => u.id === field.value) ? [field.value] : []}
                       onSelectionChange={(keys) => {
                         const v = Array.from(keys)[0] as string | undefined;
                         field.onChange(v ?? null);

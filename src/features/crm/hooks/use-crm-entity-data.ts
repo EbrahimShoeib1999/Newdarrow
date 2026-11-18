@@ -208,38 +208,22 @@ export function useCreateCrmTaskMutation(entityType: CrmEntityType, entityId: st
 export function useUploadCrmAttachmentMutation(entityType: CrmEntityType, entityId: string) {
   const { t } = useTranslation("crm");
   const { companyId } = useCompany();
-  const uploadedBy = useAuthStore((s) => s.user?.id);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (file: File) => {
-      if (!uploadedBy || !companyId) throw new Error("Not authenticated");
-      const uploaded = await uploadCrmAttachment(companyId, entityType, entityId, file);
-      const att = await AttachmentsService.createAttachment(companyId, {
-        entityType,
-        entityId,
-        fileName: file.name,
-        fileUrl: uploaded.fileUrl,
-        mimeType: uploaded.mimeType,
-        sizeBytes: uploaded.sizeBytes,
-        uploadedBy,
-      });
-      await ActivitiesService.createActivity(companyId, {
-        type: "note",
-        subject: "File uploaded",
-        description: file.name,
-        entityType,
-        entityId,
-        occurredAt: new Date().toISOString(),
-        userId: uploadedBy,
-      });
-      return att;
+      const res = await AttachmentsService.uploadAttachment(entityType, entityId, file);
+      return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["crm", companyId, "attachments"] });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.crm.activities(companyId!) });
       toast.success(t("leadDetail.attachments.saved"));
     },
-    onError: () => toast.error(t("leadDetail.attachments.failed")),
+    onError: (err: any) => {
+      const message =
+        err?.response?.data?.message || err?.message || t("leadDetail.attachments.failed");
+      toast.error(message);
+    },
   });
 }
 

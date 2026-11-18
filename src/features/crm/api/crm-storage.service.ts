@@ -1,7 +1,10 @@
 import { withLogging } from "@/lib/service-utils";
-import { uploadStorageFile } from "@/lib/storage-utils";
+import { AttachmentsService } from "./attachments.service";
+import type { CrmAttachment } from "../types/attachments.types";
 
 const SERVICE_NAME = "CrmStorageService";
+
+export const MAX_CRM_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const ALLOWED_MIME = [
   "image/jpeg",
@@ -15,25 +18,56 @@ const ALLOWED_MIME = [
   "application/msword",
 ];
 
+const ALLOWED_EXTS = [
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+  "pdf",
+  "xls",
+  "xlsx",
+  "doc",
+  "docx",
+];
+
 export function isAllowedCrmFile(file: File): boolean {
   if (ALLOWED_MIME.includes(file.type)) return true;
   const ext = file.name.split(".").pop()?.toLowerCase();
-  return ["jpg", "jpeg", "png", "gif", "webp", "pdf", "xls", "xlsx", "doc", "docx"].includes(ext ?? "");
+  return ALLOWED_EXTS.includes(ext ?? "");
+}
+
+export function validateCrmFileForUpload(file: File): { valid: boolean; error?: string } {
+  if (file.size > MAX_CRM_FILE_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: "حجم الملف يتجاوز الحد الأقصى المسموح به (10 ميجابايت)",
+    };
+  }
+  if (!isAllowedCrmFile(file)) {
+    return {
+      valid: false,
+      error: "صيغة الملف غير مدعومة. الصيغ المسموحة: PDF, PNG, JPG, GIF, WEBP, XLSX, XLS, DOCX, DOC",
+    };
+  }
+  return { valid: true };
 }
 
 export async function uploadCrmAttachment(
-  companyId: string,
+  _companyId: string,
   entityType: string,
   entityId: string,
   file: File
-): Promise<{ fileUrl: string; mimeType: string; sizeBytes: number }> {
-  return withLogging(SERVICE_NAME, "uploadCrmAttachment", (async () => {
-    const ext = file.name.split(".").pop() ?? "bin";
-    const randomId = Math.random().toString(36).substring(2, 15);
-    const path = `crm/${companyId}/${entityType}/${entityId}/${randomId}.${ext}`;
-
-    const fileUrl = await uploadStorageFile(path, file, file.type);
-    return { fileUrl, mimeType: file.type || "application/octet-stream", sizeBytes: file.size };
-  })());
+): Promise<CrmAttachment> {
+  return withLogging(SERVICE_NAME, "uploadCrmAttachment", async () => {
+    const validation = validateCrmFileForUpload(file);
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+    const res = await AttachmentsService.uploadAttachment(entityType, entityId, file);
+    if (!res.data) {
+      throw new Error("Failed to upload attachment");
+    }
+    return res.data;
+  });
 }
-

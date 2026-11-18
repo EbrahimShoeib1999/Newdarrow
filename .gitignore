@@ -29,3 +29,8 @@ dist-ssr
 .gemini
 snapshots/
 tmp/
+
+# Test outputs and local acceptance artifacts
+fixtures/
+test-*/
+screenshots-*/

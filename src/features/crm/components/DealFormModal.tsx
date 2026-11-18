@@ -147,7 +147,7 @@ export function DealFormModal({
                   <Select
                     {...selectFieldProps()}
                     label={t("deals.form.contact")}
-                    selectedKeys={field.value ? [field.value] : []}
+                    selectedKeys={field.value && contacts.some((c) => c.id === field.value) ? [field.value] : []}
                     onSelectionChange={(keys) => {
                       const v = Array.from(keys)[0] as string | undefined;
                       field.onChange(v ?? null);
@@ -239,7 +239,7 @@ export function DealFormModal({
                   <Select
                     {...selectFieldProps()}
                     label={t("deals.form.assignedTo")}
-                    selectedKeys={field.value ? [field.value] : []}
+                    selectedKeys={field.value && (users ?? []).some((u) => u.id === field.value) ? [field.value] : []}
                     onSelectionChange={(keys) => {
                       const v = Array.from(keys)[0] as string | undefined;
                       field.onChange(v ?? null);

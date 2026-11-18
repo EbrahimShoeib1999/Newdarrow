@@ -180,7 +180,15 @@ describe("CRM Services (WP-05 through WP-12) Unit & Tenant Isolation Tests", () 
 
   describe("WP-09: AttachmentsService", () => {
     it("should filter attachments by entityType and entityId", async () => {
-      const service = new AttachmentsService(mockPrisma);
+      const mockStorage = {
+        generateKey: jest.fn(),
+        saveFile: jest.fn(),
+        getFileBuffer: jest.fn(),
+        getFileStream: jest.fn(),
+        deleteFile: jest.fn(),
+        fileExists: jest.fn(),
+      };
+      const service = new AttachmentsService(mockPrisma, mockStorage as any);
       mockPrisma.crmAttachment.findMany.mockResolvedValue([]);
 
       await service.findAll(companyA, { entityType: "contact", entityId: "cust-1" });

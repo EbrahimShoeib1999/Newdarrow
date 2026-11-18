@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { PrismaService } from "../common/prisma.service";
+import { StorageModule } from "../storage/storage.module";
 import { CustomersController } from "./customers.controller";
 import { CustomersService } from "./customers.service";
 import { LeadsController } from "./leads.controller";
@@ -30,6 +31,7 @@ import { ContactClassificationsService } from "./contact-classifications.service
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 
 @Module({
+  imports: [StorageModule],
   controllers: [
     CustomersController,
     LeadsController,
