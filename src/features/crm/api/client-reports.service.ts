@@ -1,18 +1,4 @@
-import {
-  collection,
-  getDocs,
-  getDoc,
-  doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-  Timestamp,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { apiClient } from "@/lib/api-client";
 import type { ApiResponse } from "@/types/api.types";
 import { withLogging } from "@/lib/service-utils";
 import type {
@@ -23,44 +9,9 @@ import type {
 
 const SERVICE_NAME = "ClientReportsService";
 
-function mapClientReportDoc(id: string, data: Record<string, unknown>): ClientReport {
-  return {
-    id,
-    companyId: typeof data.companyId === "string" ? data.companyId : "",
-    contactId: typeof data.contactId === "string" ? data.contactId : "",
-    contactName: typeof data.contactName === "string" ? data.contactName : "",
-    dealId: typeof data.dealId === "string" ? data.dealId : undefined,
-    dealTitle: typeof data.dealTitle === "string" ? data.dealTitle : undefined,
-    authorId: typeof data.authorId === "string" ? data.authorId : "",
-    authorName: typeof data.authorName === "string" ? data.authorName : "",
-    authorEmail: typeof data.authorEmail === "string" ? data.authorEmail : undefined,
-    title: typeof data.title === "string" ? data.title : "",
-    description: typeof data.description === "string" ? data.description : undefined,
-    internalNotes: typeof data.internalNotes === "string" ? data.internalNotes : undefined,
-    reportType: (data.reportType as ClientReport["reportType"]) || "general",
-    content: typeof data.content === "string" ? data.content : "",
-    keyOutcomes: Array.isArray(data.keyOutcomes) ? data.keyOutcomes : [],
-    actionItems: Array.isArray(data.actionItems) ? data.actionItems : [],
-    clientMood: (data.clientMood as ClientReport["clientMood"]) || "satisfied",
-    satisfactionRating: typeof data.satisfactionRating === "number" ? data.satisfactionRating : 5,
-    status: (data.status as ClientReport["status"]) || "submitted",
-    reviewedBy: typeof data.reviewedBy === "string" ? data.reviewedBy : undefined,
-    reviewedByName: typeof data.reviewedByName === "string" ? data.reviewedByName : undefined,
-    reviewedAt: typeof data.reviewedAt === "string" ? data.reviewedAt : undefined,
-    createdAt:
-      data.createdAt instanceof Timestamp
-        ? data.createdAt.toDate().toISOString()
-        : (data.createdAt as string) || new Date().toISOString(),
-    updatedAt:
-      data.updatedAt instanceof Timestamp
-        ? data.updatedAt.toDate().toISOString()
-        : (data.updatedAt as string) || new Date().toISOString(),
-  };
-}
-
 export const ClientReportsService = {
   async getClientReports(
-    companyId: string,
+    _companyId: string,
     filters?: {
       contactId?: string;
       dealId?: string;
@@ -70,157 +21,114 @@ export const ClientReportsService = {
     }
   ): Promise<ApiResponse<ClientReport[]>> {
     return withLogging(SERVICE_NAME, "getClientReports", (async () => {
-      const reportsRef = collection(db, "companies", companyId, "client_reports");
-      let q = query(reportsRef, orderBy("createdAt", "desc"));
+      const params = new URLSearchParams();
+      if (filters?.contactId) params.append("contactId", filters.contactId);
+      if (filters?.dealId) params.append("dealId", filters.dealId);
+      if (filters?.authorId) params.append("authorId", filters.authorId);
+      if (filters?.reportType) params.append("reportType", filters.reportType);
+      if (filters?.clientMood) params.append("clientMood", filters.clientMood);
 
-      if (filters?.contactId) {
-        q = query(reportsRef, where("contactId", "==", filters.contactId), orderBy("createdAt", "desc"));
-      } else if (filters?.authorId) {
-        q = query(reportsRef, where("authorId", "==", filters.authorId), orderBy("createdAt", "desc"));
-      }
-
-      const querySnapshot = await getDocs(q);
-      let reports = querySnapshot.docs.map((docSnap) => mapClientReportDoc(docSnap.id, docSnap.data()));
-
-      if (filters?.dealId) {
-        reports = reports.filter((r) => r.dealId === filters.dealId);
-      }
-      if (filters?.reportType) {
-        reports = reports.filter((r) => r.reportType === filters.reportType);
-      }
-      if (filters?.clientMood) {
-        reports = reports.filter((r) => r.clientMood === filters.clientMood);
-      }
-
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      const res = await apiClient.get<ApiResponse<ClientReport[]>>(`/crm/client-reports${qs}`);
       return {
-        data: reports,
-        message: "Fetched client reports successfully",
+        data: Array.isArray(res.data?.data) ? res.data.data : [],
+        message: res.data?.message || "Fetched client reports successfully",
       };
     })());
   },
 
-  async getClientReportById(companyId: string, reportId: string): Promise<ApiResponse<ClientReport>> {
+  async getClientReportById(
+    _companyId: string,
+    reportId: string
+  ): Promise<ApiResponse<ClientReport>> {
     return withLogging(SERVICE_NAME, "getClientReportById", (async () => {
-      const reportRef = doc(db, "companies", companyId, "client_reports", reportId);
-      const docSnap = await getDoc(reportRef);
-      if (!docSnap.exists()) {
-        throw new Error("Client report not found");
-      }
+      const res = await apiClient.get<ApiResponse<ClientReport>>(`/crm/client-reports/${reportId}`);
       return {
-        data: mapClientReportDoc(docSnap.id, docSnap.data()),
-        message: "Client report fetched successfully",
+        data: res.data?.data,
+        message: res.data?.message || "Client report fetched successfully",
       };
     })());
   },
 
   async createClientReport(
-    companyId: string,
+    _companyId: string,
     payload: CreateClientReportDTO,
-    author: { id: string; name: string; email?: string }
+    _author?: { id: string; name: string; email?: string }
   ): Promise<ApiResponse<ClientReport>> {
     return withLogging(SERVICE_NAME, "createClientReport", (async () => {
-      const reportsRef = collection(db, "companies", companyId, "client_reports");
-
-      const docData: Record<string, unknown> = {
-        companyId,
-        contactId: payload.contactId,
-        contactName: payload.contactName,
-        dealId: payload.dealId || null,
-        dealTitle: payload.dealTitle || null,
-        authorId: author.id,
-        authorName: author.name,
-        authorEmail: author.email || null,
-        title: payload.title,
-        description: payload.description || null,
-        internalNotes: payload.internalNotes || null,
-        reportType: payload.reportType || "general",
-        content: payload.content,
-        keyOutcomes: payload.keyOutcomes || [],
-        actionItems: payload.actionItems || [],
-        clientMood: payload.clientMood || "satisfied",
-        satisfactionRating: payload.satisfactionRating || 5,
-        status: payload.status || "submitted",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-
-      const docRef = await addDoc(reportsRef, docData);
-      const createdSnap = await getDoc(docRef);
-
+      const res = await apiClient.post<ApiResponse<ClientReport>>("/crm/client-reports", payload);
       return {
-        data: mapClientReportDoc(docRef.id, createdSnap.data() || {}),
-        message: "تم حفظ تقرير العميل بنجاح",
+        data: res.data?.data,
+        message: res.data?.message || "تم حفظ تقرير العميل بنجاح",
       };
     })());
   },
 
   async updateClientReport(
-    companyId: string,
+    _companyId: string,
     reportId: string,
     payload: UpdateClientReportDTO
   ): Promise<ApiResponse<ClientReport>> {
     return withLogging(SERVICE_NAME, "updateClientReport", (async () => {
-      const reportRef = doc(db, "companies", companyId, "client_reports", reportId);
-
-      const updateData: Record<string, unknown> = {
-        updatedAt: serverTimestamp(),
-      };
-
-      if (payload.contactId !== undefined) updateData.contactId = payload.contactId;
-      if (payload.contactName !== undefined) updateData.contactName = payload.contactName;
-      if (payload.dealId !== undefined) updateData.dealId = payload.dealId || null;
-      if (payload.dealTitle !== undefined) updateData.dealTitle = payload.dealTitle || null;
-      if (payload.title !== undefined) updateData.title = payload.title;
-      if (payload.description !== undefined) updateData.description = payload.description || null;
-      if (payload.internalNotes !== undefined) updateData.internalNotes = payload.internalNotes || null;
-      if (payload.reportType !== undefined) updateData.reportType = payload.reportType;
-      if (payload.content !== undefined) updateData.content = payload.content;
-      if (payload.keyOutcomes !== undefined) updateData.keyOutcomes = payload.keyOutcomes;
-      if (payload.actionItems !== undefined) updateData.actionItems = payload.actionItems;
-      if (payload.clientMood !== undefined) updateData.clientMood = payload.clientMood;
-      if (payload.satisfactionRating !== undefined) updateData.satisfactionRating = payload.satisfactionRating;
-      if (payload.status !== undefined) updateData.status = payload.status;
-
-      await updateDoc(reportRef, updateData);
-      const updatedSnap = await getDoc(reportRef);
-
+      const res = await apiClient.put<ApiResponse<ClientReport>>(
+        `/crm/client-reports/${reportId}`,
+        payload
+      );
       return {
-        data: mapClientReportDoc(reportId, updatedSnap.data() || {}),
-        message: "تم تحديث تقرير العميل بنجاح",
+        data: res.data?.data,
+        message: res.data?.message || "تم تحديث تقرير العميل بنجاح",
       };
     })());
   },
 
   async approveClientReport(
-    companyId: string,
+    _companyId: string,
     reportId: string,
-    reviewer: { id: string; name: string }
+    _reviewer?: { id: string; name: string }
   ): Promise<ApiResponse<ClientReport>> {
     return withLogging(SERVICE_NAME, "approveClientReport", (async () => {
-      const reportRef = doc(db, "companies", companyId, "client_reports", reportId);
-      await updateDoc(reportRef, {
-        status: "reviewed",
-        reviewedBy: reviewer.id,
-        reviewedByName: reviewer.name,
-        reviewedAt: new Date().toISOString(),
-        updatedAt: serverTimestamp(),
-      });
-      const updatedSnap = await getDoc(reportRef);
+      const res = await apiClient.post<ApiResponse<ClientReport>>(
+        `/crm/client-reports/${reportId}/approve`
+      );
       return {
-        data: mapClientReportDoc(reportId, updatedSnap.data() || {}),
-        message: "تم اعتماد ومراجعة التقرير بنجاح",
+        data: res.data?.data,
+        message: res.data?.message || "تم اعتماد ومراجعة التقرير بنجاح",
       };
     })());
   },
 
-  async deleteClientReport(companyId: string, reportId: string): Promise<ApiResponse<void>> {
+  async deleteClientReport(_companyId: string, reportId: string): Promise<ApiResponse<void>> {
     return withLogging(SERVICE_NAME, "deleteClientReport", (async () => {
-      const reportRef = doc(db, "companies", companyId, "client_reports", reportId);
-      await deleteDoc(reportRef);
+      await apiClient.delete(`/crm/client-reports/${reportId}`);
       return {
         data: undefined,
         message: "تم حذف تقرير العميل بنجاح",
       };
+    })());
+  },
+
+  async generateShareLink(
+    _companyId: string,
+    reportId: string,
+    expiresInDays = 30
+  ): Promise<ApiResponse<{ token: string; expiresAt: string; reportId: string }>> {
+    return withLogging(SERVICE_NAME, "generateShareLink", (async () => {
+      const res = await apiClient.post<
+        ApiResponse<{ token: string; expiresAt: string; reportId: string }>
+      >(`/crm/client-reports/${reportId}/share`, { expiresInDays });
+      return res.data;
+    })());
+  },
+
+  async revokeShareLink(
+    _companyId: string,
+    reportId: string
+  ): Promise<ApiResponse<{ success: boolean }>> {
+    return withLogging(SERVICE_NAME, "revokeShareLink", (async () => {
+      const res = await apiClient.post<ApiResponse<{ success: boolean }>>(
+        `/crm/client-reports/${reportId}/revoke`
+      );
+      return res.data;
     })());
   },
 };

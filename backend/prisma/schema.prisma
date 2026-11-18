@@ -126,6 +126,13 @@ model Company {
   invoices        Invoice[]
   crmActivities   CrmActivity[]
   crmNotifications CrmNotification[]
+  crmContracts    CrmContract[]
+  crmQuotations   CrmQuotation[]
+  crmTasks        CrmTask[]
+  crmNotes        CrmNote[]
+  crmAttachments  CrmAttachment[]
+  crmClientReports CrmClientReport[]
+  crmContactClassifications CrmContactClassification[]
 
   @@index([primaryActivity])
 }
@@ -419,6 +426,9 @@ model Customer {
   leads         Lead[]
   deals         Deal[]
   invoices      Invoice[]
+  contracts     CrmContract[]
+  quotations    CrmQuotation[]
+  clientReports CrmClientReport[]
 
   @@index([companyId])
   @@index([email])
@@ -470,6 +480,9 @@ model Deal {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   deletedAt      DateTime?
+  contracts      CrmContract[]
+  quotations     CrmQuotation[]
+  clientReports  CrmClientReport[]
 
   @@index([companyId])
   @@index([stage])
@@ -532,6 +545,190 @@ model CrmNotification {
 
   @@index([companyId, userId, read])
   @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// CRM: Contracts, Quotations, Tasks, Notes, Attachments, Reports, Classifications
+// ---------------------------------------------------------------------------
+
+model CrmContract {
+  id               String    @id @default(cuid())
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title            String
+  status           String    @default("draft") // "draft" | "final"
+  form             Json      // ContractFormDraft (parties, dynamic fields, clauses, services, etc.)
+  contactId        String?
+  contact          Customer? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  dealId           String?
+  deal             Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  createdBy        String?
+  approvalStatus   String    @default("pending") // "pending" | "approved"
+  approvedAt       DateTime?
+  approvedBy       String?
+  convertedToTasks Boolean   @default(false)
+  createdTaskIds   Json?     // string[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  @@index([companyId])
+  @@index([contactId])
+  @@index([dealId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model CrmQuotation {
+  id             String    @id @default(cuid())
+  companyId      String
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title          String
+  status         String    @default("draft") // "draft" | "sent"
+  form           Json      // QuotationFormDraft (quoteNumber, lines, vatRate, notes, etc.)
+  total          Float     @default(0)
+  currency       String    @default("SAR")
+  contactId      String?
+  contact        Customer? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  dealId         String?
+  deal           Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  createdBy      String?
+  approvalStatus String    @default("pending") // "pending" | "approved"
+  approvedAt     DateTime?
+  approvedBy     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  @@index([companyId])
+  @@index([contactId])
+  @@index([dealId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model CrmTask {
+  id          String    @id @default(cuid())
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  taskType    String    @default("follow_up") // "call" | "meeting" | "email" | "follow_up" | "proposal"
+  status      String    @default("pending")   // "pending" | "in_progress" | "completed" | "cancelled"
+  priority    String    @default("medium")    // "low" | "medium" | "high"
+  dueDate     DateTime?
+  entityType  String    @default("lead")      // "lead" | "contact" | "deal"
+  entityId    String
+  assigneeId  String?
+  ownerId     String?
+  tags        Json?                           // string[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([companyId, status])
+  @@index([companyId, entityType, entityId])
+  @@index([assigneeId])
+  @@index([dueDate])
+  @@index([deletedAt])
+}
+
+model CrmNote {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  content    String
+  entityType String    // "lead" | "contact" | "deal" | "customer"
+  entityId   String
+  authorId   String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  @@index([companyId, entityType, entityId])
+  @@index([authorId])
+  @@index([deletedAt])
+}
+
+model CrmAttachment {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entityType String    // "lead" | "contact" | "deal" | "customer"
+  entityId   String
+  fileName   String
+  fileUrl    String
+  mimeType   String    @default("application/octet-stream")
+  sizeBytes  Int       @default(0)
+  storageKey String?
+  uploadedBy String
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  @@index([companyId, entityType, entityId])
+  @@index([uploadedBy])
+  @@index([deletedAt])
+}
+
+model CrmClientReport {
+  id                   String    @id @default(cuid())
+  companyId            String
+  company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId            String
+  contact              Customer? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contactName          String
+  dealId               String?
+  deal                 Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  dealTitle            String?
+  authorId             String
+  authorName           String
+  authorEmail          String?
+  title                String
+  description          String?
+  internalNotes        String?
+  reportType           String    @default("general") // "general" | "weekly" | "monthly" | "quarterly" | "incident"
+  content              String
+  keyOutcomes          Json?     // string[]
+  actionItems          Json?     // { id, text, done, dueDate }[]
+  clientMood           String    @default("satisfied") // "satisfied" | "neutral" | "concerned" | "unhappy"
+  satisfactionRating   Int       @default(5)
+  status               String    @default("submitted") // "draft" | "submitted" | "reviewed"
+  reviewedBy           String?
+  reviewedByName       String?
+  reviewedAt           DateTime?
+  publicToken          String?   @unique
+  publicTokenExpiresAt DateTime?
+  isPublicRevoked      Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+
+  @@index([companyId])
+  @@index([contactId])
+  @@index([authorId])
+  @@index([publicToken])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model CrmContactClassification {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key        String
+  nameAr     String
+  nameEn     String
+  color      String   @default("primary")
+  emoji      String?
+  isDefault  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([companyId, key])
+  @@index([companyId])
+  @@index([key])
 }
 
 // ---------------------------------------------------------------------------

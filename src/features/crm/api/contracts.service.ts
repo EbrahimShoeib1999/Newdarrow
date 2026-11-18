@@ -1,5 +1,5 @@
-import { createCrmCollectionService } from "./crm-base.service";
-import { CRM_COLLECTIONS } from "../constants/crm-collections";
+import { apiClient } from "@/lib/api-client";
+import type { ApiResponse } from "@/types/api.types";
 import type {
   SavedContract,
   CreateContractDTO,
@@ -10,27 +10,48 @@ import {
   normalizeContractPayload,
 } from "../utils/contract-normalization";
 
-const base = createCrmCollectionService<
-  SavedContract,
-  CreateContractDTO,
-  UpdateContractDTO
->(CRM_COLLECTIONS.contracts, "ContractsService", {
-  status: "draft",
-  approvalStatus: "pending",
-});
-
 export const ContractsService = {
-  getAll: base.getAll,
-  getById: base.getById,
-  async create(companyId: string, data: CreateContractDTO) {
+  async getAll(_companyId?: string): Promise<ApiResponse<SavedContract[]>> {
+    const res = await apiClient.get<ApiResponse<SavedContract[]>>("/crm/contracts");
+    return {
+      data: Array.isArray(res.data?.data) ? res.data.data : [],
+      message: res.data?.message || "Success",
+    };
+  },
+
+  async getById(_companyId: string, id: string): Promise<ApiResponse<SavedContract>> {
+    const res = await apiClient.get<ApiResponse<SavedContract>>(`/crm/contracts/${id}`);
+    return {
+      data: res.data?.data,
+      message: res.data?.message || "Success",
+    };
+  },
+
+  async create(_companyId: string, data: CreateContractDTO): Promise<ApiResponse<SavedContract>> {
     validateContractPayload(data);
     const normalized = normalizeContractPayload(data);
-    return base.create(companyId, normalized);
+    const res = await apiClient.post<ApiResponse<SavedContract>>("/crm/contracts", normalized);
+    return {
+      data: res.data?.data,
+      message: res.data?.message || "Contract created successfully",
+    };
   },
-  async update(companyId: string, id: string, data: UpdateContractDTO) {
+
+  async update(
+    _companyId: string,
+    id: string,
+    data: UpdateContractDTO
+  ): Promise<ApiResponse<SavedContract>> {
     validateContractPayload(data);
     const normalized = normalizeContractPayload(data);
-    return base.update(companyId, id, normalized);
+    const res = await apiClient.put<ApiResponse<SavedContract>>(`/crm/contracts/${id}`, normalized);
+    return {
+      data: res.data?.data,
+      message: res.data?.message || "Contract updated successfully",
+    };
   },
-  delete: base.delete,
+
+  async delete(_companyId: string, id: string): Promise<void> {
+    await apiClient.delete(`/crm/contracts/${id}`);
+  },
 };

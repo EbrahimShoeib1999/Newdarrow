@@ -20,9 +20,8 @@ import {
   Check,
   Globe,
 } from "lucide-react";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import type { ClientReport, ClientMood } from "../types/client-reports.types";
+import { apiClient } from "@/lib/api-client";
+import type { ClientReport } from "../types/client-reports.types";
 
 const MOOD_CONFIG: Record<string, { labelAr: string; labelEn: string; color: "success" | "default" | "warning" | "danger"; icon: any }> = {
   satisfied: { labelAr: "مرتاح / راضٍ", labelEn: "Satisfied", color: "success", icon: Smile },
@@ -59,41 +58,20 @@ export default function PublicClientReportPage() {
 
     const fetchPublicReport = async () => {
       try {
-        const docRef = doc(db, "companies", companyId, "client_reports", reportId);
-        const snap = await getDoc(docRef);
-        if (!snap.exists()) {
+        const res = await apiClient.get<{ data: ClientReport }>(
+          `/crm/public/client-reports/view/${companyId}/${reportId}`
+        );
+        const data = res.data?.data;
+        if (!data) {
           setError(isAr ? "التقرير غير موجود أو تم إزالته" : "Report not found");
         } else {
-          const data = snap.data();
           setReport({
-            id: snap.id,
-            companyId: (data.companyId as string) || companyId,
-            contactId: (data.contactId as string) || "",
-            contactName: (data.contactName as string) || "",
-            dealId: data.dealId as string | undefined,
-            dealTitle: data.dealTitle as string | undefined,
-            authorId: (data.authorId as string) || "",
-            authorName: (data.authorName as string) || "",
-            authorEmail: data.authorEmail as string | undefined,
-            title: (data.title as string) || "",
-            description: data.description as string | undefined,
-            internalNotes: undefined, // Always strip internal confidential notes for public views
-            reportType: (data.reportType as ClientReport["reportType"]) || "general",
-            content: (data.content as string) || "",
-            keyOutcomes: Array.isArray(data.keyOutcomes) ? data.keyOutcomes : [],
-            actionItems: Array.isArray(data.actionItems) ? data.actionItems : [],
-            clientMood: (data.clientMood as ClientMood) || "satisfied",
-            satisfactionRating: typeof data.satisfactionRating === "number" ? data.satisfactionRating : 5,
-            status: (data.status as ClientReport["status"]) || "submitted",
-            reviewedBy: data.reviewedBy as string | undefined,
-            reviewedByName: data.reviewedByName as string | undefined,
-            reviewedAt: data.reviewedAt as string | undefined,
-            createdAt: (data.createdAt?.toDate?.()?.toISOString()) || new Date().toISOString(),
-            updatedAt: (data.updatedAt?.toDate?.()?.toISOString()) || new Date().toISOString(),
+            ...data,
+            internalNotes: undefined, // Enforce no internal notes
           });
         }
       } catch (err: any) {
-        setError(err.message || (isAr ? "فشل تحميل التقرير" : "Failed to load report"));
+        setError(err.response?.data?.message || err.message || (isAr ? "فشل تحميل التقرير" : "Failed to load report"));
       } finally {
         setLoading(false);
       }

@@ -1,8 +1,18 @@
-import { Timestamp } from "firebase/firestore";
-
 export function timestampToIso(value: unknown): string | null {
   if (value == null) return null;
-  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    try {
+      return (value as { toDate: () => Date }).toDate().toISOString();
+    } catch {
+      return null;
+    }
+  }
+  if (value instanceof Date) return value.toISOString();
   if (typeof value === "string") return value;
   return null;
 }
@@ -25,7 +35,7 @@ export function stripUndefined<T extends Record<string, unknown>>(obj: T): Parti
   ) as Partial<T>;
 }
 
-/** Recursively remove undefined — required before Firestore writes. */
+/** Recursively remove undefined */
 export function deepStripUndefined<T>(value: T): T {
   if (value === undefined) {
     return value;
