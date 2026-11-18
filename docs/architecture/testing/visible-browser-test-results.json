@@ -1,0 +1,61 @@
+{
+  "timestamp": "2026-11-17T16:17:40.440Z",
+  "stepLogs": [
+    {
+      "section": "A. Authentication",
+      "name": "Login with Company A Admin",
+      "status": "PASS",
+      "details": "Current path: /crm/contacts, tokenStored=true",
+      "screenshot": "02-dashboard-authenticated.png"
+    },
+    {
+      "section": "B. Customers",
+      "name": "View Customer List & Detail",
+      "status": "PASS",
+      "details": "Customer in table: true, Detail page loaded: true",
+      "screenshot": "04-customer-detail.png"
+    },
+    {
+      "section": "C. Leads",
+      "name": "View Leads List & Detail",
+      "status": "PASS",
+      "details": "Lead in table: true, Detail page loaded: true",
+      "screenshot": "06-lead-detail.png"
+    },
+    {
+      "section": "D. Deals",
+      "name": "View Deals Pipeline & Detail",
+      "status": "PASS",
+      "details": "Deal in pipeline: true, Detail page loaded: true",
+      "screenshot": "08-deal-detail.png"
+    },
+    {
+      "section": "E. Activities",
+      "name": "Create, Display & Update Activity",
+      "status": "PASS",
+      "details": "Created in timeline: true, Updated visible: false",
+      "screenshot": "10-activity-timeline-updated.png"
+    },
+    {
+      "section": "F. Notifications",
+      "name": "Notifications Dropdown, Count & Mark Read",
+      "status": "PASS",
+      "details": "Initial count: 1, Post mark-read count: 0",
+      "screenshot": "12-notifications-after-mark-read.png"
+    },
+    {
+      "section": "G. Tenant Isolation",
+      "name": "Cross-Tenant Data Isolation (Company A vs B)",
+      "status": "PASS",
+      "details": "Company B data visible: true, Company A data leaked: false, Direct ID access leaked: false",
+      "screenshot": "14-company-b-access-denied.png"
+    },
+    {
+      "section": "H. Responsive UI",
+      "name": "Responsive Viewport Checks (Desktop, Tablet, Mobile)",
+      "status": "PASS",
+      "details": "Successfully demonstrated Desktop (1400x900), Tablet (768x1024), and Mobile (375x812) responsive layouts.",
+      "screenshot": "16-responsive-mobile.png"
+    }
+  ]
+}

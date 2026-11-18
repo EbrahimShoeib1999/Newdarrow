@@ -25,6 +25,8 @@ import {
 } from "../utils/invite-delivery";
 import type { UserRole } from "@/features/auth/types/auth.types";
 import type { CreateInviteInput, TeamInvite } from "../types/invite.types";
+import apiClient from "@/lib/api-client";
+import type { ApiResponse } from "@/types/api.types";
 
 const SERVICE_NAME = "InvitesService";
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -255,6 +257,15 @@ export const InvitesService = {
   },
 
   async getByToken(token: string): Promise<TeamInvite | null> {
+    try {
+      const res = await apiClient.get<ApiResponse<TeamInvite>>(`/auth/invitation/${token}`);
+      if (res.data?.data) {
+        return res.data.data;
+      }
+    } catch {
+      // Fallback to Firestore
+    }
+
     console.info("[InvitesService:getByToken] Firestore operation started", {
       operation: "get",
       path: "invites/{token}",

@@ -95,6 +95,14 @@ export default defineConfig(({ command }) => ({
     },
   },
   server: {
+    port: 5173,
+    proxy: {
+      "/api": {
+        target: "http://localhost:3005/api/v1",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
     // The browser E2E lifecycle harness sets this to stop Vite from firing a
     // full page reload when the Firestore emulator writes its debug log into
     // the project root mid-test (which wipes in-progress modal forms). Normal
@@ -107,7 +115,9 @@ export default defineConfig(({ command }) => ({
     // session still hot-reloads on any file change.
     watch: process.env.E2E_NO_HMR
       ? null
-      : undefined,
+      : {
+          ignored: ["**/tmp/**", "**/.e2e-temp/**"],
+        },
   },
   build: {
     reportCompressedSize: false,

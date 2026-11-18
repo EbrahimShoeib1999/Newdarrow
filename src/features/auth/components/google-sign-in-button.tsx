@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 
 export function GoogleSignInButton({
   className,
-  appearance = "dark",
 }: {
   className?: string;
   appearance?: "light" | "dark";

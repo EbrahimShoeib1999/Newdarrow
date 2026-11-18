@@ -13,10 +13,11 @@ import {
   User,
   UserCheck,
   Briefcase,
+  Trash2,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { FieldBox } from "@/components/shared/field-box";
-import { useLeadQuery, useUpdateLeadMutation } from "../hooks/use-leads";
+import { useLeadQuery, useUpdateLeadMutation, useDeleteLeadMutation } from "../hooks/use-leads";
 import { useDealsQuery } from "../hooks/use-deals";
 import { useCrmPermissions } from "../hooks/use-crm-permissions";
 import {
@@ -52,16 +53,32 @@ export function LeadDetailPage() {
   const { leadId = "" } = useParams();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation("crm");
-  const { canManageLeads } = useCrmPermissions();
+  const { canManageLeads, canDeleteCrm } = useCrmPermissions();
   const { data: leadRes, isLoading } = useLeadQuery(leadId);
   const { data: users } = useAllUsers();
   const updateLead = useUpdateLeadMutation();
+  const deleteMutation = useDeleteLeadMutation();
   const convertLead = useConvertLeadMutation();
   const { data: dealsRes } = useDealsQuery();
   const [editOpen, setEditOpen] = useState(false);
   const [wonTaskOpen, setWonTaskOpen] = useState(false);
   const [dealModalOpen, setDealModalOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (window.confirm(t("leads.confirmDelete", { defaultValue: "Are you sure you want to delete this lead?" }))) {
+      setIsDeleting(true);
+      try {
+        await deleteMutation.mutateAsync(leadId);
+        navigate("/crm/leads");
+      } catch {
+        // error toasted by hook
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
 
   const { data: notes = [] } = useLeadNotes(leadId);
   const { data: activities = [] } = useLeadActivities(leadId);
@@ -147,6 +164,18 @@ export function LeadDetailPage() {
                   >
                     {t("leadDetail.edit")}
                   </Button>
+                  {canDeleteCrm && (
+                    <Button
+                      color="danger"
+                      variant="flat"
+                      startContent={<Trash2 className="h-4 w-4" />}
+                      className="rounded-full font-bold"
+                      isLoading={isDeleting}
+                      onPress={handleDelete}
+                    >
+                      {t("leadDetail.delete", "Delete")}
+                    </Button>
+                  )}
                 </div>
               ) : undefined
             }

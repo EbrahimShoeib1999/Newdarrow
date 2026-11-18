@@ -22,7 +22,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     try {
       const response = await AuthService.login({ email, password });
-      const { user: userData, refreshToken } = response.data;
+      const { user: rawUser, refreshToken } = response.data;
+      const userData = rawUser
+        ? ({
+            ...rawUser,
+            role: (rawUser.role ? String(rawUser.role).toLowerCase() : "viewer") as any,
+          } as User)
+        : null;
 
       localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
 
@@ -48,8 +54,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   checkAuth: async () => {
     try {
       const response = await AuthService.getCurrentUser();
+      const rawUser = response.data;
+      const userData = rawUser
+        ? ({
+            ...rawUser,
+            role: (rawUser.role ? String(rawUser.role).toLowerCase() : "viewer") as any,
+          } as User)
+        : null;
       set({
-        user: response.data,
+        user: userData,
         isAuthenticated: true,
         isLoading: false,
       });

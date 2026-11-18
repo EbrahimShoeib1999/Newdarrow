@@ -1,11 +1,14 @@
 import {
   Body,
   Controller,
+  Get,
+  Param,
   Post,
   UseGuards,
   Request,
   HttpCode,
   HttpStatus,
+  Inject,
 } from "@nestjs/common";
 import { IsEmail, IsString, MinLength, IsOptional } from "class-validator";
 import { AuthService } from "./auth.service";
@@ -75,7 +78,7 @@ export class AcceptInvitationDto {
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post("register")
   @RateLimit({ max: 5, windowSeconds: 300 }) // 5 registrations per 5 minutes
@@ -104,6 +107,12 @@ export class AuthController {
     return { message: "Logged out" };
   }
 
+  @Get("invitation/:token")
+  @HttpCode(HttpStatus.OK)
+  async getInvitation(@Param("token") token: string) {
+    return this.authService.getInvitation(token);
+  }
+
   @Post("invitation/accept")
   @RateLimit({ max: 5, windowSeconds: 300 }) // 5 invitation acceptances per 5 minutes
   @HttpCode(HttpStatus.OK)
@@ -111,8 +120,16 @@ export class AuthController {
     return this.authService.acceptInvitation(dto);
   }
 
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async getMe(@Request() req: any) {
+    return req.user;
+  }
+
   @Post("me")
   @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
   async me(@Request() req: any) {
     return req.user;
   }

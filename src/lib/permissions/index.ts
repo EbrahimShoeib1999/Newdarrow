@@ -296,30 +296,36 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
 };
 
 export function hasPermission(
-  role: UserRole | undefined,
+  role: UserRole | string | undefined,
   permission: Permission
 ): boolean {
   if (!role) return false;
-  return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
+  const normalized = role.toLowerCase() as UserRole;
+  return ROLE_PERMISSIONS[normalized]?.includes(permission) ?? false;
 }
 
 export function hasAnyPermission(
-  role: UserRole | undefined,
+  role: UserRole | string | undefined,
   permissions: readonly Permission[]
 ): boolean {
   return permissions.some((p) => hasPermission(role, p));
 }
 
-export function isAdminRole(role: UserRole | undefined): boolean {
-  return role === "platform_admin" || role === "super_admin" || role === "admin";
+export function isAdminRole(role: UserRole | string | undefined): boolean {
+  if (!role) return false;
+  const normalized = role.toLowerCase();
+  return normalized === "platform_admin" || normalized === "super_admin" || normalized === "admin";
 }
 
-export function isPlatformAdminRole(role: UserRole | undefined): boolean {
-  return role === "platform_admin";
+export function isPlatformAdminRole(role: UserRole | string | undefined): boolean {
+  if (!role) return false;
+  return role.toLowerCase() === "platform_admin";
 }
 
-export function isManagerRole(role: UserRole | undefined): boolean {
-  return isAdminRole(role) || role === "manager" || role === "global_hr_manager";
+export function isManagerRole(role: UserRole | string | undefined): boolean {
+  if (!role) return false;
+  const normalized = role.toLowerCase();
+  return isAdminRole(normalized) || normalized === "manager" || normalized === "global_hr_manager";
 }
 
 export type AccessiblePortal =
@@ -336,14 +342,14 @@ export type AccessiblePortal =
   | "custom_modules";
 
 export function canAccessPortal(
-  role: UserRole | undefined,
+  role: UserRole | string | undefined,
   portal: AccessiblePortal
 ): boolean {
   return hasPermission(role, `portals.${portal}` as Permission);
 }
 
 export function getAccessiblePortals(
-  role: UserRole | undefined
+  role: UserRole | string | undefined
 ): AccessiblePortal[] {
   return (["tasks", "crm", "people", "billing", "chat", "projects", "facilities", "agency", "real_estate", "school", "custom_modules"] as const).filter((p) =>
     canAccessPortal(role, p)

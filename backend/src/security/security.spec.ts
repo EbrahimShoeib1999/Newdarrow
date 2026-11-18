@@ -1,73 +1,195 @@
 /**
- * D-Arrow Security Regression Tests — Phase 3
+ * D-Arrow Security Regression Tests â€” Phase 3
  *
  * Tenant isolation, IDOR, RBAC, auth security, and rate limiting tests.
  * Uses mocked PrismaService to avoid database dependency.
+ *
+ * Mocks use mockImplementation so where-clause arguments are respected:
+ * a mock returns a record only if its fields match the requested where clause.
+ * This prevents a Company B record from being returned for a Company A request.
  */
 
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+
+// ---------------------------------------------------------------------------
+// Mock bcryptjs at module level (avoids "Cannot redefine property: hash")
+// ---------------------------------------------------------------------------
+jest.mock("bcryptjs", () => ({
+  hash: jest.fn().mockResolvedValue("hashed-password"),
+  compare: jest.fn().mockResolvedValue(true),
+}));
+
 import * as bcrypt from "bcryptjs";
 
 // ---------------------------------------------------------------------------
-// Mock PrismaService (jest.Mocked to preserve mockResolvedValue typing)
+// Mock PrismaService with where-clause-aware implementations
 // ---------------------------------------------------------------------------
+
+// Helper: returns the record only if every key in `where` matches the record.
+function matchWhere(record: any, where: Record<string, unknown> | null | undefined): any {
+  if (!record || !where) return record;
+  const keys = Object.keys(where);
+  for (const k of keys) {
+    if (record[k] !== where[k]) return null;
+  }
+  return record;
+}
+
+const companyA = { id: "company-a", name: "Company A", deletedAt: null };
+const companyB = { id: "company-b", name: "Company B", deletedAt: null };
+
+const membershipA = {
+  id: "membership-a",
+  userId: "user-a",
+  companyId: "company-a",
+  role: "ADMIN",
+  status: "ACTIVE",
+  company: companyA,
+};
+
+const membershipB = {
+  id: "membership-b",
+  userId: "user-b",
+  companyId: "company-b",
+  role: "EMPLOYEE",
+  status: "ACTIVE",
+};
+
+const userA = { id: "user-a", email: "a@companya.com", passwordHash: "hashed-password-a" };
+const userB = { id: "user-b", email: "b@companyb.com", passwordHash: "hashed-password-b" };
+
+const branchA = { id: "branch-a", companyId: "company-a", name: "Branch A", deletedAt: null };
+const branchB = { id: "branch-b", companyId: "company-b", name: "Branch B", deletedAt: null };
+
+const employeeA = { id: "employee-a", userId: "user-a", companyId: "company-a", employeeNumber: "E001", deletedAt: null };
+const employeeB = { id: "employee-b", userId: "user-b", companyId: "company-b", employeeNumber: "E002", deletedAt: null };
+
+const customerA = { id: "customer-a", companyId: "company-a", name: "Customer A", deletedAt: null };
+const customerB = { id: "customer-b", companyId: "company-b", name: "Customer B", deletedAt: null };
+
+const leadA = { id: "lead-a", companyId: "company-a", name: "Lead A", deletedAt: null };
+const leadB = { id: "lead-b", companyId: "company-b", name: "Lead B", deletedAt: null };
+
+const dealA = { id: "deal-a", companyId: "company-a", title: "Deal A", deletedAt: null };
+const dealB = { id: "deal-b", companyId: "company-b", title: "Deal B", deletedAt: null };
+
+const invoiceA = { id: "invoice-a", companyId: "company-a", invoiceNumber: "INV-001", deletedAt: null };
+const invoiceB = { id: "invoice-b", companyId: "company-b", invoiceNumber: "INV-002", deletedAt: null };
+
+const attendanceA = { id: "attendance-a", employeeId: "employee-a", companyId: "company-a" };
+const attendanceB = { id: "attendance-b", employeeId: "employee-b", companyId: "company-b" };
+
+const leaveRequestA = { id: "leave-a", employeeId: "employee-a", companyId: "company-a", status: "PENDING" };
+const leaveRequestB = { id: "leave-b", employeeId: "employee-b", companyId: "company-b", status: "PENDING" };
 
 const mockPrisma: any = {
   user: {
-    findUnique: jest.fn(),
+    findUnique: jest.fn((args: any) => {
+      if (args?.where?.id === userA.id) return userA;
+      if (args?.where?.id === userB.id) return userB;
+      if (args?.where?.email === userA.email) return userA;
+      if (args?.where?.email === userB.email) return userB;
+      return null;
+    }),
     create: jest.fn(),
+    upsert: jest.fn(),
   },
   company: {
-    findUnique: jest.fn(),
-    findMany: jest.fn(),
+    findUnique: jest.fn((args: any) => matchWhere(companyA, args?.where) ?? matchWhere(companyB, args?.where)),
+    findMany: jest.fn((args: any) => {
+      const where = args?.where ?? {};
+      if (where.id && where.deletedAt === null) {
+        return [companyA.id === where.id ? companyA : companyB.id === where.id ? companyB : null].filter(Boolean);
+      }
+      return [companyA, companyB].filter((c) => !c.deletedAt);
+    }),
     create: jest.fn(),
     update: jest.fn(),
     count: jest.fn(),
   },
   companyMembership: {
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
+    findUnique: jest.fn((args: any) => matchWhere(membershipA, args?.where) ?? matchWhere(membershipB, args?.where)),
+    findFirst: jest.fn((args: any) => matchWhere(membershipA, args?.where) ?? matchWhere(membershipB, args?.where)),
+    findMany: jest.fn((args: any) => {
+      const where = args?.where ?? {};
+      const results = [membershipA, membershipB].filter((m) => !where.status || m.status === where.status);
+      if (where.companyId) return results.filter((m) => m.companyId === where.companyId);
+      if (where.userId) return results.filter((m) => m.userId === where.userId);
+      return results;
+    }),
     create: jest.fn(),
   },
   branch: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
+    findUnique: jest.fn((args: any) => matchWhere(branchA, args?.where) ?? matchWhere(branchB, args?.where)),
+    findFirst: jest.fn((args: any) => matchWhere(branchA, args?.where) ?? matchWhere(branchB, args?.where)),
+    findMany: jest.fn((args: any) => {
+      const where = args?.where ?? {};
+      return [branchA, branchB].filter((b) => !where.companyId || b.companyId === where.companyId);
+    }),
     create: jest.fn(),
     update: jest.fn(),
   },
   employee: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
+    findUnique: jest.fn((args: any) => matchWhere(employeeA, args?.where) ?? matchWhere(employeeB, args?.where)),
+    findFirst: jest.fn((args: any) => matchWhere(employeeA, args?.where) ?? matchWhere(employeeB, args?.where)),
+    findMany: jest.fn((args: any) => {
+      const where = args?.where ?? {};
+      return [employeeA, employeeB].filter((e) => !where.companyId || e.companyId === where.companyId);
+    }),
     create: jest.fn(),
     update: jest.fn(),
   },
   customer: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
+    findUnique: jest.fn((args: any) => matchWhere(customerA, args?.where) ?? matchWhere(customerB, args?.where)),
+    findFirst: jest.fn((args: any) => matchWhere(customerA, args?.where) ?? matchWhere(customerB, args?.where)),
+    findMany: jest.fn((args: any) => {
+      const where = args?.where ?? {};
+      return [customerA, customerB].filter((c) => !where.companyId || c.companyId === where.companyId);
+    }),
     create: jest.fn(),
     update: jest.fn(),
   },
   lead: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
+    findUnique: jest.fn((args: any) => matchWhere(leadA, args?.where) ?? matchWhere(leadB, args?.where)),
+    findFirst: jest.fn((args: any) => matchWhere(leadA, args?.where) ?? matchWhere(leadB, args?.where)),
+    findMany: jest.fn((args: any) => {
+      const where = args?.where ?? {};
+      return [leadA, leadB].filter((l) => !where.companyId || l.companyId === where.companyId);
+    }),
     create: jest.fn(),
     update: jest.fn(),
   },
   deal: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
+    findUnique: jest.fn((args: any) => matchWhere(dealA, args?.where) ?? matchWhere(dealB, args?.where)),
+    findFirst: jest.fn((args: any) => matchWhere(dealA, args?.where) ?? matchWhere(dealB, args?.where)),
+    findMany: jest.fn((args: any) => {
+      const where = args?.where ?? {};
+      return [dealA, dealB].filter((d) => !where.companyId || d.companyId === where.companyId);
+    }),
     create: jest.fn(),
     update: jest.fn(),
   },
   invoice: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
+    findUnique: jest.fn((args: any) => matchWhere(invoiceA, args?.where) ?? matchWhere(invoiceB, args?.where)),
+    findFirst: jest.fn((args: any) => matchWhere(invoiceA, args?.where) ?? matchWhere(invoiceB, args?.where)),
+    findMany: jest.fn((args: any) => {
+      const where = args?.where ?? {};
+      return [invoiceA, invoiceB].filter((i) => !where.companyId || i.companyId === where.companyId);
+    }),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+  attendance: {
+    findUnique: jest.fn((args: any) => matchWhere(attendanceA, args?.where) ?? matchWhere(attendanceB, args?.where)),
+    findFirst: jest.fn((args: any) => matchWhere(attendanceA, args?.where) ?? matchWhere(attendanceB, args?.where)),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+  leaveRequest: {
+    findUnique: jest.fn((args: any) => matchWhere(leaveRequestA, args?.where) ?? matchWhere(leaveRequestB, args?.where)),
+    findFirst: jest.fn((args: any) => matchWhere(leaveRequestA, args?.where) ?? matchWhere(leaveRequestB, args?.where)),
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
@@ -76,7 +198,7 @@ const mockPrisma: any = {
     findUnique: jest.fn(),
     create: jest.fn(),
     delete: jest.fn(),
-    deleteMany: jest.fn(),
+    deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
   invitation: {
     findUnique: jest.fn(),
@@ -87,6 +209,7 @@ const mockPrisma: any = {
   },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
+  $transaction: jest.fn(async (callback: any) => callback(mockPrisma)),
 };
 
 jest.mock("../common/prisma.service", () => ({
@@ -114,47 +237,25 @@ const prisma: any = mockPrisma;
 // Test helpers
 // ---------------------------------------------------------------------------
 
-const companyA = { id: "company-a", name: "Company A", deletedAt: null };
-const companyB = { id: "company-b", name: "Company B", deletedAt: null };
-
-const membershipA = {
-  id: "membership-a",
-  userId: "user-a",
-  companyId: "company-a",
-  role: "ADMIN",
-  status: "ACTIVE",
-};
-
-const userA = { id: "user-a", email: "a@companya.com", passwordHash: "hashed-password-a" };
-const userB = { id: "user-b", email: "b@companyb.com", passwordHash: "hashed-password-b" };
-
-const branchA = { id: "branch-a", companyId: "company-a", name: "Branch A", deletedAt: null };
-const branchB = { id: "branch-b", companyId: "company-b", name: "Branch B", deletedAt: null };
-
-const employeeA = { id: "employee-a", userId: "user-a", companyId: "company-a", employeeNumber: "E001", deletedAt: null };
-const employeeB = { id: "employee-b", userId: "user-b", companyId: "company-b", employeeNumber: "E002", deletedAt: null };
-
-const customerA = { id: "customer-a", companyId: "company-a", name: "Customer A", deletedAt: null };
-const customerB = { id: "customer-b", companyId: "company-b", name: "Customer B", deletedAt: null };
-
-const leadA = { id: "lead-a", companyId: "company-a", name: "Lead A", deletedAt: null };
-const leadB = { id: "lead-b", companyId: "company-b", name: "Lead B", deletedAt: null };
-
-const dealA = { id: "deal-a", companyId: "company-a", title: "Deal A", deletedAt: null };
-const dealB = { id: "deal-b", companyId: "company-b", title: "Deal B", deletedAt: null };
-
-const invoiceA = { id: "invoice-a", companyId: "company-a", invoiceNumber: "INV-001", deletedAt: null };
-const invoiceB = { id: "invoice-b", companyId: "company-b", invoiceNumber: "INV-002", deletedAt: null };
+function resetAllMocks() {
+  for (const [, service] of Object.entries(mockPrisma)) {
+    if (typeof service === "object" && service !== null) {
+      for (const [, fn] of Object.entries(service)) {
+        if (typeof fn === "function" && fn.mockClear) fn.mockClear();
+      }
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
-// CompaniesService — Tenant Isolation
+// CompaniesService â€” Tenant Isolation
 // ---------------------------------------------------------------------------
 
-describe("CompaniesService — Tenant Isolation", () => {
+describe("CompaniesService â€” Tenant Isolation", () => {
   let service: CompaniesService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     service = new CompaniesService(prisma as any);
   });
 
@@ -171,13 +272,13 @@ describe("CompaniesService — Tenant Isolation", () => {
   });
 
   it("findOne rejects access to another company's record", async () => {
-    prisma.company.findUnique.mockResolvedValue({ ...companyB, id: "company-b" });
+    prisma.company.findUnique.mockResolvedValue(companyB);
 
     await expect(service.findOne("company-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
   it("update rejects modification of another company's record", async () => {
-    prisma.company.findUnique.mockResolvedValue({ ...companyB, id: "company-b" });
+    prisma.company.findUnique.mockResolvedValue(companyB);
 
     await expect(
       service.update("company-b", { name: "Hacked" } as any, "company-a"),
@@ -185,12 +286,13 @@ describe("CompaniesService — Tenant Isolation", () => {
   });
 
   it("remove rejects deletion of another company's record", async () => {
-    prisma.company.findUnique.mockResolvedValue({ ...companyB, id: "company-b" });
+    prisma.company.findUnique.mockResolvedValue(companyB);
 
     await expect(service.remove("company-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
   it("create creates company and membership for the owner", async () => {
+    prisma.companyMembership.findUnique.mockResolvedValue(null);
     prisma.company.create.mockResolvedValue(companyA);
     prisma.companyMembership.create.mockResolvedValue(membershipA);
 
@@ -213,17 +315,25 @@ describe("CompaniesService — Tenant Isolation", () => {
     );
     expect(result).toEqual(companyA);
   });
+
+  it("create rejects when owner already belongs to a company", async () => {
+    prisma.companyMembership.findUnique.mockResolvedValue(membershipA);
+
+    await expect(
+      service.create({ name: "Second Co" } as any, "user-a"),
+    ).rejects.toThrow(ForbiddenException);
+  });
 });
 
 // ---------------------------------------------------------------------------
-// BranchesService — Tenant Isolation
+// BranchesService â€” Tenant Isolation
 // ---------------------------------------------------------------------------
 
-describe("BranchesService — Tenant Isolation", () => {
+describe("BranchesService â€” Tenant Isolation", () => {
   let service: BranchesService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     service = new BranchesService(prisma as any);
   });
 
@@ -237,22 +347,16 @@ describe("BranchesService — Tenant Isolation", () => {
   });
 
   it("findOne rejects access to another company's branch", async () => {
-    prisma.branch.findFirst.mockResolvedValue(branchB);
-
     await expect(service.findOne("branch-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
   it("update rejects modification of another company's branch", async () => {
-    prisma.branch.findFirst.mockResolvedValue(branchB);
-
     await expect(
       service.update("branch-b", { name: "Hacked" } as any, "company-a"),
     ).rejects.toThrow(NotFoundException);
   });
 
   it("remove rejects deletion of another company's branch", async () => {
-    prisma.branch.findFirst.mockResolvedValue(branchB);
-
     await expect(service.remove("branch-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
@@ -269,14 +373,14 @@ describe("BranchesService — Tenant Isolation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// EmployeesService — Tenant Isolation
+// EmployeesService â€” Tenant Isolation
 // ---------------------------------------------------------------------------
 
-describe("EmployeesService — Tenant Isolation", () => {
+describe("EmployeesService â€” Tenant Isolation", () => {
   let service: EmployeesService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     service = new EmployeesService(prisma as any);
   });
 
@@ -294,23 +398,32 @@ describe("EmployeesService — Tenant Isolation", () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it("findOne rejects access to another company's employee", async () => {
-    prisma.employee.findFirst.mockResolvedValue(employeeB);
+  it("create rejects employee when user membership company does not match", async () => {
+    // userA's membership is in company-a, but we try to create employee in company-b
+    await expect(
+      service.create(
+        {
+          userId: "user-a",
+          companyId: "company-b",
+          employeeNumber: "E003",
+          jobTitle: "Mismatch",
+        } as any,
+        "company-b",
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
 
+  it("findOne rejects access to another company's employee", async () => {
     await expect(service.findOne("employee-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
   it("update rejects modification of another company's employee", async () => {
-    prisma.employee.findFirst.mockResolvedValue(employeeB);
-
     await expect(
       service.update("employee-b", { jobTitle: "Hacked" } as any, "company-a"),
     ).rejects.toThrow(NotFoundException);
   });
 
   it("remove rejects deletion of another company's employee", async () => {
-    prisma.employee.findFirst.mockResolvedValue(employeeB);
-
     await expect(service.remove("employee-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
@@ -328,14 +441,14 @@ describe("EmployeesService — Tenant Isolation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// CustomersService — Tenant Isolation (CRM)
+// CustomersService â€” Tenant Isolation (CRM)
 // ---------------------------------------------------------------------------
 
-describe("CustomersService — Tenant Isolation", () => {
+describe("CustomersService â€” Tenant Isolation", () => {
   let service: CustomersService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     service = new CustomersService(prisma as any);
   });
 
@@ -349,101 +462,83 @@ describe("CustomersService — Tenant Isolation", () => {
   });
 
   it("findOne rejects access to another company's customer", async () => {
-    prisma.customer.findFirst.mockResolvedValue(customerB);
-
     await expect(service.findOne("customer-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
   it("update rejects modification of another company's customer", async () => {
-    prisma.customer.findFirst.mockResolvedValue(customerB);
-
     await expect(
       service.update("customer-b", { firstName: "Hacked" } as any, "company-a"),
     ).rejects.toThrow(NotFoundException);
   });
 
   it("remove rejects deletion of another company's customer", async () => {
-    prisma.customer.findFirst.mockResolvedValue(customerB);
-
     await expect(service.remove("customer-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 });
 
 // ---------------------------------------------------------------------------
-// LeadsService — Tenant Isolation (CRM)
+// LeadsService â€” Tenant Isolation (CRM)
 // ---------------------------------------------------------------------------
 
-describe("LeadsService — Tenant Isolation", () => {
+describe("LeadsService â€” Tenant Isolation", () => {
   let service: LeadsService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     service = new LeadsService(prisma as any);
   });
 
   it("findOne rejects access to another company's lead", async () => {
-    prisma.lead.findFirst.mockResolvedValue(leadB);
-
     await expect(service.findOne("lead-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
   it("update rejects modification of another company's lead", async () => {
-    prisma.lead.findFirst.mockResolvedValue(leadB);
-
     await expect(
       service.update("lead-b", { name: "Hacked" } as any, "company-a"),
     ).rejects.toThrow(NotFoundException);
   });
 
   it("remove rejects deletion of another company's lead", async () => {
-    prisma.lead.findFirst.mockResolvedValue(leadB);
-
     await expect(service.remove("lead-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 });
 
 // ---------------------------------------------------------------------------
-// DealsService — Tenant Isolation (CRM)
+// DealsService â€” Tenant Isolation (CRM)
 // ---------------------------------------------------------------------------
 
-describe("DealsService — Tenant Isolation", () => {
+describe("DealsService â€” Tenant Isolation", () => {
   let service: DealsService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     service = new DealsService(prisma as any);
   });
 
   it("findOne rejects access to another company's deal", async () => {
-    prisma.deal.findFirst.mockResolvedValue(dealB);
-
     await expect(service.findOne("deal-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
   it("update rejects modification of another company's deal", async () => {
-    prisma.deal.findFirst.mockResolvedValue(dealB);
-
     await expect(
       service.update("deal-b", { title: "Hacked" } as any, "company-a"),
     ).rejects.toThrow(NotFoundException);
   });
 
   it("remove rejects deletion of another company's deal", async () => {
-    prisma.deal.findFirst.mockResolvedValue(dealB);
-
     await expect(service.remove("deal-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 });
 
 // ---------------------------------------------------------------------------
-// InvoicesService — Tenant Isolation (Finance)
+// InvoicesService â€” Tenant Isolation (Finance)
 // ---------------------------------------------------------------------------
 
-describe("InvoicesService — Tenant Isolation", () => {
+describe("InvoicesService â€” Tenant Isolation", () => {
   let service: InvoicesService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     service = new InvoicesService(prisma as any);
   });
 
@@ -458,42 +553,42 @@ describe("InvoicesService — Tenant Isolation", () => {
   });
 
   it("findOne rejects access to another company's invoice", async () => {
-    prisma.invoice.findFirst.mockResolvedValue(invoiceB);
-
     await expect(service.findOne("invoice-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 
   it("update rejects modification of another company's invoice", async () => {
-    prisma.invoice.findFirst.mockResolvedValue(invoiceB);
-
     await expect(
       service.update("invoice-b", { grandTotal: 999999 } as any, "company-a"),
     ).rejects.toThrow(NotFoundException);
   });
 
   it("remove rejects deletion of another company's invoice", async () => {
-    prisma.invoice.findFirst.mockResolvedValue(invoiceB);
-
     await expect(service.remove("invoice-b", "company-a")).rejects.toThrow(NotFoundException);
   });
 });
 
 // ---------------------------------------------------------------------------
-// AuthService — JWT / Membership Model
+// AuthService â€” JWT / Membership Model
 // ---------------------------------------------------------------------------
 
-describe("AuthService — JWT / Membership Model", () => {
+describe("AuthService â€” JWT / Membership Model", () => {
   let service: AuthService;
   let mockJwtService: { sign: jest.Mock };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     mockJwtService = { sign: jest.fn().mockReturnValue("mock-token") };
     service = new AuthService(prisma as any, mockJwtService as any);
+    jest.spyOn(bcrypt, "hash").mockResolvedValue("hashed-password" as never);
+    jest.spyOn(bcrypt, "compare").mockResolvedValue(true as never);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it("generateTokens returns role from membership, not user.role", async () => {
-    prisma.companyMembership.findFirst.mockResolvedValue({
+    prisma.companyMembership.findUnique.mockResolvedValue({
       ...membershipA,
       role: "ADMIN",
       company: companyA,
@@ -508,25 +603,42 @@ describe("AuthService — JWT / Membership Model", () => {
     expect(result.user.role).not.toBeUndefined();
   });
 
-  it("generateTokens returns undefined role when no active membership", async () => {
-    prisma.companyMembership.findFirst.mockResolvedValue(null);
+  it("generateTokens rejects when no active membership", async () => {
+    prisma.companyMembership.findUnique.mockResolvedValue(null);
 
-    const result = await (service as any).generateTokens(userA);
+    await expect((service as any).generateTokens(userA)).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
 
-    expect(result.user.role).toBeUndefined();
-    expect(result.user.companyId).toBeUndefined();
+  it("generateTokens rejects when membership is SUSPENDED", async () => {
+    prisma.companyMembership.findUnique.mockResolvedValue({
+      ...membershipA,
+      status: "SUSPENDED",
+      company: companyA,
+    });
+
+    await expect((service as any).generateTokens(userA)).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it("generateTokens rejects when company is deleted", async () => {
+    prisma.companyMembership.findUnique.mockResolvedValue({
+      ...membershipA,
+      company: { ...companyA, deletedAt: new Date() },
+    });
+
+    await expect((service as any).generateTokens(userA)).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   it("register hashes password with bcrypt (cost 12)", async () => {
-    jest.spyOn(bcrypt, "hash").mockResolvedValue("hashed-password" as never);
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.user.create.mockResolvedValue(userA);
 
-    await service.register({
-      email: "new@test.com",
-      password: "Password123!",
-      name: "New User",
-    } as any);
+    await service.register({ email: "new@test.com", password: "Password123!", name: "New User" } as any);
 
     expect(bcrypt.hash).toHaveBeenCalledWith("Password123!", 12);
     expect(prisma.user.create).toHaveBeenCalledWith(
@@ -540,11 +652,7 @@ describe("AuthService — JWT / Membership Model", () => {
     prisma.user.findUnique.mockResolvedValue(userA);
 
     await expect(
-      service.register({
-        email: "a@companya.com",
-        password: "Password123!",
-        name: "User",
-      } as any),
+      service.register({ email: "a@companya.com", password: "Password123!", name: "User" } as any),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -581,13 +689,13 @@ describe("AuthService — JWT / Membership Model", () => {
     await expect(service.refresh("invalid-token")).rejects.toThrow(UnauthorizedException);
   });
 
-  it("refresh rotates tokens (deletes old, creates new)", async () => {
+  it("refresh rotates tokens (revokes old, creates new)", async () => {
     prisma.refreshToken.findUnique.mockResolvedValue({
       token: "old-token",
       expiresAt: new Date(Date.now() + 100000),
       user: userA,
     });
-    prisma.companyMembership.findFirst.mockResolvedValue({
+    prisma.companyMembership.findUnique.mockResolvedValue({
       ...membershipA,
       role: "ADMIN",
       company: companyA,
@@ -595,8 +703,10 @@ describe("AuthService — JWT / Membership Model", () => {
 
     await service.refresh("old-token");
 
-    expect(prisma.refreshToken.delete).toHaveBeenCalledTimes(1);
     expect(prisma.refreshToken.create).toHaveBeenCalledTimes(1);
+    expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+      where: { id: undefined },
+    });
   });
 
   it("logout deletes refresh token", async () => {
@@ -666,6 +776,30 @@ describe("AuthService — JWT / Membership Model", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it("acceptInvitation rejects if user already has active membership", async () => {
+    prisma.invitation.findUnique.mockResolvedValue({
+      id: "token-1",
+      status: "PENDING",
+      expiresAt: new Date(Date.now() + 100000),
+      email: "a@test.com",
+      companyId: "company-b",
+      company: companyB,
+      role: "EMPLOYEE",
+      invitedByUserId: "user-a",
+    });
+    prisma.user.findUnique.mockResolvedValue(userA); // userA already has membershipA
+    prisma.companyMembership.findUnique.mockResolvedValue(membershipA);
+
+    await expect(
+      service.acceptInvitation({
+        token: "token-1",
+        email: "a@test.com",
+        password: "Password123!",
+        name: "Test",
+      } as any),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
   it("acceptInvitation creates user, membership, and marks accepted", async () => {
     prisma.invitation.findUnique.mockResolvedValue({
       id: "token-1",
@@ -711,14 +845,14 @@ describe("AuthService — JWT / Membership Model", () => {
 });
 
 // ---------------------------------------------------------------------------
-// AttendanceService — Tenant Isolation
+// AttendanceService â€” Tenant Isolation
 // ---------------------------------------------------------------------------
 
-describe("AttendanceService — Tenant Isolation", () => {
+describe("AttendanceService â€” Tenant Isolation", () => {
   let service: AttendanceService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     service = new AttendanceService(prisma as any);
   });
 
@@ -732,22 +866,12 @@ describe("AttendanceService — Tenant Isolation", () => {
   });
 
   it("findOne rejects access to another company's attendance record", async () => {
-    prisma.attendance.findFirst.mockResolvedValue({
-      id: "attendance-b",
-      companyId: "company-b",
-    });
-
     await expect(service.findOne("attendance-b", "company-a")).rejects.toThrow(
       NotFoundException,
     );
   });
 
   it("update rejects modification of another company's attendance record", async () => {
-    prisma.attendance.findFirst.mockResolvedValue({
-      id: "attendance-b",
-      companyId: "company-b",
-    });
-
     await expect(
       service.update("attendance-b", { status: "absent" } as any, "company-a"),
     ).rejects.toThrow(NotFoundException);
@@ -755,14 +879,14 @@ describe("AttendanceService — Tenant Isolation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// LeaveRequestsService — Tenant Isolation
+// LeaveRequestsService â€” Tenant Isolation
 // ---------------------------------------------------------------------------
 
-describe("LeaveRequestsService — Tenant Isolation", () => {
+describe("LeaveRequestsService â€” Tenant Isolation", () => {
   let service: LeaveRequestsService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetAllMocks();
     service = new LeaveRequestsService(prisma as any);
   });
 
@@ -781,22 +905,12 @@ describe("LeaveRequestsService — Tenant Isolation", () => {
   });
 
   it("findOne rejects access to another company's leave request", async () => {
-    prisma.leaveRequest.findFirst.mockResolvedValue({
-      id: "leave-b",
-      companyId: "company-b",
-    });
-
     await expect(service.findOne("leave-b", "company-a")).rejects.toThrow(
       NotFoundException,
     );
   });
 
   it("update rejects modification of another company's leave request", async () => {
-    prisma.leaveRequest.findFirst.mockResolvedValue({
-      id: "leave-b",
-      companyId: "company-b",
-    });
-
     await expect(
       service.update("leave-b", { status: "APPROVED" } as any, "user-a", "company-a"),
     ).rejects.toThrow(NotFoundException);

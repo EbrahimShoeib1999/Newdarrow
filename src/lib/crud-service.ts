@@ -1,4 +1,4 @@
-import apiClient, { getAccessToken, setAccessToken } from "@/lib/api-client";
+import apiClient from "@/lib/api-client";
 import type { PaginatedResponse } from "@/types/api.types";
 
 export interface PaginationParams {
@@ -22,14 +22,18 @@ export interface PaginatedResult<T> {
  * Endpoints follow the pattern: GET /{resource}, GET /{resource}/:id, etc.
  */
 export class CrudService<T, CreateDto, UpdateDto> {
-  constructor(private resource: string) {}
+  private resource: string;
+
+  constructor(resource: string) {
+    this.resource = resource;
+  }
 
   async list(params: PaginationParams = {}): Promise<PaginatedResult<T>> {
     const { page = 1, pageSize = 20, search, sortBy, sortOrder } = params;
     const response = await apiClient.get<PaginatedResponse<T>>(this.resource, {
       params: { page, pageSize, search, sortBy, sortOrder },
     });
-    return response.data.data;
+    return response.data;
   }
 
   async get(id: string): Promise<T> {

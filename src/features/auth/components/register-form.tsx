@@ -18,6 +18,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import * as z from "zod";
 import { cn, containsControlCharacters } from "@/lib/utils";
 import { isReservedCompanyName } from "@/lib/company-defaults";
+import { useAuthStore } from "@/stores/auth.store";
 import { AuthService } from "../api/auth.service";
 import { resolvePostLoginTarget } from "../utils/post-login";
 import { GoogleSignInButton } from "./google-sign-in-button";
@@ -90,10 +91,14 @@ export function RegisterForm() {
     setError("");
 
     try {
-      await AuthService.register(data);
-      // The AuthProvider's onAuthStateChanged listener already promotes the
-      // new session into the store; re-subscribing here leaked a second
-      // listener and only raced the same result.
+      const response = await AuthService.register(data);
+      if (response?.data?.user) {
+        useAuthStore.setState({
+          user: response.data.user,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      }
       const target = resolvePostLoginTarget(location);
       navigate(target.to, { replace: true, state: target.state });
     } catch (err: unknown) {

@@ -26,30 +26,39 @@ export class CompaniesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: CreateCompanyDto, ownerUserId: string) {
-    const company = await this.prisma.company.create({
-      data: {
-        id: data.name.toLowerCase().replace(/[^a-z0-9]/g, "-"),
-        name: data.name,
-        primaryActivity: data.primaryActivity ?? null,
-        defaultCurrency: data.defaultCurrency ?? "SAR",
-        settings: (data.settings ?? {}) as Prisma.InputJsonValue,
-        ownerId: ownerUserId,
-      },
-      include: { branches: true, departments: true },
+    const existingMembership = await this.prisma.companyMembership.findUnique({
+      where: { userId: ownerUserId },
     });
+    if (existingMembership) {
+      throw new ForbiddenException("User already belongs to a company");
+    }
 
-    // Make the owner a platform_admin member of the company
-    await this.prisma.companyMembership.create({
-      data: {
-        userId: ownerUserId,
-        companyId: company.id,
-        role: "ADMIN",
-        joinedAt: new Date(),
-        status: "ACTIVE",
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const company = await tx.company.create({
+        data: {
+          id: data.name.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+          name: data.name,
+          primaryActivity: data.primaryActivity ?? null,
+          defaultCurrency: data.defaultCurrency ?? "SAR",
+          settings: (data.settings ?? {}) as Prisma.InputJsonValue,
+          ownerId: ownerUserId,
+        },
+        include: { branches: true, departments: true },
+      });
+
+      // Make the owner an admin member of the company
+      await tx.companyMembership.create({
+        data: {
+          userId: ownerUserId,
+          companyId: company.id,
+          role: "ADMIN",
+          joinedAt: new Date(),
+          status: "ACTIVE",
+        },
+      });
+
+      return company;
     });
-
-    return company;
   }
 
   async findAll(companyId: string) {

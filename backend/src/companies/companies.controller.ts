@@ -54,20 +54,17 @@ export class CompaniesController {
 
   @Post()
   async create(@Body() body: CreateCompanyBody, @CurrentUser() user: any) {
-    const company = await this.companiesService.create(body, user.userId);
-    return { data: company, message: "Company created" };
+    return this.companiesService.create(body, user.userId);
   }
 
   @Get()
   async findAll(@CurrentUser() user: any) {
-    const companies = await this.companiesService.findAll(user.companyId);
-    return { data: companies, message: "Companies listed" };
+    return this.companiesService.findAll(user.companyId);
   }
 
   @Get(":id")
   async findOne(@Param("id") id: string, @CurrentUser() user: any) {
-    const company = await this.companiesService.findOne(id, user.companyId);
-    return { data: company, message: "Company retrieved" };
+    return this.companiesService.findOne(id, user.companyId);
   }
 
   @Put(":id")
@@ -76,14 +73,13 @@ export class CompaniesController {
     @Body() body: UpdateCompanyBody,
     @CurrentUser() user: any,
   ) {
-    const company = await this.companiesService.update(id, body, user.companyId);
-    return { data: company, message: "Company updated" };
+    return this.companiesService.update(id, body, user.companyId);
   }
 
   @Delete(":id")
   async remove(@Param("id") id: string, @CurrentUser() user: any) {
     await this.companiesService.remove(id, user.companyId);
-    return { message: "Company deleted" };
+    return { removed: true };
   }
 
   @Get(":id/memberships")
@@ -92,7 +88,6 @@ export class CompaniesController {
     if (companyId !== user.companyId) {
       throw new ForbiddenException("Cannot view memberships of another company");
     }
-    const memberships = await this.companiesService.getMemberships(companyId);
-    return { data: memberships, message: "Company memberships retrieved" };
+    return this.companiesService.getMemberships(companyId);
   }
 }

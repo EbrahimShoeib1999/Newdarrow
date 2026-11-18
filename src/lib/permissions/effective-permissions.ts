@@ -9,7 +9,7 @@ import {
 } from "./sub-roles";
 
 export interface PermissionContext {
-  role: UserRole | undefined;
+  role: UserRole | string | undefined;
   portalSubRoles?: PortalSubRoles | null;
   customPermissions?: Permission[] | null;
 }
@@ -20,9 +20,10 @@ export function hasEffectivePermission(
 ): boolean {
   const { role, portalSubRoles, customPermissions } = ctx;
   if (!role) return false;
+  const normalizedRole = role.toLowerCase() as UserRole;
 
-  if (role === "platform_admin" || role === "super_admin") {
-    return ROLE_PERMISSIONS[role].includes(permission);
+  if (normalizedRole === "platform_admin" || normalizedRole === "super_admin") {
+    return (ROLE_PERMISSIONS[normalizedRole] ?? []).includes(permission);
   }
 
   // Explicit custom permission override granted to individual user
@@ -32,14 +33,14 @@ export function hasEffectivePermission(
 
   const portal = permissionPortal(permission);
   if (portal) {
-    const subRole = resolvePortalSubRole(portal, role, portalSubRoles);
+    const subRole = resolvePortalSubRole(portal, normalizedRole, portalSubRoles);
     if (subRole) {
       const subAllowed = getSubRolePermissions(portal, subRole).includes(permission);
       if (!subAllowed) return false;
     }
   }
 
-  return hasPermission(role, permission);
+  return hasPermission(normalizedRole, permission);
 }
 
 export function hasAnyEffectivePermission(

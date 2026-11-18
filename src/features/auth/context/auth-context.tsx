@@ -33,8 +33,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedToken = localStorage.getItem("d-arrow-refresh-token");
     if (storedToken && !isAuthenticated) {
       useAuthStore.getState().checkAuth();
+    } else if (!storedToken && isLoading) {
+      useAuthStore.setState({ isLoading: false });
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isLoading]);
 
   return (
     <AuthContext.Provider

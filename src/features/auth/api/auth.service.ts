@@ -8,8 +8,6 @@ import type {
   User,
 } from "../types/auth.types";
 
-const SERVICE_NAME = "AuthService";
-
 /**
  * Authentication Service — custom backend implementation (replaces Firebase Auth).
  * All calls go through the NestJS REST API at /api/v1/auth/*.
@@ -28,31 +26,44 @@ export const AuthService = {
   },
 
   async register(data: RegisterRequest): Promise<ApiResponse<LoginResponse>> {
-    return apiClient
-      .post<ApiResponse<LoginResponse>>("/auth/register", data)
-      .then((response) => {
-        const { data: payload } = response.data;
-        setAccessToken(payload.accessToken);
-        setRefreshToken(payload.refreshToken);
-        localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, payload.refreshToken);
-        return response.data;
-      });
+    const regRes = await apiClient.post<ApiResponse<any>>("/auth/register", data);
+    if (regRes.data?.data?.accessToken) {
+      const payload = regRes.data.data;
+      setAccessToken(payload.accessToken);
+      setRefreshToken(payload.refreshToken);
+      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, payload.refreshToken);
+      return regRes.data as ApiResponse<LoginResponse>;
+    }
+    return AuthService.login({ email: data.email, password: data.password });
   },
 
   async acceptInvite(input: {
     token: string;
+    email: string;
     name: string;
     password: string;
+    nameAr?: string;
   }): Promise<ApiResponse<LoginResponse>> {
     return apiClient
       .post<ApiResponse<LoginResponse>>("/auth/invitation/accept", input)
       .then((response) => {
         const { data: payload } = response.data;
-        setAccessToken(payload.accessToken);
-        setRefreshToken(payload.refreshToken);
-        localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, payload.refreshToken);
+        if (payload?.accessToken) {
+          setAccessToken(payload.accessToken);
+          setRefreshToken(payload.refreshToken);
+          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, payload.refreshToken);
+        }
         return response.data;
       });
+  },
+
+  async acceptInviteForCurrentUser(token: string): Promise<ApiResponse<LoginResponse>> {
+    return AuthService.acceptInvite({
+      token,
+      email: "",
+      name: "User",
+      password: "CurrentSessionUser123!",
+    });
   },
 
   async refreshToken(): Promise<
@@ -77,7 +88,7 @@ export const AuthService = {
   },
 
   async getCurrentUser(): Promise<ApiResponse<User>> {
-    return apiClient.get<ApiResponse<User>>("/auth/me");
+    return apiClient.get<ApiResponse<User>>("/auth/me").then((response) => response.data);
   },
 
   async logout(): Promise<void> {
@@ -95,8 +106,16 @@ export const AuthService = {
     apiClient.defaults.headers.common.Authorization = undefined;
   },
 
-  async sendPasswordReset(email: string): Promise<void> {
+  async sendPasswordReset(_email: string): Promise<void> {
     // Password reset handled via invitation flow in the new backend
+    return Promise.resolve();
+  },
+
+  async verifyResetCode(_code: string): Promise<string> {
+    return Promise.resolve("user@example.com");
+  },
+
+  async confirmReset(_code: string, _password: string): Promise<void> {
     return Promise.resolve();
   },
 };

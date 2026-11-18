@@ -125,6 +125,7 @@ export function AcceptInvitePage() {
     try {
       const response = await AuthService.acceptInvite({
         token,
+        email: invite?.email || "",
         name: nameFromEmail(invite?.email || "User"),
         password,
       });

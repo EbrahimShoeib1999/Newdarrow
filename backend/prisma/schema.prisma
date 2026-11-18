@@ -87,6 +87,8 @@ model User {
   customers        Customer[]
   leads            Lead[]
   deals            Deal[]
+  crmActivities    CrmActivity[]
+  crmNotifications CrmNotification[]
 
   @@index([deletedAt])
 }
@@ -122,6 +124,8 @@ model Company {
   leads           Lead[]
   deals           Deal[]
   invoices        Invoice[]
+  crmActivities   CrmActivity[]
+  crmNotifications CrmNotification[]
 
   @@index([primaryActivity])
 }
@@ -131,7 +135,7 @@ model Company {
 // the table permits the SaaS multi-company future without a second migration.
 model CompanyMembership {
   id                String           @id @default(cuid())
-  userId            String
+  userId            String @unique
   user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyId         String
   company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -470,6 +474,64 @@ model Deal {
   @@index([companyId])
   @@index([stage])
   @@index([deletedAt])
+}
+
+enum CrmActivityType {
+  CALL
+  EMAIL
+  MEETING
+  NOTE
+  OTHER
+}
+
+model CrmActivity {
+  id              String          @id @default(cuid())
+  companyId       String
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            CrmActivityType @default(NOTE)
+  subject         String
+  description     String?
+  entityType      String          // "lead" | "contact" | "deal" | "customer"
+  entityId        String
+  occurredAt      DateTime        @default(now())
+  durationMinutes Int?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  @@index([companyId, entityType, entityId])
+  @@index([companyId, occurredAt])
+  @@index([userId])
+  @@index([deletedAt])
+}
+
+enum CrmNotificationType {
+  ASSIGNMENT
+  DEAL_STAGE
+  LEAD_ASSIGNED
+  REMINDER
+  GENERAL
+}
+
+model CrmNotification {
+  id         String              @id @default(cuid())
+  companyId  String
+  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       CrmNotificationType @default(GENERAL)
+  title      String
+  body       String
+  entityType String?             // "lead" | "contact" | "deal" | "crm_task"
+  entityId   String?
+  read       Boolean             @default(false)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@index([companyId, userId, read])
+  @@index([userId, createdAt])
 }
 
 // ---------------------------------------------------------------------------

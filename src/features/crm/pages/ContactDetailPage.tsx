@@ -42,11 +42,12 @@ import {
   ExternalLink,
   MessageSquare,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { FieldBox } from "@/components/shared/field-box";
-import { useContactQuery } from "../hooks/use-contacts";
+import { useContactQuery, useDeleteContactMutation } from "../hooks/use-contacts";
 import { useContractsQuery } from "../hooks/use-contracts";
 import { useDealsQuery } from "../hooks/use-deals";
 import { useCrmPermissions } from "../hooks/use-crm-permissions";
@@ -96,6 +97,22 @@ export function ContactDetailPage() {
   const { data: users } = useAllUsers();
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState("overview");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const deleteMutation = useDeleteContactMutation();
+
+  const handleDelete = async () => {
+    if (window.confirm(t("contacts.confirmDelete", { defaultValue: "Are you sure you want to delete this contact?" }))) {
+      setIsDeleting(true);
+      try {
+        await deleteMutation.mutateAsync(contactId);
+        navigate("/crm/contacts");
+      } catch {
+        // error toasted by hook
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
 
   const { data: notes = [], isLoading: notesLoading } = useCrmEntityNotes("contact", contactId);
   const { data: tasks = [], isLoading: tasksLoading } = useCrmEntityTasks("contact", contactId);
@@ -196,15 +213,28 @@ export function ContactDetailPage() {
           description={contact.accountName || contact.jobTitle || contact.email || t("contactDetail.noAccount")}
           actions={
             canManageContacts ? (
-              <Button
-                color="primary"
-                variant="flat"
-                startContent={<Pencil className="h-4 w-4" />}
-                className="rounded-full font-bold"
-                onPress={() => setEditOpen(true)}
-              >
-                {t("contactDetail.edit")}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  color="primary"
+                  variant="flat"
+                  startContent={<Pencil className="h-4 w-4" />}
+                  className="rounded-full font-bold"
+                  onPress={() => setEditOpen(true)}
+                >
+                  {t("contactDetail.edit")}
+                </Button>
+                <Button
+                  color="danger"
+                  variant="flat"
+                  startContent={<Trash2 className="h-4 w-4" />}
+                  className="rounded-full font-bold"
+                  isLoading={isDeleting}
+                  onPress={handleDelete}
+                  aria-label="Delete contact"
+                >
+                  {t("contacts.actions.delete", { defaultValue: "Delete" })}
+                </Button>
+              </div>
             ) : undefined
           }
         />

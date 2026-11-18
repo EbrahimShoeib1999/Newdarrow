@@ -1,25 +1,6 @@
 import { storage } from "@/lib/storage";
 
-const UNAVAILABLE_KEY = "storage:bucket-unavailable";
 let bucketUnavailable = false;
-
-function readUnavailableFlag(): boolean {
-  try {
-    return sessionStorage.getItem(UNAVAILABLE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function markBucketUnavailable(detail: unknown) {
-  bucketUnavailable = true;
-  try {
-    sessionStorage.setItem(UNAVAILABLE_KEY, "true");
-  } catch {
-    /* Private mode / storage disabled — the in-memory flag still holds. */
-  }
-  console.warn("[uploadStorageFile] Storage unavailable, using inline fallback.", detail);
-}
 
 export function isStorageBucketAvailable(): boolean {
   return !bucketUnavailable;

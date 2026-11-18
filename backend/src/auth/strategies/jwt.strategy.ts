@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { Injectable, UnauthorizedException, Inject } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { PrismaService } from "../../common/prisma.service";
@@ -15,7 +15,7 @@ const env = loadEnv();
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: env.JWT_SECRET,
@@ -40,13 +40,35 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
       throw new UnauthorizedException("User not found or deactivated");
     }
 
+    let role = payload.role;
+    let companyId = payload.companyId;
+
+    if (!user.isPlatformAdmin) {
+      const membership = await this.prisma.companyMembership.findUnique({
+        where: { userId: user.id },
+        include: { company: true },
+      });
+
+      if (!membership || membership.status !== "ACTIVE") {
+        throw new UnauthorizedException("Account has no active company membership");
+      }
+
+      if (!membership.company || membership.company.deletedAt) {
+        throw new UnauthorizedException("Company is inactive or deleted");
+      }
+
+      role = membership.role;
+      companyId = membership.companyId;
+    }
+
     return {
+      id: user.id,
       userId: user.id,
       email: user.email,
       name: user.name,
       nameAr: user.nameAr,
-      role: payload.role,
-      companyId: payload.companyId,
+      role,
+      companyId,
       isPlatformAdmin: user.isPlatformAdmin,
     };
   }

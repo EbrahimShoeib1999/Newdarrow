@@ -112,31 +112,27 @@ export class EmployeesController {
 
   @Post()
   async create(@Body() body: CreateEmployeeBody, @CurrentUser() user: any) {
-    const employee = await this.employeesService.create({ ...body, companyId: user.companyId }, user.companyId);
-    return { data: employee, message: "Employee created" };
+    return this.employeesService.create({ ...body, companyId: user.companyId }, user.companyId);
   }
 
   @Get()
   async findAll(@CurrentUser() user: any) {
-    const employees = await this.employeesService.findAll(user.companyId);
-    return { data: employees, message: "Employees listed" };
+    return this.employeesService.findAll(user.companyId);
   }
 
   @Get(":id")
   async findOne(@Param("id") id: string, @CurrentUser() user: any) {
-    const employee = await this.employeesService.findOne(id, user.companyId);
-    return { data: employee, message: "Employee retrieved" };
+    return this.employeesService.findOne(id, user.companyId);
   }
 
   @Put(":id")
   async update(@Param("id") id: string, @Body() body: UpdateEmployeeBody, @CurrentUser() user: any) {
-    const employee = await this.employeesService.update(id, body, user.companyId);
-    return { data: employee, message: "Employee updated" };
+    return this.employeesService.update(id, body, user.companyId);
   }
 
   @Delete(":id")
   async remove(@Param("id") id: string, @CurrentUser() user: any) {
     await this.employeesService.remove(id, user.companyId);
-    return { message: "Employee deleted" };
+    return { removed: true };
   }
 }

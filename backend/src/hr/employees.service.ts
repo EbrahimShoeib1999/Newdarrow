@@ -63,6 +63,27 @@ export class EmployeesService {
       throw new NotFoundException("User not found");
     }
 
+    // Employee's company must match the account's membership company.
+    // An account belongs to exactly one company; an Employee record cannot
+    // be linked to a different company than the account's membership.
+    const userMembership = await this.prisma.companyMembership.findUnique({
+      where: { userId: data.userId },
+    });
+    if (!userMembership || userMembership.companyId !== data.companyId) {
+      throw new ForbiddenException(
+        "Employee company must match the account's company membership",
+      );
+    }
+
+    if (data.branchId) {
+      const branch = await this.prisma.branch.findUnique({
+        where: { id: data.branchId },
+      });
+      if (!branch || branch.companyId !== data.companyId || branch.deletedAt) {
+        throw new BadRequestException("Branch does not belong to the employee company");
+      }
+    }
+
     return this.prisma.employee.create({
       data: {
         userId: data.userId,
@@ -109,6 +130,15 @@ export class EmployeesService {
     });
     if (!employee || employee.deletedAt) {
       throw new NotFoundException("Employee not found");
+    }
+
+    if (data.branchId) {
+      const branch = await this.prisma.branch.findUnique({
+        where: { id: data.branchId },
+      });
+      if (!branch || branch.companyId !== companyId || branch.deletedAt) {
+        throw new BadRequestException("Branch does not belong to the employee company");
+      }
     }
 
     return this.prisma.employee.update({

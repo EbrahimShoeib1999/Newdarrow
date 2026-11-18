@@ -3,7 +3,6 @@ import { QUERY_KEYS } from "@/lib/constants";
 import { useCompany } from "@/features/companies/context/company-context";
 import { useAuthStore } from "@/stores/auth.store";
 import { ContactsService } from "../api/contacts.service";
-import { ActivitiesService } from "../api/activities.service";
 import type { CreateContactDTO, UpdateContactDTO } from "../types/contacts.types";
 import { filterCrmRecordsByAccess } from "../utils/crm-access.utils";
 import { toast } from "sonner";
@@ -34,23 +33,10 @@ export function useContactQuery(contactId: string) {
 export function useCreateContactMutation() {
   const { t } = useTranslation("crm");
   const { companyId } = useCompany();
-  const userId = useAuthStore((s) => s.user?.id);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: CreateContactDTO) => {
-      const res = await ContactsService.createContact(companyId!, data);
-      if (userId) {
-        await ActivitiesService.createActivity(companyId!, {
-          type: "note",
-          subject: "Contact created",
-          description: `${data.firstName} ${data.lastName}`.trim(),
-          entityType: "contact",
-          entityId: res.data.id,
-          occurredAt: new Date().toISOString(),
-          userId,
-        });
-      }
-      return res;
+      return ContactsService.createContact(companyId!, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.crm.all });
@@ -63,22 +49,10 @@ export function useCreateContactMutation() {
 export function useUpdateContactMutation() {
   const { t } = useTranslation("crm");
   const { companyId } = useCompany();
-  const userId = useAuthStore((s) => s.user?.id);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: UpdateContactDTO }) => {
-      const res = await ContactsService.updateContact(companyId!, id, data);
-      if (userId) {
-        await ActivitiesService.createActivity(companyId!, {
-          type: "note",
-          subject: "Contact updated",
-          entityType: "contact",
-          entityId: id,
-          occurredAt: new Date().toISOString(),
-          userId,
-        });
-      }
-      return res;
+      return ContactsService.updateContact(companyId!, id, data);
     },
     onSuccess: () => {
       toast.success(t("contacts.toast.updated"));
@@ -87,5 +61,21 @@ export function useUpdateContactMutation() {
       await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.crm.all });
     },
     onError: () => toast.error(t("contacts.toast.updateFailed")),
+  });
+}
+
+export function useDeleteContactMutation() {
+  const { t } = useTranslation("crm");
+  const { companyId } = useCompany();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await ContactsService.deleteContact(companyId!, id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.crm.all });
+      toast.success(t("contacts.toast.deleted", { defaultValue: "Contact deleted successfully" }));
+    },
+    onError: () => toast.error(t("contacts.toast.deleteFailed", { defaultValue: "Failed to delete contact" })),
   });
 }

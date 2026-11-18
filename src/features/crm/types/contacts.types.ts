@@ -178,7 +178,9 @@ export interface Contact extends CrmBaseFields {
   companySize?: string;
   city?: string;
   region?: string;
+  country?: string;
   branchesCount?: number;
+  companyId?: string;
 
   /** Specialized Entity Fields */
   govSector?: string;

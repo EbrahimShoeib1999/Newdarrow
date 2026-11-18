@@ -11,7 +11,7 @@ export function useCrmNotificationsQuery() {
     queryKey: ["crm", companyId, "notifications", userId],
     queryFn: async () => {
       const res = await CrmNotificationsService.getNotifications(companyId!);
-      return res.data.filter((n) => n.userId === userId);
+      return res.data;
     },
     enabled: !!companyId && !!userId,
     refetchInterval: 60_000,
@@ -24,7 +24,7 @@ export function useMarkNotificationReadMutation() {
   const userId = useAuthStore((s) => s.user?.id);
   return useMutation({
     mutationFn: (id: string) =>
-      CrmNotificationsService.updateNotification(companyId!, id, { read: true }),
+      CrmNotificationsService.markAsRead(companyId!, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["crm", companyId, "notifications", userId] });
     },
@@ -36,12 +36,8 @@ export function useMarkAllNotificationsReadMutation() {
   const queryClient = useQueryClient();
   const userId = useAuthStore((s) => s.user?.id);
   return useMutation({
-    mutationFn: async (notifications: CrmNotification[]) => {
-      await Promise.all(
-        notifications
-          .filter((n) => !n.read)
-          .map((n) => CrmNotificationsService.updateNotification(companyId!, n.id, { read: true }))
-      );
+    mutationFn: async (_notifications?: CrmNotification[]) => {
+      await CrmNotificationsService.markAllAsRead(companyId!);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["crm", companyId, "notifications", userId] });

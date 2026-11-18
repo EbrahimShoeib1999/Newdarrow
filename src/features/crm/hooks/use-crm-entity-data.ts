@@ -26,10 +26,8 @@ export function useCrmEntityActivities(entityType: CrmEntityType, entityId: stri
   return useQuery({
     queryKey: [...QUERY_KEYS.crm.activities(companyId!), entityType, entityId],
     queryFn: async () => {
-      const res = await ActivitiesService.getActivities(companyId!);
-      return filterByEntity(res.data, entityType, entityId).sort(
-        (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
-      );
+      const res = await ActivitiesService.getActivities(companyId!, { entityType, entityId });
+      return res.data;
     },
     enabled: !!companyId && !!entityId,
   });

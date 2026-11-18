@@ -5,10 +5,15 @@ describe("parseEnv (T2.1 — config validation)", () => {
     expect(parseEnv({})).toEqual({
       NODE_ENV: "development",
       PORT: 3001,
+      DATABASE_URL: undefined,
       JWT_SECRET: "dev-secret-change-in-production",
       JWT_REFRESH_SECRET: "dev-refresh-secret-change-in-production",
       JWT_ACCESS_TTL_SECONDS: 900,
       JWT_REFRESH_TTL_SECONDS: 604800,
+      RATE_LIMIT_MAX: 10,
+      RATE_LIMIT_WINDOW_SECONDS: 60,
+      CORS_ALLOWED_ORIGINS: "",
+      CORS_CREDENTIALS: true,
     });
   });
 

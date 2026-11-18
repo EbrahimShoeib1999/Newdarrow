@@ -32,11 +32,12 @@ import {
   Plus,
   ReceiptText,
   FolderKanban,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { FieldBox } from "@/components/shared/field-box";
-import { useDealQuery, useUpdateDealMutation } from "../hooks/use-deals";
+import { useDealQuery, useUpdateDealMutation, useDeleteDealMutation } from "../hooks/use-deals";
 import { useContactQuery } from "../hooks/use-contacts";
 import { useContractsQuery } from "../hooks/use-contracts";
 import { useCrmPermissions } from "../hooks/use-crm-permissions";
@@ -76,12 +77,13 @@ export function DealDetailPage() {
   const { t, i18n } = useTranslation("crm");
   const isAr = i18n.language === "ar";
   const navigate = useNavigate();
-  const { canManageDeals } = useCrmPermissions();
+  const { canManageDeals, canDeleteCrm } = useCrmPermissions();
   const { data: dealRes, isLoading } = useDealQuery(dealId);
   const contactId = dealRes?.data.contactId ?? "";
   const { data: contactRes } = useContactQuery(contactId);
   const { data: users } = useAllUsers();
   const updateDeal = useUpdateDealMutation();
+  const deleteDeal = useDeleteDealMutation();
   const [editOpen, setEditOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
   const [activeTab, setActiveTab] = useState<string>("overview");
@@ -276,6 +278,23 @@ export function DealDetailPage() {
                     onPress={() => setEditOpen(true)}
                   >
                     {t("dealDetail.edit")}
+                  </Button>
+                )}
+                {canDeleteCrm && (
+                  <Button
+                    color="danger"
+                    variant="flat"
+                    startContent={<Trash2 className="h-4 w-4" />}
+                    className="rounded-full font-bold"
+                    isLoading={deleteDeal.isPending}
+                    onPress={async () => {
+                      if (window.confirm(t("deals.deleteConfirm", "Are you sure you want to delete this deal?"))) {
+                        await deleteDeal.mutateAsync(dealId);
+                        navigate("/crm/deals");
+                      }
+                    }}
+                  >
+                    {t("common.delete", "Delete")}
                   </Button>
                 )}
               </div>

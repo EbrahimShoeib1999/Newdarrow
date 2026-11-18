@@ -3,27 +3,31 @@ import {
   ExecutionContext,
   Injectable,
   ForbiddenException,
+  Inject,
+  Optional,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { PERMISSIONS_KEY } from "../decorators/require-permission.decorator";
 import { PrismaService } from "../../common/prisma.service";
 
 /**
- * Resolves the tenant companyId for a request from multiple sources:
- * 1. Body params (companyId)
- * 2. Query params (companyId)
- * 3. Path params (companyId)
- * 4. The user's active membership (fallback)
+ * Resolves the tenant company for a request from the authenticated user's
+ * unique CompanyMembership. Never trusts client-supplied companyId.
  *
- * Never trusts client-supplied companyId for authorization — the user's
- * actual membership is verified against the database.
+ * The @unique constraint on CompanyMembership.userId guarantees at most one
+ * membership row per user, so findUnique({ where: { userId } }) is
+ * deterministic and safe.
  */
 @Injectable()
 export class PermissionsGuard implements CanActivate {
+  private readonly reflector: Reflector;
+
   constructor(
-    private readonly reflector: Reflector,
-    private readonly prisma: PrismaService,
-  ) {}
+    @Optional() reflector?: Reflector,
+    @Inject(PrismaService) private readonly prisma?: PrismaService,
+  ) {
+    this.reflector = reflector || new Reflector();
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredPermissions = this.reflector.get<string[]>(
@@ -41,26 +45,42 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException("Authentication required");
     }
 
-    // Platform admins have all permissions
+    // Platform admins have all permissions — separate platform-level access model,
+    // not a normal employee membership in multiple companies.
     if (user.isPlatformAdmin) {
       return true;
     }
 
-    // Resolve company context: prefer user's active membership
-    const membership = await this.prisma.companyMembership.findFirst({
-      where: { userId: user.userId, status: "ACTIVE" },
+    // Resolve company context deterministically by unique userId.
+    const prisma = this.prisma || new PrismaService();
+    const membership = await prisma.companyMembership.findUnique({
+      where: { userId: user.userId },
+      include: { company: true },
     });
 
     if (!membership) {
-      throw new ForbiddenException("No active company membership");
+      throw new ForbiddenException("Account has no company membership");
     }
 
-    // Attach resolved company context to the request for downstream use
+    if (membership.status !== "ACTIVE") {
+      throw new ForbiddenException(`Membership is ${membership.status}`);
+    }
+
+    if (!membership.company || membership.company.deletedAt) {
+      throw new ForbiddenException("Company is inactive or deleted");
+    }
+
+    if (user.deletedAt) {
+      throw new ForbiddenException("Account is deactivated");
+    }
+
+    // Attach resolved company context to the request for downstream use.
+    // Services must not trust client-supplied companyId; this is the authoritative value.
     request.companyId = membership.companyId;
     request.role = membership.role;
 
     // Get all permissions for the user's role
-    const rolePermissions = await this.prisma.rolePermission.findMany({
+    const rolePermissions = await prisma.rolePermission.findMany({
       where: { role: membership.role },
       include: { permission: true },
     });

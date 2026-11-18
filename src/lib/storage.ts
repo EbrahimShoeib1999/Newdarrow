@@ -1,5 +1,3 @@
-import { STORAGE_KEYS } from "./constants";
-
 /**
  * Storage service — replaces Firebase Storage with a backend abstraction.
  * For development, files are stored as base64 data URLs in localStorage
