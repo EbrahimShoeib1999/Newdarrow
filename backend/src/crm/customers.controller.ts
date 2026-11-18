@@ -93,6 +93,135 @@ export class CreateCustomerBody {
   @IsOptional()
   @IsString()
   assignedTo?: string;
+
+  @IsOptional()
+  fatherName?: string;
+
+  @IsOptional()
+  secondaryPhone?: string;
+
+  @IsOptional()
+  landlinePhone?: string;
+
+  @IsOptional()
+  establishmentType?: string;
+
+  @IsOptional()
+  unifiedNumber?: string;
+
+  @IsOptional()
+  crExpiryDate?: string;
+
+  @IsOptional()
+  mainActivity?: string;
+
+  @IsOptional()
+  companySize?: string;
+
+  @IsOptional()
+  region?: string;
+
+  @IsOptional()
+  branchesCount?: number;
+
+  @IsOptional()
+  govSector?: string;
+
+  @IsOptional()
+  administration?: string;
+
+  @IsOptional()
+  department?: string;
+
+  @IsOptional()
+  tenderNumber?: string;
+
+  @IsOptional()
+  contractNumber?: string;
+
+  @IsOptional()
+  licenseNumber?: string;
+
+  @IsOptional()
+  nonProfitType?: string;
+
+  @IsOptional()
+  financialInstitutionType?: string;
+
+  @IsOptional()
+  mediaPlatformType?: string;
+
+  @IsOptional()
+  audienceSize?: string;
+
+  @IsOptional()
+  contentNiche?: string;
+
+  @IsOptional()
+  collaborationAreas?: string;
+
+  @IsOptional()
+  managerName?: string;
+
+  @IsOptional()
+  nationalId?: string;
+
+  @IsOptional()
+  nationality?: string;
+
+  @IsOptional()
+  jobTitle?: string;
+
+  @IsOptional()
+  relationships?: any;
+
+  @IsOptional()
+  relationshipStatuses?: any;
+
+  @IsOptional()
+  classification?: string;
+
+  @IsOptional()
+  source?: string;
+
+  @IsOptional()
+  satisfaction?: string;
+
+  @IsOptional()
+  satisfactionNotes?: string;
+
+  @IsOptional()
+  interests?: any;
+
+  @IsOptional()
+  tags?: any;
+
+  @IsOptional()
+  notes?: string;
+
+  @IsOptional()
+  associatedContacts?: any;
+
+  @IsOptional()
+  socialAccounts?: any;
+
+  @IsOptional()
+  addresses?: any;
+
+  @IsOptional()
+  financialInfo?: any;
+
+  @IsOptional()
+  crmSalesInfo?: any;
+
+  @IsOptional()
+  billingAddress?: string;
+
+  @IsOptional()
+  ownerId?: string | null;
+
+  @IsOptional()
+  leadId?: string | null;
 }
 
 export class UpdateCustomerBody {
@@ -167,6 +296,135 @@ export class UpdateCustomerBody {
   @IsOptional()
   @IsString()
   assignedTo?: string;
+
+  @IsOptional()
+  fatherName?: string;
+
+  @IsOptional()
+  secondaryPhone?: string;
+
+  @IsOptional()
+  landlinePhone?: string;
+
+  @IsOptional()
+  establishmentType?: string;
+
+  @IsOptional()
+  unifiedNumber?: string;
+
+  @IsOptional()
+  crExpiryDate?: string;
+
+  @IsOptional()
+  mainActivity?: string;
+
+  @IsOptional()
+  companySize?: string;
+
+  @IsOptional()
+  region?: string;
+
+  @IsOptional()
+  branchesCount?: number;
+
+  @IsOptional()
+  govSector?: string;
+
+  @IsOptional()
+  administration?: string;
+
+  @IsOptional()
+  department?: string;
+
+  @IsOptional()
+  tenderNumber?: string;
+
+  @IsOptional()
+  contractNumber?: string;
+
+  @IsOptional()
+  licenseNumber?: string;
+
+  @IsOptional()
+  nonProfitType?: string;
+
+  @IsOptional()
+  financialInstitutionType?: string;
+
+  @IsOptional()
+  mediaPlatformType?: string;
+
+  @IsOptional()
+  audienceSize?: string;
+
+  @IsOptional()
+  contentNiche?: string;
+
+  @IsOptional()
+  collaborationAreas?: string;
+
+  @IsOptional()
+  managerName?: string;
+
+  @IsOptional()
+  nationalId?: string;
+
+  @IsOptional()
+  nationality?: string;
+
+  @IsOptional()
+  jobTitle?: string;
+
+  @IsOptional()
+  relationships?: any;
+
+  @IsOptional()
+  relationshipStatuses?: any;
+
+  @IsOptional()
+  classification?: string;
+
+  @IsOptional()
+  source?: string;
+
+  @IsOptional()
+  satisfaction?: string;
+
+  @IsOptional()
+  satisfactionNotes?: string;
+
+  @IsOptional()
+  interests?: any;
+
+  @IsOptional()
+  tags?: any;
+
+  @IsOptional()
+  notes?: string;
+
+  @IsOptional()
+  associatedContacts?: any;
+
+  @IsOptional()
+  socialAccounts?: any;
+
+  @IsOptional()
+  addresses?: any;
+
+  @IsOptional()
+  financialInfo?: any;
+
+  @IsOptional()
+  crmSalesInfo?: any;
+
+  @IsOptional()
+  billingAddress?: string;
+
+  @IsOptional()
+  ownerId?: string | null;
+
+  @IsOptional()
+  leadId?: string | null;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)

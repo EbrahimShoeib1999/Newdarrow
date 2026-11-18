@@ -59,6 +59,12 @@ export class CreateDealBody {
   @IsOptional()
   @IsString()
   assignedTo?: string | null;
+
+  @IsOptional()
+  ownerId?: string | null;
+
+  @IsOptional()
+  tags?: any;
 }
 
 export class UpdateDealBody {
@@ -100,6 +106,12 @@ export class UpdateDealBody {
   @IsOptional()
   @IsString()
   assignedTo?: string | null;
+
+  @IsOptional()
+  ownerId?: string | null;
+
+  @IsOptional()
+  tags?: any;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)

@@ -52,6 +52,38 @@ export class LeadsService {
       throw new NotFoundException("Company not found");
     }
 
+    // Tenant isolation: validate referenced contact belongs to this company
+    if (data.contactId) {
+      const contact = await this.prisma.customer.findFirst({
+        where: { id: data.contactId, companyId: data.companyId, deletedAt: null },
+      });
+      if (!contact) {
+        throw new BadRequestException("Referenced customer/contact does not exist or does not belong to your company");
+      }
+    }
+
+    // Tenant isolation: validate assigned user belongs to this company
+    let assignedToId: string | null = null;
+    const rawAssigned = data.assignedToId || data.assignedTo;
+    if (rawAssigned && rawAssigned.trim() !== "") {
+      const assignedUser = await this.prisma.user.findFirst({
+        where: {
+          id: rawAssigned.trim(),
+          deletedAt: null,
+          memberships: {
+            some: {
+              companyId: data.companyId,
+              status: "ACTIVE",
+            },
+          },
+        },
+      });
+      if (!assignedUser) {
+        throw new BadRequestException("Assigned user does not exist or does not belong to your company");
+      }
+      assignedToId = assignedUser.id;
+    }
+
     return this.prisma.lead.create({
       data: {
         companyId: data.companyId,
@@ -62,7 +94,7 @@ export class LeadsService {
         status: normalizeBackendStatus(data.status),
         source: data.source ?? null,
         priority: data.priority ?? "medium",
-        assignedToId: data.assignedToId ?? data.assignedTo ?? null,
+        assignedToId,
         contactId: data.contactId ?? null,
         notes: data.notes ?? null,
       },
@@ -109,6 +141,39 @@ export class LeadsService {
     const companyNameVal = data.companyName !== undefined ? data.companyName : data.company;
     const assignedVal = data.assignedToId !== undefined ? data.assignedToId : data.assignedTo;
 
+    if (data.contactId) {
+      const contact = await this.prisma.customer.findFirst({
+        where: { id: data.contactId, companyId, deletedAt: null },
+      });
+      if (!contact) {
+        throw new BadRequestException("Referenced customer/contact does not exist or does not belong to your company");
+      }
+    }
+
+    let assignedToId: string | null | undefined = undefined;
+    if (assignedVal !== undefined) {
+      if (assignedVal && assignedVal.trim() !== "") {
+        const assignedUser = await this.prisma.user.findFirst({
+          where: {
+            id: assignedVal.trim(),
+            deletedAt: null,
+            memberships: {
+              some: {
+                companyId,
+                status: "ACTIVE",
+              },
+            },
+          },
+        });
+        if (!assignedUser) {
+          throw new BadRequestException("Assigned user does not exist or does not belong to your company");
+        }
+        assignedToId = assignedUser.id;
+      } else {
+        assignedToId = null;
+      }
+    }
+
     return this.prisma.lead.update({
       where: { id },
       data: {
@@ -119,7 +184,7 @@ export class LeadsService {
         ...(data.status !== undefined && { status: normalizeBackendStatus(data.status) }),
         ...(data.source !== undefined && { source: data.source ?? null }),
         ...(data.priority !== undefined && { priority: data.priority ?? "medium" }),
-        ...(assignedVal !== undefined && { assignedToId: assignedVal ?? null }),
+        ...(assignedToId !== undefined && { assignedToId }),
         ...(data.contactId !== undefined && { contactId: data.contactId ?? null }),
         ...(data.notes !== undefined && { notes: data.notes ?? null }),
       },

@@ -49,6 +49,18 @@ export class CreateQuotationBody {
   @IsOptional()
   @IsString()
   approvalStatus?: string;
+
+  @IsOptional()
+  @Allow()
+  approvedAt?: any;
+
+  @IsOptional()
+  @Allow()
+  approvedBy?: any;
+
+  @IsOptional()
+  @IsString()
+  createdBy?: string;
 }
 
 export class UpdateQuotationBody {
@@ -83,6 +95,18 @@ export class UpdateQuotationBody {
   @IsOptional()
   @IsString()
   approvalStatus?: string;
+
+  @IsOptional()
+  @Allow()
+  approvedAt?: any;
+
+  @IsOptional()
+  @Allow()
+  approvedBy?: any;
+
+  @IsOptional()
+  @IsString()
+  createdBy?: string;
 }
 
 @Controller("crm/quotations")

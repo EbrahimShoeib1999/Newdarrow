@@ -575,7 +575,10 @@ export function ContractBuilderForm() {
       return savedId;
     } else {
       const res = await createMutation.mutateAsync(payload);
-      const newId = res.data.id;
+      const newId = (res as any)?.data?.id || (res as any)?.id;
+      if (!newId) {
+        throw new Error("لم يتم إرجاع معرّف العقد الجديد من الخادم");
+      }
       setSavedId(newId);
       return newId;
     }
@@ -614,7 +617,11 @@ export function ContractBuilderForm() {
         targetContractId = await persistContract();
       } catch (err: any) {
         console.error("Failed to auto-save contract before task conversion:", err);
-        toast.error(err?.message || "فشل حفظ العقد. يجب حفظ العقد أولاً قبل ترحيل المهام.");
+        const errMsg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "فشل حفظ العقد تلقائياً قبل ترحيل المهام. يرجى مراجعة الحقول المطلوبة والمحاولة مرة أخرى.";
+        toast.error(typeof errMsg === "string" ? errMsg : JSON.stringify(errMsg));
         setConvertingTasks(false);
         return;
       }

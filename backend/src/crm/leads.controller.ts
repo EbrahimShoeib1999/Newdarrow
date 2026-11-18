@@ -68,6 +68,20 @@ export class CreateLeadBody {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceOther?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceCategory?: string;
+
+  @IsOptional()
+  ownerId?: string | null;
+
+  @IsOptional()
+  tags?: any;
 }
 
 export class UpdateLeadBody {
@@ -118,6 +132,20 @@ export class UpdateLeadBody {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceOther?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceCategory?: string;
+
+  @IsOptional()
+  ownerId?: string | null;
+
+  @IsOptional()
+  tags?: any;
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)

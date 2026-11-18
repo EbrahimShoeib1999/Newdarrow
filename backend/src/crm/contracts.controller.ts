@@ -43,6 +43,18 @@ export class CreateContractBody {
   approvalStatus?: string;
 
   @IsOptional()
+  @Allow()
+  approvedAt?: any;
+
+  @IsOptional()
+  @Allow()
+  approvedBy?: any;
+
+  @IsOptional()
+  @IsString()
+  createdBy?: string;
+
+  @IsOptional()
   @IsBoolean()
   convertedToTasks?: boolean;
 
@@ -75,6 +87,18 @@ export class UpdateContractBody {
   @IsOptional()
   @IsString()
   approvalStatus?: string;
+
+  @IsOptional()
+  @Allow()
+  approvedAt?: any;
+
+  @IsOptional()
+  @Allow()
+  approvedBy?: any;
+
+  @IsOptional()
+  @IsString()
+  createdBy?: string;
 
   @IsOptional()
   @IsBoolean()
