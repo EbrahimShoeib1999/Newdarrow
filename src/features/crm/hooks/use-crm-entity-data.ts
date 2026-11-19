@@ -6,7 +6,6 @@ import { ActivitiesService } from "../api/activities.service";
 import { NotesService } from "../api/notes.service";
 import { CrmTasksService } from "../api/crm-tasks.service";
 import { AttachmentsService } from "../api/attachments.service";
-import { uploadCrmAttachment } from "../api/crm-storage.service";
 import type { CrmEntityType } from "../types/crm.common.types";
 import type { CreateActivityDTO } from "../types/activities.types";
 import type { CreateCrmTaskDTO, CrmTaskType } from "../types/crm-tasks.types";

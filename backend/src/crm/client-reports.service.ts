@@ -285,6 +285,10 @@ export class ClientReportsService {
       throw new ForbiddenException("Public access to this report has been revoked");
     }
 
+    if (report.publicTokenExpiresAt && new Date() > report.publicTokenExpiresAt) {
+      throw new ForbiddenException("Public report link has expired");
+    }
+
     return mapReportToResponse(report, true);
   }
 }

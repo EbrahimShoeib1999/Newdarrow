@@ -247,6 +247,22 @@ describe("CRM Services (WP-05 through WP-12) Unit & Tenant Isolation Tests", () 
         "Public access to this report has been revoked"
       );
     });
+
+    it("should reject public report if expired", async () => {
+      const service = new ClientReportsService(mockPrisma);
+      const expiredDate = new Date();
+      expiredDate.setDate(expiredDate.getDate() - 1);
+      mockPrisma.crmClientReport.findFirst.mockResolvedValue({
+        id: "rep-1",
+        companyId: companyA,
+        isPublicRevoked: false,
+        publicTokenExpiresAt: expiredDate,
+      });
+
+      await expect(service.findPublicReportById(companyA, "rep-1")).rejects.toThrow(
+        "Public report link has expired"
+      );
+    });
   });
 
   describe("WP-11: ContactClassificationsService", () => {

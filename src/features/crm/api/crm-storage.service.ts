@@ -59,7 +59,7 @@ export async function uploadCrmAttachment(
   entityId: string,
   file: File
 ): Promise<CrmAttachment> {
-  return withLogging(SERVICE_NAME, "uploadCrmAttachment", async () => {
+  return withLogging(SERVICE_NAME, "uploadCrmAttachment", (async () => {
     const validation = validateCrmFileForUpload(file);
     if (!validation.valid) {
       throw new Error(validation.error);
@@ -69,5 +69,5 @@ export async function uploadCrmAttachment(
       throw new Error("Failed to upload attachment");
     }
     return res.data;
-  });
+  })());
 }
